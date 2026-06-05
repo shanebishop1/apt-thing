@@ -64,6 +64,8 @@ node_modules/
 !.yarn/versions/
 .parcel-cache/
 .next/
+.open-next/
+.wrangler/
 .nuxt/
 .svelte-kit/
 coverage/
