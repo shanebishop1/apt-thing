@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "g2a-acquisition-artifact-contract-v1",
+  "roots": {
+    "raw": {
+      "rootKind": "raw-local",
+      "path": "tmp/proof-output/acquisition/raw",
+      "committed": false,
+      "retention": "local proof evidence only; do not commit secrets, paid data, raw emails, or source photos",
+      "redaction": "raw captures must omit API keys/auth headers and only include bounded non-sensitive samples",
+      "futureOwner": "r2"
+    },
+    "sanitized": {
+      "rootKind": "sanitized-committed",
+      "path": "fixtures/acquisition/sanitized",
+      "committed": true,
+      "retention": "safe fixture/proof summaries may be committed when they contain no secrets or private emails",
+      "redaction": "strip credentials, sender/recipient addresses, cookies, hidden tokens, and full-size source images",
+      "futureOwner": "repo"
+    }
+  },
+  "runManifest": {
+    "schemaVersion": "g2a-acquisition-run-manifest-v1",
+    "requiredFields": [
+      "runId",
+      "mode",
+      "startedAt",
+      "artifactRoots",
+      "apiKeyAvailability",
+      "sourceClassifications"
+    ]
+  },
+  "normalizedCandidate": {
+    "schemaVersion": "g2a-normalized-candidate-v1",
+    "requiredFields": [
+      "id",
+      "source",
+      "sourceUrl",
+      "visibleFacts",
+      "quotedEvidence",
+      "extractionMetadata",
+      "aiAnalysis",
+      "classification"
+    ]
+  },
+  "evidenceRecord": {
+    "schemaVersion": "g2a-source-evidence-v1",
+    "requiredFields": [
+      "claim",
+      "quote",
+      "sourceUrl",
+      "artifactId",
+      "capturedAt"
+    ]
+  },
+  "futureStorageBoundaries": {
+    "d1": {
+      "owns": [
+        "run manifests",
+        "candidate metadata",
+        "source classification rows",
+        "failure codes",
+        "R2 artifact pointers"
+      ],
+      "notOwnerOf": [
+        "raw Firecrawl payload bodies",
+        "screenshots",
+        "source image binaries"
+      ]
+    },
+    "r2": {
+      "owns": [
+        "raw Firecrawl payloads",
+        "screenshots",
+        "open context responses",
+        "provider payload snapshots"
+      ],
+      "pointerShape": "r2://acquisition/{groupId}/{runId}/{sourceKey}/{artifactId}.json"
+    }
+  },
+  "redaction": [
+    {
+      "appliesTo": "api keys and auth headers",
+      "action": "never persist"
+    },
+    {
+      "appliesTo": "email samples",
+      "action": "sanitize sender/recipient"
+    },
+    {
+      "appliesTo": "screenshots",
+      "action": "commit references or redacted thumbnails only"
+    },
+    {
+      "appliesTo": "source images",
+      "action": "store capped source URLs and private R2 pointers, not image binaries"
+    }
+  ]
+}

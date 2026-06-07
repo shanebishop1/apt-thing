@@ -7,12 +7,17 @@ const BOROUGHS = ["brooklyn", "manhattan", "queens", "bronx", "staten-island"];
 
 loadDotenvLocal();
 
-const apiKey = process.env.REALTYAPI_KEY;
-if (!apiKey) {
-  throw new Error("REALTYAPI_KEY is required in the environment or .env.local");
+const args = process.argv.slice(2).filter((arg) => arg !== "--");
+if (args.includes("--fixture")) {
+  writeFixtureProof();
+  process.exit(0);
 }
 
-const args = process.argv.slice(2).filter((arg) => arg !== "--");
+const apiKey = process.env.REALTYAPI_KEY;
+if (!apiKey) {
+  throw new Error("REALTYAPI_KEY is required in the environment or .env.local. Use --fixture for offline proof.");
+}
+
 const targetUrl = args[0] ?? DEFAULT_URL;
 const locationOverride = args[1];
 const targetPath = new URL(targetUrl).pathname.toLowerCase();
@@ -225,4 +230,51 @@ function loadDotenvLocal() {
       process.env[key] = value;
     }
   }
+}
+
+function writeFixtureProof() {
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+
+  const output = {
+    mode: "fixture",
+    input: {
+      url: DEFAULT_URL,
+      locationCandidates: ["Williamsburg", "Brooklyn", "NYC and NJ"],
+      parsedStreetEasyPath: {
+        address: "152 Manhattan Avenue",
+        borough: "Brooklyn",
+        unit: "4B",
+        addressQuery: "152 Manhattan Avenue Brooklyn NY",
+      },
+      matchedPath: "/building/152-manhattan-avenue-brooklyn/4b",
+    },
+    searchMatch: {
+      id: "5062766",
+      urlPath: "/building/152-manhattan-avenue-brooklyn/4b",
+      foundInLocation: "Williamsburg",
+      foundOnPage: 2,
+    },
+    detailsSummary: {
+      listingId: "5062766",
+      status: "active",
+      price: 10150,
+      noFee: true,
+      availableAt: "2026-08-01",
+      address: "152 Manhattan Avenue #4B",
+      city: "Brooklyn",
+      state: "NY",
+      beds: 6,
+      fullBaths: 2,
+      halfBaths: 0,
+      amenities: ["Laundry in building", "Dishwasher", "Roof deck"],
+      photoCount: 7,
+      descriptionPreview:
+        "Six-bedroom whole-apartment rental with two baths and August 1 availability from RealtyAPI fixture evidence.",
+    },
+  };
+  const outputPath = path.join(OUT_DIR, "realtyapi_resolved_target_details.fixture.json");
+  fs.writeFileSync(outputPath, `${JSON.stringify(output, null, 2)}
+`);
+  console.log(JSON.stringify(output.detailsSummary, null, 2));
+  console.log(`wrote ${outputPath}`);
 }

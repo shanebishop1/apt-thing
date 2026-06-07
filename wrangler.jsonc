@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "apt-thing",
-  "main": ".open-next/worker.js",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-06-05",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
@@ -33,6 +33,16 @@
     "NEXTJS_ENV": "production",
     "APP_ENV": "local",
   },
+  "triggers": {
+    "crons": ["0 10 * * *"],
+  },
+  "workflows": [
+    {
+      "binding": "DAILY_SOURCE_AGENT_LOOP_WORKFLOW",
+      "name": "daily-source-agent-loop",
+      "class_name": "DailySourceAgentLoopWorkflow",
+    },
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,

@@ -18,7 +18,9 @@
     "cf:preview": "pnpm cf:build && wrangler dev",
     "cf:types": "wrangler types",
     "cf:deploy:dry": "pnpm cf:build && wrangler deploy --dry-run",
-    "cf:deploy": "pnpm cf:build && wrangler deploy"
+    "cf:deploy": "pnpm cf:build && wrangler deploy",
+    "proof:acquisition": "node --experimental-strip-types scripts/proof-acquisition.mjs",
+    "proof:daily-loop": "vitest run src/lib/daily-source-loop.test.ts"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.19.11",

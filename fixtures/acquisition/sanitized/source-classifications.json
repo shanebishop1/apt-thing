@@ -1,0 +1,118 @@
+[
+  {
+    "sourceKey": "nybits-firecrawl-public-detail",
+    "source": "nybits",
+    "inputKind": "firecrawl-public-page",
+    "classification": "success",
+    "failureCode": "none",
+    "handoff": "source-adapter",
+    "evidenceArtifactIds": [
+      "raw-firecrawl-nybits"
+    ],
+    "notes": "Bounded Firecrawl fixture produced normalized public-page candidate/evidence JSON."
+  },
+  {
+    "sourceKey": "openigloo-firecrawl-public-detail",
+    "source": "openigloo",
+    "inputKind": "firecrawl-public-page",
+    "classification": "success",
+    "failureCode": "none",
+    "handoff": "source-adapter",
+    "evidenceArtifactIds": [
+      "raw-firecrawl-openigloo"
+    ],
+    "notes": "Public-page fixture works with caution; avoid hidden/internal paths and keep source-linked evidence minimal."
+  },
+  {
+    "sourceKey": "streeteasy-realtyapi-pasted-url",
+    "source": "streeteasy",
+    "inputKind": "streeteasy-pasted-url",
+    "classification": "success",
+    "failureCode": "none",
+    "handoff": "source-adapter",
+    "evidenceArtifactIds": [],
+    "notes": "Multiple pasted URL samples normalize through RealtyAPI-style fixtures with urlPath match and detail retry metadata."
+  },
+  {
+    "sourceKey": "streeteasy-realtyapi-daily-search",
+    "source": "streeteasy",
+    "inputKind": "streeteasy-daily-search",
+    "classification": "partial",
+    "failureCode": "gemini-output-hard-constraint-rejected",
+    "handoff": "source-adapter",
+    "evidenceArtifactIds": [],
+    "notes": "Three daily-search query shapes work in fixture mode; one AI-positive sample is deterministically rejected as over budget."
+  },
+  {
+    "sourceKey": "zillow-user-mediated-fallback",
+    "source": "zillow",
+    "inputKind": "manual-url",
+    "classification": "manual_needed",
+    "failureCode": "provider-proof-pending",
+    "handoff": "manual-intake",
+    "evidenceArtifactIds": [
+      "raw-zillow-manual-url-sample",
+      "raw-zillow-email-sample",
+      "raw-zillow-screenshot-ref"
+    ],
+    "notes": "Pasted URL, alert-email, saved-search link, and screenshot reference create first-class candidate stubs only."
+  },
+  {
+    "sourceKey": "osm-overpass-amenities",
+    "source": "osm-overpass",
+    "inputKind": "open-context",
+    "classification": "success",
+    "failureCode": "none",
+    "handoff": "context-map",
+    "evidenceArtifactIds": [
+      "raw-open-context-overpass"
+    ],
+    "notes": "Fixture mirrors bounded Overpass amenity query with OSM attribution; live-safe mode may query public Overpass separately."
+  },
+  {
+    "sourceKey": "maplibre-openfreemap-render",
+    "source": "maplibre-openfreemap",
+    "inputKind": "map-render",
+    "classification": "success",
+    "failureCode": "none",
+    "handoff": "context-map",
+    "evidenceArtifactIds": [
+      "raw-maplibre-render"
+    ],
+    "notes": "Render proof captures MapLibre/OpenFreeMap style URL, pins, and overlay inputs without building UI."
+  },
+  {
+    "sourceKey": "dynamic-zillow-browser-escalation",
+    "source": "zillow",
+    "inputKind": "screenshot-reference",
+    "classification": "dynamic_needs_browser",
+    "failureCode": "dynamic-browser-required",
+    "handoff": "manual-intake",
+    "evidenceArtifactIds": [
+      "raw-zillow-manual-url-sample",
+      "raw-zillow-email-sample",
+      "raw-zillow-screenshot-ref"
+    ],
+    "notes": "If user screenshots need OCR/browser inspection, route to a bounded explicit browser proof rather than crawling."
+  },
+  {
+    "sourceKey": "renthop-craigslist-repeatable-automation",
+    "source": "guardrail",
+    "inputKind": "disallowed-attempt",
+    "classification": "deferred",
+    "failureCode": "fixture-mode-network-deferred",
+    "handoff": "defer",
+    "evidenceArtifactIds": [],
+    "notes": "Repeatable automation remains deferred unless future approved proof identifies a compliant bounded path."
+  },
+  {
+    "sourceKey": "zillow-hidden-api-guardrail",
+    "source": "guardrail",
+    "inputKind": "disallowed-attempt",
+    "classification": "policy_disallowed",
+    "failureCode": "policy-disallowed-hidden-api",
+    "handoff": "guardrail",
+    "evidenceArtifactIds": [],
+    "notes": "No hidden Zillow APIs, broad crawling, login scraping, CAPTCHA bypass, or anti-bot bypass are permitted."
+  }
+]
