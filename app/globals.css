@@ -3,19 +3,49 @@
 :root {
   color-scheme: light;
   --bg: #faf8f4;
+  --bg-stop: #f3eee6;
+  --bg-glow: rgb(201 168 76 / 12%);
   --panel: #ffffff;
   --panel-2: #f0ebe2;
   --ink: #1c1a18;
   --muted: #8a847d;
   --line: #e8e2d8;
   --accent: #1e3a5f;
+  --accent-ink: #ffffff;
   --warn: #c9a84c;
   --ok: #2e7d5a;
+  --map-base: #f0ebe2;
+  --map-street: rgb(30 58 95 / 16%);
+  --map-avenue: rgb(201 168 76 / 22%);
+  --map-green: rgb(46 125 90 / 24%);
+  --map-blue: rgb(30 58 95 / 22%);
   --radius: 2px;
   --shadow: 0 24px 80px rgb(28 26 24 / 8%);
   --font: "Inter", ui-sans-serif, system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
   --display: "Playfair Display", Georgia, serif;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #07100c;
+  --bg-stop: #102019;
+  --bg-glow: rgb(104 200 154 / 18%);
+  --panel: #101b16;
+  --panel-2: #172b22;
+  --ink: #f5efe5;
+  --muted: #9caab5;
+  --line: #284238;
+  --accent: #9fe8c3;
+  --accent-ink: #06130d;
+  --warn: #f1c768;
+  --ok: #68c89a;
+  --map-base: #111923;
+  --map-street: rgb(159 201 255 / 16%);
+  --map-avenue: rgb(241 199 104 / 18%);
+  --map-green: rgb(104 200 154 / 18%);
+  --map-blue: rgb(159 201 255 / 20%);
+  --shadow: 0 24px 90px rgb(0 0 0 / 36%);
 }
 
 * {
@@ -25,8 +55,8 @@
 body {
   margin: 0;
   background:
-    radial-gradient(circle at 12% 8%, rgb(201 168 76 / 12%), transparent 28rem),
-    linear-gradient(135deg, #faf8f4 0%, #f3eee6 52%, #ffffff 100%);
+    radial-gradient(circle at 12% 8%, var(--bg-glow), transparent 28rem),
+    linear-gradient(135deg, var(--bg) 0%, var(--bg-stop) 52%, var(--panel) 100%);
   color: var(--ink);
   font-family: var(--font);
 }
@@ -89,7 +119,18 @@ p {
   overflow-x: auto;
 }
 
+.theme-toggle {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 42px;
+  padding: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 .design-tabs button,
+.theme-toggle,
 .status-control button,
 .intake-form button {
   min-height: 40px;
@@ -107,12 +148,13 @@ p {
 
 .design-tabs button:hover,
 .design-tabs button.active,
+.theme-toggle:hover,
 .status-control button:hover,
 .status-control button.active,
 .intake-form button {
   border-color: var(--accent);
   background: var(--accent);
-  color: white;
+  color: var(--accent-ink);
 }
 
 .layout {
@@ -208,7 +250,7 @@ input {
   min-height: 40px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--panel) 88%, white);
+  background: color-mix(in srgb, var(--panel) 88%, var(--bg));
   color: var(--ink);
   padding: 9px 10px;
   letter-spacing: 0;
@@ -442,14 +484,14 @@ input {
   background:
     linear-gradient(
       90deg,
-      rgb(30 58 95 / 16%) 10px,
+      var(--map-street) 10px,
       transparent 10px 90px,
-      rgb(201 168 76 / 22%) 90px 102px,
+      var(--map-avenue) 90px 102px,
       transparent 102px
     ),
-    linear-gradient(155deg, transparent 0 45%, rgb(46 125 90 / 24%) 45% 47%, transparent 47%),
-    linear-gradient(28deg, transparent 0 35%, rgb(30 58 95 / 22%) 35% 37%, transparent 37%),
-    #f0ebe2;
+    linear-gradient(155deg, transparent 0 45%, var(--map-green) 45% 47%, transparent 47%),
+    linear-gradient(28deg, transparent 0 35%, var(--map-blue) 35% 37%, transparent 37%),
+    var(--map-base);
 }
 
 .map-side {
@@ -464,10 +506,10 @@ input {
   position: absolute;
   width: 42px;
   height: 42px;
-  border: 3px solid white;
+  border: 3px solid var(--panel);
   border-radius: 50%;
   background: var(--accent);
-  color: white;
+  color: var(--accent-ink);
   font-weight: 900;
   box-shadow: 0 10px 24px rgb(0 0 0 / 20%);
 }

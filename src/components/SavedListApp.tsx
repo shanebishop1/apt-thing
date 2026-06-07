@@ -17,6 +17,7 @@ import {
 
 const storageVersion = "v2";
 const identityStorageKey = `apt-thing:${storageVersion}:identity`;
+const themeStorageKey = `apt-thing:${storageVersion}:theme`;
 
 const reviewStatuses: ReviewStatus[] = ["new", "interested", "touring", "rejected"];
 const editableFields: FieldProvenance["field"][] = [
@@ -38,6 +39,7 @@ const designOptions = [
 ] as const;
 
 type DesignId = (typeof designOptions)[number]["id"];
+type ThemeId = "light" | "dark";
 
 type SharedViewProps = {
   identity: InviteIdentity;
@@ -61,6 +63,8 @@ type SharedViewProps = {
 
 export function SavedListApp() {
   const [activeDesign, setActiveDesign] = useState<DesignId>("split");
+  const [theme, setTheme] = useState<ThemeId>("light");
+  const [isThemeReady, setIsThemeReady] = useState(false);
   const [identity, setIdentity] = useState<InviteIdentity>({
     groupId: defaultSearchGroup.id,
     inviteCode: defaultSearchGroup.inviteCode,
@@ -73,6 +77,37 @@ export function SavedListApp() {
   );
   const [selectedId, setSelectedId] = useState<string>(fixtureListings[0]?.id ?? "");
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    try {
+      const savedTheme = window.localStorage.getItem(themeStorageKey);
+
+      if (savedTheme === "light" || savedTheme === "dark") {
+        setTheme(savedTheme);
+        return;
+      }
+
+      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        setTheme("dark");
+      }
+    } finally {
+      setIsThemeReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+
+    if (!isThemeReady) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(themeStorageKey, theme);
+    } catch {
+      setMessage("Could not save theme preference in this browser.");
+    }
+  }, [isThemeReady, theme]);
 
   useEffect(() => {
     try {
@@ -231,7 +266,12 @@ export function SavedListApp() {
 
   return (
     <main className="prototype" data-design={activeDesign}>
-      <DesignSwitcher activeDesign={activeDesign} onChange={setActiveDesign} />
+      <DesignSwitcher
+        activeDesign={activeDesign}
+        theme={theme}
+        onChange={setActiveDesign}
+        onThemeChange={setTheme}
+      />
       {activeDesign === "split" ? <SplitReview {...viewProps} /> : null}
       {activeDesign === "board" ? <StatusBoard {...viewProps} /> : null}
       {activeDesign === "map" ? <MapDesk {...viewProps} /> : null}
@@ -243,10 +283,14 @@ export function SavedListApp() {
 
 function DesignSwitcher({
   activeDesign,
+  theme,
   onChange,
+  onThemeChange,
 }: {
   activeDesign: DesignId;
+  theme: ThemeId;
   onChange: (design: DesignId) => void;
+  onThemeChange: (theme: ThemeId) => void;
 }) {
   return (
     <nav className="design-switcher" aria-label="Design options">
@@ -265,6 +309,16 @@ function DesignSwitcher({
           </button>
         ))}
       </div>
+      <button
+        type="button"
+        className="theme-toggle"
+        onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")}
+        aria-pressed={theme === "dark"}
+        aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      >
+        <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
+      </button>
     </nav>
   );
 }
