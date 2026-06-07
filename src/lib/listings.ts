@@ -30,8 +30,15 @@ export type ListingEvidence = {
   sourceUrl: string;
 };
 
+export type SearchGroup = {
+  id: string;
+  inviteCode: string;
+  name: string;
+};
+
 export type ListingCandidate = {
   id: string;
+  groupId: string;
   source: SourceType;
   url: string;
   submittedBy: string;
@@ -55,6 +62,7 @@ export type ListingCandidate = {
 };
 
 export type InviteIdentity = {
+  groupId: string;
   inviteCode: string;
   displayName: string;
 };
@@ -84,6 +92,16 @@ const preferredNeighborhoods = new Set([
   "nolita",
   "soho",
 ]);
+
+export const hardcodedSearchGroups: SearchGroup[] = [
+  {
+    id: "nyc-5br-2026",
+    inviteCode: "apt-g1",
+    name: "NYC 5BR search",
+  },
+];
+
+export const defaultSearchGroup = hardcodedSearchGroups[0];
 
 export function normalizeUrl(rawUrl: string): string {
   const url = new URL(rawUrl.trim());
@@ -122,6 +140,14 @@ export function createDuplicateKey(rawUrl: string): string {
   return `${url.hostname.replace(/^www\./, "").toLowerCase()}${path}`;
 }
 
+export function createGroupScopedDuplicateKey(groupId: string, rawUrl: string): string {
+  return `${groupId}:${createDuplicateKey(rawUrl)}`;
+}
+
+export function resolveSearchGroup(inviteCode: string): SearchGroup | undefined {
+  return hardcodedSearchGroups.find((group) => group.inviteCode === inviteCode.trim());
+}
+
 export function createListingFromUrl(
   rawUrl: string,
   identity: InviteIdentity,
@@ -138,7 +164,8 @@ export function createListingFromUrl(
     : "manual-needed";
 
   return {
-    id: createId(normalizedUrl),
+    id: createId(`${identity.groupId}:${normalizedUrl}`),
+    groupId: identity.groupId,
     source,
     url: normalizedUrl,
     submittedBy: identity.displayName,

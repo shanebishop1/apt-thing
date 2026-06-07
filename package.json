@@ -12,6 +12,7 @@
     "format:check": "oxfmt --check app src *.config.ts next.config.ts open-next.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "proof:streeteasy": "node scripts/proof-streeteasy-realtyapi.mjs",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "cf:build": "opennextjs-cloudflare build",
     "cf:preview": "pnpm cf:build && wrangler dev",

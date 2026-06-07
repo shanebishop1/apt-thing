@@ -1,8 +1,14 @@
 import type { ListingCandidate } from "./listings";
-import { createListingFromUrl, updateListingField, updateReviewStatus } from "./listings";
+import {
+  createListingFromUrl,
+  defaultSearchGroup,
+  updateListingField,
+  updateReviewStatus,
+} from "./listings";
 
 const identity = {
-  inviteCode: "apt-g1",
+  groupId: defaultSearchGroup.id,
+  inviteCode: defaultSearchGroup.inviteCode,
   displayName: "Shane",
 };
 

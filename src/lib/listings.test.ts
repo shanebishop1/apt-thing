@@ -3,12 +3,19 @@ import {
   calculateFitFlags,
   classifySource,
   createDuplicateKey,
+  createGroupScopedDuplicateKey,
   createListingFromUrl,
+  defaultSearchGroup,
+  resolveSearchGroup,
   updateListingField,
   updateReviewStatus,
 } from "./listings";
 
-const identity = { inviteCode: "apt-g1", displayName: "Tester" };
+const identity = {
+  groupId: defaultSearchGroup.id,
+  inviteCode: defaultSearchGroup.inviteCode,
+  displayName: "Tester",
+};
 
 describe("listing contracts", () => {
   it("classifies first-class and fallback apartment sources", () => {
@@ -24,12 +31,21 @@ describe("listing contracts", () => {
     expect(createDuplicateKey("https://www.zillow.com/homedetails/abc/?b=2&a=1#photos")).toBe(
       createDuplicateKey("https://zillow.com/homedetails/abc/?a=1&b=2"),
     );
+    expect(
+      createGroupScopedDuplicateKey("group-a", "https://zillow.com/homedetails/abc/"),
+    ).not.toBe(createGroupScopedDuplicateKey("group-b", "https://zillow.com/homedetails/abc/"));
+  });
+
+  it("resolves only hardcoded search groups for G1", () => {
+    expect(resolveSearchGroup(defaultSearchGroup.inviteCode)).toEqual(defaultSearchGroup);
+    expect(resolveSearchGroup("unknown-group")).toBeUndefined();
   });
 
   it("creates manual-needed stubs for unknown or incomplete listings", () => {
     const listing = createListingFromUrl("https://example.com/private-lead", identity);
 
     expect(listing.extractionStatus).toBe("manual-needed");
+    expect(listing.groupId).toBe(defaultSearchGroup.id);
     expect(listing.fitFlags).toContain("missing_required_fields");
     expect(listing.url).toBe("https://example.com/private-lead");
   });
