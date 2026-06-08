@@ -74,11 +74,12 @@ describe("runDailySourceAgentLoop", () => {
     expect(result.listings.every((listing) => listing.imageEvidence.length <= 5)).toBe(true);
     expect(result.observability.fanOut.maxObservedInFlight).toBeLessThanOrEqual(2);
     expect(result.persistence.d1.authoritativeTables).toContain("daily_loop_runs");
-    expect(result.persistence.r2.rawArtifactPointers.length).toBeGreaterThan(0);
+    expect(result.persistence.rawArtifacts.rawArtifactPointers.length).toBeGreaterThan(0);
+    expect(result.persistence.rawArtifacts.storage).toBe("disabled-no-r2");
     expect(result.persistence.kv.authoritative).toBe(false);
     expect(result.persistence.outcome).toMatchObject({
       d1: { attempted: false, skippedReason: "missing-binding", rowsWritten: 0 },
-      r2: { attempted: false, skippedReason: "missing-binding", objectsWritten: 0 },
+      r2: { attempted: false, skippedReason: "disabled-no-r2", objectsWritten: 0 },
     });
     expect(validateBriefingRunHistoryContract(result.history)).toEqual([]);
   });
@@ -266,7 +267,7 @@ describe("runDailySourceAgentLoop", () => {
       ]),
     );
     expect(result.operatorEvidence.artifactPointers).toEqual(
-      expect.arrayContaining([expect.objectContaining({ owner: "r2", groupScoped: true })]),
+      expect.arrayContaining([expect.objectContaining({ owner: "d1", groupScoped: true })]),
     );
     expect(result.operatorEvidence.debugIdentifiers.listingIds.length).toBeGreaterThan(0);
     expect(result.operatorEvidence.debugIdentifiers.sourceListingIds.length).toBeGreaterThan(0);
@@ -321,9 +322,8 @@ describe("runDailySourceAgentLoop", () => {
     });
   });
 
-  it("persists D1 rows and R2 raw artifacts when Cloudflare bindings exist", async () => {
+  it("persists D1 rows and keeps raw artifacts disabled without R2", async () => {
     const statements: Array<{ sql: string; values: unknown[] }> = [];
-    const puts: Array<{ key: string; value: unknown; contentType?: string }> = [];
     const db = {
       prepare(sql: string) {
         return {
@@ -337,28 +337,20 @@ describe("runDailySourceAgentLoop", () => {
         };
       },
     };
-    const bucket = {
-      async put(
-        key: string,
-        value: unknown,
-        options?: { httpMetadata?: { contentType?: string } },
-      ) {
-        puts.push({ key, value, contentType: options?.httpMetadata?.contentType });
-      },
-    };
 
     const result = await runDailySourceAgentLoop({
       identity,
       now: "2026-06-07T19:00:00.000Z",
-      env: { DB: db, RAW_ARTIFACTS: bucket },
+      env: { DB: db },
     });
 
     expect(result.persistence.outcome.d1).toMatchObject({ attempted: true });
     expect(result.persistence.outcome.d1.rowsWritten).toBeGreaterThan(0);
-    expect(result.persistence.outcome.r2).toMatchObject({ attempted: true });
-    expect(result.persistence.outcome.r2.objectsWritten).toBe(
-      result.persistence.r2.rawArtifactPointers.length,
-    );
+    expect(result.persistence.outcome.r2).toMatchObject({
+      attempted: false,
+      skippedReason: "disabled-no-r2",
+      objectsWritten: 0,
+    });
     expect(statements.some((statement) => statement.sql.includes("daily_loop_runs"))).toBe(true);
     const runTransitions = statements.filter((statement) =>
       statement.sql.includes("daily_loop_runs"),
@@ -423,11 +415,12 @@ describe("runDailySourceAgentLoop", () => {
         statement.values[0] === result.listings[0]?.id,
     );
     expect(firstListingEvidenceIndex).toBeGreaterThan(firstListingUpsertIndex);
-    expect(puts.some((put) => put.key.includes("coverage.json"))).toBe(true);
-    expect(puts.some((put) => put.key.includes("raw-artifact.json"))).toBe(true);
+    expect(result.persistence.rawArtifacts.rawArtifactPointers).toEqual(
+      expect.arrayContaining([expect.objectContaining({ owner: "d1", groupScoped: true })]),
+    );
   });
 
-  it("surfaces D1, R2, and KV persistence failures without dropping run outputs", async () => {
+  it("surfaces D1 and KV persistence failures without dropping run outputs", async () => {
     const db = {
       prepare(sql: string) {
         return {
@@ -443,11 +436,6 @@ describe("runDailySourceAgentLoop", () => {
         };
       },
     };
-    const bucket = {
-      put: vi.fn(async () => {
-        throw new Error("r2-put-failed");
-      }),
-    };
     const kv = {
       put: vi.fn(async () => {
         throw new Error("kv-cache-failed");
@@ -457,7 +445,7 @@ describe("runDailySourceAgentLoop", () => {
     const result = await runDailySourceAgentLoop({
       identity,
       now: "2026-06-07T19:30:00.000Z",
-      env: { DB: db, RAW_ARTIFACTS: bucket, APP_CACHE: kv } as any,
+      env: { DB: db, APP_CACHE: kv } as any,
     });
 
     expect(result.ok).toBe(true);
@@ -469,9 +457,9 @@ describe("runDailySourceAgentLoop", () => {
       error: expect.stringContaining("d1-transition-failed"),
     });
     expect(result.persistence.outcome.r2).toMatchObject({
-      attempted: true,
+      attempted: false,
+      skippedReason: "disabled-no-r2",
       objectsWritten: 0,
-      error: "r2-put-failed",
     });
     expect(result.persistence.outcome.kv).toMatchObject({
       attempted: true,
@@ -604,6 +592,57 @@ describe("runDailySourceAgentLoop", () => {
     });
   });
 
+  it("skips scheduled dispatches when DAILY_LOOP_ENABLED is explicitly disabled", async () => {
+    const disabledValues = ["false", "0", "off"];
+
+    for (const value of disabledValues) {
+      const workflow = {
+        create: vi.fn(async () => ({ id: "workflow-instance" })),
+      };
+
+      const result = await scheduledDailySourceAgentLoop(
+        { cron: "0 10 * * *", scheduledTime: Date.parse("2026-06-07T10:00:00.000Z") },
+        { DAILY_LOOP_ENABLED: value, [DAILY_SOURCE_AGENT_LOOP_WORKFLOW_BINDING]: workflow },
+      );
+
+      expect(workflow.create).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        ok: true,
+        disabled: true,
+        dispatchedToWorkflow: false,
+        fallback: false,
+        reason: "daily-loop-disabled",
+        envVar: "DAILY_LOOP_ENABLED",
+        configuredValue: value,
+        payload: { cadence: "daily", trigger: "cron", mode: "live-safe" },
+      });
+    }
+  });
+
+  it("logs disabled scheduled runs from the Worker scheduled handler", async () => {
+    const waited: Promise<unknown>[] = [];
+    const log = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const worker = createDailyLoopWorkerHandler({
+      fetch: async () => Response.json({ ok: true, source: "opennext" }),
+    });
+
+    worker.scheduled!(
+      { cron: "0 10 * * *", scheduledTime: Date.parse("2026-06-07T10:00:00.000Z") } as any,
+      { DAILY_LOOP_ENABLED: "off" },
+      { waitUntil: (promise: Promise<unknown>) => waited.push(promise) } as any,
+    );
+
+    await expect(waited[0]).resolves.toMatchObject({
+      disabled: true,
+      reason: "daily-loop-disabled",
+    });
+    expect(log).toHaveBeenCalledWith(
+      "daily-source-agent-loop-disabled",
+      expect.objectContaining({ disabled: true, reason: "daily-loop-disabled" }),
+    );
+    log.mockRestore();
+  });
+
   it("falls back visibly when scheduled Workflow dispatch fails", async () => {
     const workflow = {
       create: vi.fn(async () => {
@@ -674,6 +713,7 @@ describe("runDailySourceAgentLoop", () => {
     expect(wranglerConfig).toContain('"name": "daily-source-agent-loop"');
     expect(wranglerConfig).toContain('"class_name": "DailySourceAgentLoopWorkflow"');
     expect(wranglerConfig).toContain('"crons": ["0 10 * * *"]');
+    expect(wranglerConfig).toContain('"DAILY_LOOP_ENABLED": "true"');
   });
 
   it("falls back to fixture analyzer without a Gemini key and uses direct analyzer with a mocked key", async () => {

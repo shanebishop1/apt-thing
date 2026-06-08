@@ -48,7 +48,6 @@ export async function GET(request: NextRequest) {
       REALTYAPI_KEY: env?.REALTYAPI_KEY ?? process.env.REALTYAPI_KEY,
       REALTYAPI_BASE_URL: env?.REALTYAPI_BASE_URL ?? process.env.REALTYAPI_BASE_URL,
       DB: env?.DB,
-      RAW_ARTIFACTS: env?.RAW_ARTIFACTS,
       APP_CACHE: env?.APP_CACHE,
     },
   });
@@ -96,7 +95,6 @@ export async function POST(request: NextRequest) {
       REALTYAPI_KEY: env?.REALTYAPI_KEY ?? process.env.REALTYAPI_KEY,
       REALTYAPI_BASE_URL: env?.REALTYAPI_BASE_URL ?? process.env.REALTYAPI_BASE_URL,
       DB: env?.DB,
-      RAW_ARTIFACTS: env?.RAW_ARTIFACTS,
       APP_CACHE: env?.APP_CACHE,
     },
   });

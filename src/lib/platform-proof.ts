@@ -7,12 +7,11 @@ import {
 
 export type PlatformProofEnv = Partial<{
   DB: D1Database;
-  RAW_ARTIFACTS: R2Bucket;
   APP_CACHE: KVNamespace;
 }>;
 
 export type BindingProofStep = {
-  binding: "D1" | "R2" | "KV";
+  binding: "D1" | "KV";
   ok: boolean;
   skipped: boolean;
   operation: string;
@@ -25,8 +24,12 @@ export type CloudflareBindingProofResult = {
   groupId: string;
   proofId: string;
   d1: BindingProofStep;
-  r2: BindingProofStep;
   kv: BindingProofStep & { authoritativeState: false };
+  rawArtifacts: {
+    enabled: false;
+    storage: "source-image-urls-and-d1-metadata";
+    detail: string;
+  };
   notes: string[];
 };
 
@@ -52,13 +55,6 @@ export async function runCloudflareBindingProof(
   const d1 = env?.DB
     ? await proveD1(env.DB, groupId, proofId)
     : skippedStep("D1", "write/read/delete group-scoped smoke row", "DB binding unavailable");
-  const r2 = env?.RAW_ARTIFACTS
-    ? await proveR2(env.RAW_ARTIFACTS, groupId, proofId)
-    : skippedStep(
-        "R2",
-        "write/read/delete raw artifact pointer fixture",
-        "RAW_ARTIFACTS binding unavailable",
-      );
   const kvBase = env?.APP_CACHE
     ? await proveKV(env.APP_CACHE, proofId)
     : skippedStep("KV", "write/read/delete cache/config fixture", "APP_CACHE binding unavailable");
@@ -66,15 +62,19 @@ export async function runCloudflareBindingProof(
 
   return {
     contract: "cloudflare-binding-proof-v1",
-    ok: d1.ok && r2.ok && kv.ok,
+    ok: d1.ok && kv.ok,
     groupId,
     proofId,
     d1,
-    r2,
     kv,
+    rawArtifacts: {
+      enabled: false,
+      storage: "source-image-urls-and-d1-metadata",
+      detail: "R2 is intentionally disabled for the near-term MVP to avoid storage charges.",
+    },
     notes: [
       "D1 is the authoritative relational owner for listing/group/run state.",
-      "R2 stores raw source/evidence artifacts and D1 stores pointers/metadata.",
+      "Raw artifact storage is disabled; listing images stay as source URLs and evidence metadata stays in D1.",
       "KV is cache/config only and is never authoritative listing or group-review state.",
     ],
   };
@@ -142,42 +142,6 @@ async function proveD1(
     };
   } catch (error) {
     return failedStep("D1", "write/read/delete group-scoped smoke row", error);
-  }
-}
-
-async function proveR2(
-  bucket: R2Bucket,
-  groupId: string,
-  proofId: string,
-): Promise<BindingProofStep> {
-  const key = `${groupId}/platform-proof/${proofId}.json`;
-  const payload = {
-    groupId,
-    proofId,
-    sourceUrl: "https://streeteasy.com/building/batch-save/3",
-    pointerRole: "raw-artifact-fixture",
-  };
-
-  try {
-    await bucket.put(key, JSON.stringify(payload), {
-      httpMetadata: { contentType: "application/json" },
-      customMetadata: { groupId, proofId },
-    });
-    const object = await bucket.get(key);
-    const text = object ? await object.text() : "";
-    await bucket.delete(key);
-    const deleted = (await bucket.get(key)) === null;
-    const parsed = JSON.parse(text) as typeof payload;
-
-    return {
-      binding: "R2",
-      ok: parsed.groupId === groupId && parsed.proofId === proofId && deleted,
-      skipped: false,
-      operation: "write/read/delete raw artifact pointer fixture",
-      detail: `key=${key}; deleted=${String(deleted)}`,
-    };
-  } catch (error) {
-    return failedStep("R2", "write/read/delete raw artifact pointer fixture", error);
   }
 }
 

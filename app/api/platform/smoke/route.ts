@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 
 type BindingState = "bound" | "missing";
 type ContextStatus = "available" | "unavailable";
-type PlatformSmokeEnv = Partial<
-  Record<"APP_ENV" | "DB" | "RAW_ARTIFACTS" | "APP_CACHE" | "ASSETS", unknown>
->;
+type PlatformSmokeEnv = Partial<Record<"APP_ENV" | "DB" | "APP_CACHE" | "ASSETS", unknown>>;
 
 function bindingState(value: unknown): BindingState {
   return value ? "bound" : "missing";
@@ -21,9 +19,12 @@ export function buildPlatformSmokePayload(
     appEnv: typeof env?.APP_ENV === "string" ? env.APP_ENV : "unknown",
     bindings: {
       db: bindingState(env?.DB),
-      rawArtifacts: bindingState(env?.RAW_ARTIFACTS),
       appCache: bindingState(env?.APP_CACHE),
       assets: bindingState(env?.ASSETS),
+    },
+    rawArtifacts: {
+      storage: "disabled",
+      reason: "R2 not used in near-term MVP; source image URLs and evidence metadata stay in D1.",
     },
   };
 }

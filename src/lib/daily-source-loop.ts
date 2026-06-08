@@ -55,23 +55,14 @@ export type DailyLoopD1Binding = {
   };
 };
 
-export type DailyLoopR2Binding = {
-  put(
-    key: string,
-    value: string | ArrayBuffer | ArrayBufferView | Blob,
-    options?: { httpMetadata?: { contentType?: string } },
-  ): Promise<unknown>;
-};
-
 export type DailyLoopKVBinding = {
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<unknown>;
 };
 
 export type DailyLoopEnv = Partial<
-  Record<"GEMINI_API_KEY" | "REALTYAPI_KEY" | "REALTYAPI_BASE_URL", string>
+  Record<"GEMINI_API_KEY" | "REALTYAPI_KEY" | "REALTYAPI_BASE_URL" | "DAILY_LOOP_ENABLED", string>
 > & {
   DB?: DailyLoopD1Binding;
-  RAW_ARTIFACTS?: DailyLoopR2Binding;
   APP_CACHE?: DailyLoopKVBinding;
 };
 
@@ -110,7 +101,7 @@ export type DailyLoopPersistenceOutcome = {
   };
   r2: {
     attempted: boolean;
-    skippedReason?: "missing-binding";
+    skippedReason?: "disabled-no-r2";
     objectsWritten: number;
     error?: string;
   };
@@ -136,8 +127,9 @@ export type DailyLoopPersistencePlan = {
       seenMemory: SeenRejectedMemoryRecord[];
     };
   };
-  r2: {
-    bucketBinding: "RAW_ARTIFACTS";
+  rawArtifacts: {
+    storage: "disabled-no-r2";
+    strategy: "source-image-urls-and-d1-metadata";
     rawArtifactPointers: EvidenceStoragePointer[];
   };
   kv: {
@@ -447,7 +439,11 @@ export async function runDailySourceAgentLoop(
         seenMemory: seenRejectedMemory,
       },
     },
-    r2: { bucketBinding: "RAW_ARTIFACTS", rawArtifactPointers },
+    rawArtifacts: {
+      storage: "disabled-no-r2",
+      strategy: "source-image-urls-and-d1-metadata",
+      rawArtifactPointers,
+    },
     kv: { allowedOnlyFor: "cache-config", authoritative: false },
   } satisfies Omit<DailyLoopPersistencePlan, "outcome">;
   const persistence: DailyLoopPersistencePlan = {
@@ -1247,7 +1243,7 @@ function createDailyLoopSourceEvidence({
         claim: `${item.source} source failure isolated`,
         quote: item.failureMessage ?? "Source failed without failing the daily loop.",
         pointer: rawArtifactPointers.find((pointer) => pointer.key.includes("source-failures")) ?? {
-          owner: "r2",
+          owner: "d1",
           key: `${groupId}/${runId}/source-failures/${item.source}.json`,
           contentType: "application/json",
           groupScoped: true,
@@ -1477,7 +1473,7 @@ function createRawArtifactPointers(
   return [
     ...coverage.map(
       (item): EvidenceStoragePointer => ({
-        owner: "r2",
+        owner: "d1",
         key: `${groupId}/${runId}/${item.status === "failed" ? "source-failures" : item.source}/coverage.json`,
         contentType: "application/json",
         groupScoped: true,
@@ -1485,7 +1481,7 @@ function createRawArtifactPointers(
     ),
     ...listings.map(
       (listing): EvidenceStoragePointer => ({
-        owner: "r2",
+        owner: "d1",
         key: `${groupId}/${runId}/${listing.source}/${listing.id}/raw-artifact.json`,
         contentType: "application/json",
         groupScoped: true,
@@ -1908,7 +1904,7 @@ async function persistDailyLoopArtifacts(input: {
   d1TransitionErrors: string[];
 }): Promise<DailyLoopPersistenceOutcome> {
   const d1 = await persistD1(input);
-  const r2 = await persistR2(input);
+  const r2 = persistRawArtifactsDisabled();
   const kv = await persistKV(input);
   return { d1, r2, kv };
 }
@@ -2237,35 +2233,8 @@ async function runD1(db: DailyLoopD1Binding, sql: string, ...values: unknown[]) 
     .run();
 }
 
-async function persistR2(
-  input: Parameters<typeof persistDailyLoopArtifacts>[0],
-): Promise<DailyLoopPersistenceOutcome["r2"]> {
-  const bucket = input.env?.RAW_ARTIFACTS;
-  if (!bucket) return { attempted: false, skippedReason: "missing-binding", objectsWritten: 0 };
-  try {
-    let objectsWritten = 0;
-    for (const pointer of input.rawArtifactPointers) {
-      const body = pointer.key.includes("coverage.json")
-        ? input.coverage.filter(
-            (item) =>
-              pointer.key.includes(`/${item.source}/`) || pointer.key.includes("source-failures"),
-          )
-        : (input.listings.find((listing) =>
-            pointer.key.includes(`/${listing.source}/${listing.id}/`),
-          ) ?? input.sourceEvidence.filter((evidence) => evidence.pointer.key === pointer.key));
-      await bucket.put(pointer.key, JSON.stringify(body, null, 2), {
-        httpMetadata: { contentType: pointer.contentType },
-      });
-      objectsWritten += 1;
-    }
-    return { attempted: true, objectsWritten };
-  } catch (error) {
-    return {
-      attempted: true,
-      objectsWritten: 0,
-      error: error instanceof Error ? error.message : "r2-write-failed",
-    };
-  }
+function persistRawArtifactsDisabled(): DailyLoopPersistenceOutcome["r2"] {
+  return { attempted: false, skippedReason: "disabled-no-r2", objectsWritten: 0 };
 }
 
 async function persistKV(

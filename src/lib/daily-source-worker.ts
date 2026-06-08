@@ -6,6 +6,7 @@ import {
 import type { Cadence } from "./listings";
 
 export const DAILY_SOURCE_AGENT_LOOP_WORKFLOW_BINDING = "DAILY_SOURCE_AGENT_LOOP_WORKFLOW" as const;
+export const DAILY_LOOP_DISABLED_VALUES = new Set(["false", "0", "off"]);
 
 export type DailyLoopWorkflowTrigger = "cron" | "fixture";
 
@@ -38,6 +39,17 @@ export type DailyLoopExecutionContext = Pick<ExecutionContext, "waitUntil">;
 
 export type DailyLoopScheduledDispatch =
   | {
+      ok: true;
+      disabled: true;
+      dispatchedToWorkflow: false;
+      fallback: false;
+      reason: "daily-loop-disabled";
+      envVar: "DAILY_LOOP_ENABLED";
+      configuredValue: string;
+      payload: DailyLoopWorkflowPayload;
+    }
+  | {
+      disabled?: false;
       dispatchedToWorkflow: true;
       fallback: false;
       workflowBinding: typeof DAILY_SOURCE_AGENT_LOOP_WORKFLOW_BINDING;
@@ -45,6 +57,7 @@ export type DailyLoopScheduledDispatch =
       payload: DailyLoopWorkflowPayload;
     }
   | (Awaited<ReturnType<typeof runDailySourceAgentLoop>> & {
+      disabled?: false;
       dispatchedToWorkflow: false;
       fallback: true;
       fallbackReason: "missing-workflow-binding" | "workflow-dispatch-failed";
@@ -76,6 +89,20 @@ export async function scheduledDailySourceAgentLoop(
   env: DailyLoopScheduledEnv,
 ): Promise<DailyLoopScheduledDispatch> {
   const payload = createDailyLoopWorkflowPayload(event);
+  const disabledValue = getDailyLoopDisabledValue(env.DAILY_LOOP_ENABLED);
+  if (disabledValue) {
+    return {
+      ok: true,
+      disabled: true,
+      dispatchedToWorkflow: false,
+      fallback: false,
+      reason: "daily-loop-disabled",
+      envVar: "DAILY_LOOP_ENABLED",
+      configuredValue: disabledValue,
+      payload,
+    };
+  }
+
   const workflow = env[DAILY_SOURCE_AGENT_LOOP_WORKFLOW_BINDING];
   if (workflow) {
     try {
@@ -85,6 +112,7 @@ export async function scheduledDailySourceAgentLoop(
         retention: { successRetention: "30 days", errorRetention: "90 days" },
       });
       return {
+        disabled: false,
         dispatchedToWorkflow: true,
         fallback: false,
         workflowBinding: DAILY_SOURCE_AGENT_LOOP_WORKFLOW_BINDING,
@@ -101,6 +129,7 @@ export async function scheduledDailySourceAgentLoop(
       });
       return {
         ...result,
+        disabled: false,
         dispatchedToWorkflow: false,
         fallback: true,
         fallbackReason: "workflow-dispatch-failed",
@@ -122,6 +151,7 @@ export async function scheduledDailySourceAgentLoop(
   });
   return {
     ...result,
+    disabled: false,
     dispatchedToWorkflow: false,
     fallback: true,
     fallbackReason: "missing-workflow-binding",
@@ -141,11 +171,24 @@ export function createDailyLoopWorkerHandler(
       return openNextWorker.fetch(request, env, ctx);
     },
     scheduled(event, env, ctx) {
-      ctx.waitUntil(scheduledDailySourceAgentLoop(event, env));
+      ctx.waitUntil(
+        scheduledDailySourceAgentLoop(event, env).then((result) => {
+          if (result.disabled) {
+            console.info("daily-source-agent-loop-disabled", result);
+          }
+
+          return result;
+        }),
+      );
     },
   };
 }
 
 function createWorkflowInstanceId(event: DailyLoopScheduledEvent) {
   return `daily-source-agent-loop-${event.scheduledTime}-${event.cron.replace(/[^a-zA-Z0-9]+/g, "-")}`;
+}
+
+function getDailyLoopDisabledValue(value: string | undefined) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized && DAILY_LOOP_DISABLED_VALUES.has(normalized) ? value : undefined;
 }

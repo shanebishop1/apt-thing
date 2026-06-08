@@ -42,32 +42,6 @@ class MockD1Statement {
   }
 }
 
-class MockR2Object {
-  constructor(private readonly value: string) {}
-
-  async text() {
-    return this.value;
-  }
-}
-
-class MockR2Bucket {
-  objects = new Map<string, string>();
-
-  async put(key: string, value: string) {
-    this.objects.set(key, value);
-    return null;
-  }
-
-  async get(key: string) {
-    const value = this.objects.get(key);
-    return value === undefined ? null : new MockR2Object(value);
-  }
-
-  async delete(key: string) {
-    this.objects.delete(key);
-  }
-}
-
 class MockKVNamespace {
   values = new Map<string, string>();
 
@@ -85,10 +59,9 @@ class MockKVNamespace {
 }
 
 describe("Cloudflare binding proof", () => {
-  it("writes, reads, and deletes D1/R2/KV fixture data while keeping KV cache/config only", async () => {
+  it("writes, reads, and deletes D1/KV fixture data while keeping raw artifacts disabled", async () => {
     const env = {
       DB: new MockD1Database() as unknown as D1Database,
-      RAW_ARTIFACTS: new MockR2Bucket() as unknown as R2Bucket,
       APP_CACHE: new MockKVNamespace() as unknown as KVNamespace,
     };
 
@@ -99,9 +72,13 @@ describe("Cloudflare binding proof", () => {
 
     expect(result.ok).toBe(true);
     expect(result.d1).toMatchObject({ ok: true, skipped: false });
-    expect(result.r2).toMatchObject({ ok: true, skipped: false });
     expect(result.kv).toMatchObject({ ok: true, skipped: false, authoritativeState: false });
+    expect(result.rawArtifacts).toMatchObject({
+      enabled: false,
+      storage: "source-image-urls-and-d1-metadata",
+    });
     expect(result.notes.join(" ")).toContain("KV is cache/config only");
+    expect(result.notes.join(" ")).toContain("Raw artifact storage is disabled");
   });
 
   it("reports skipped binding proof steps when worker bindings are unavailable", async () => {
@@ -109,7 +86,7 @@ describe("Cloudflare binding proof", () => {
 
     expect(result.ok).toBe(false);
     expect(result.d1).toMatchObject({ binding: "D1", skipped: true });
-    expect(result.r2).toMatchObject({ binding: "R2", skipped: true });
     expect(result.kv).toMatchObject({ binding: "KV", skipped: true, authoritativeState: false });
+    expect(result.rawArtifacts.enabled).toBe(false);
   });
 });

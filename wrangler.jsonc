@@ -12,26 +12,27 @@
     {
       "binding": "DB",
       "database_name": "apt-thing-local",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "3d45db61-b312-406a-bae2-c3f1af12a1a9",
       "migrations_dir": "./migrations",
-    },
-  ],
-  "r2_buckets": [
-    {
-      "binding": "RAW_ARTIFACTS",
-      "bucket_name": "apt-thing-raw-artifacts",
     },
   ],
   "kv_namespaces": [
     {
       "binding": "APP_CACHE",
-      "id": "00000000000000000000000000000000",
-      "preview_id": "00000000000000000000000000000000",
+      "id": "371fa51f16f149a7845a15b19d459294",
+      "preview_id": "d2e40710a3344b3283cf7a1fe14d7fe8",
+    },
+  ],
+  "routes": [
+    {
+      "pattern": "apt.shane-bishop.com",
+      "custom_domain": true,
     },
   ],
   "vars": {
     "NEXTJS_ENV": "production",
     "APP_ENV": "local",
+    "DAILY_LOOP_ENABLED": "true",
   },
   "triggers": {
     "crons": ["0 10 * * *"],
