@@ -304,7 +304,7 @@ describe("G1 saved-list exit verification", () => {
     expect(packageJson.scripts["cf:preview"]).toBe("pnpm cf:build && wrangler dev");
     expect(wrangler).toContain('"main": "src/worker.ts"');
     expect(wrangler).toContain('"binding": "DB"');
-    expect(wrangler).toContain('"binding": "RAW_ARTIFACTS"');
+    expect(wrangler).not.toContain('"binding": "RAW_ARTIFACTS"');
     expect(wrangler).toContain('"binding": "APP_CACHE"');
     expect(smokeRoute).toContain('runtime: "cloudflare-workers"');
     expect(smokeRoute).toContain("contextStatus");
@@ -345,17 +345,16 @@ describe("G1 saved-list exit verification", () => {
       appEnv: "unknown",
       bindings: {
         db: "missing",
-        rawArtifacts: "missing",
         appCache: "missing",
         assets: "missing",
       },
+      rawArtifacts: { storage: "disabled" },
     });
 
     expect(
       buildPlatformSmokePayload({
         APP_ENV: "local",
         DB: {},
-        RAW_ARTIFACTS: {},
         APP_CACHE: {},
         ASSETS: {},
       }),
@@ -366,10 +365,10 @@ describe("G1 saved-list exit verification", () => {
       appEnv: "local",
       bindings: {
         db: "bound",
-        rawArtifacts: "bound",
         appCache: "bound",
         assets: "bound",
       },
+      rawArtifacts: { storage: "disabled" },
     });
   });
 

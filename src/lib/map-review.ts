@@ -24,12 +24,14 @@ export type MapContextFixture = {
     kind: "grocery" | "park" | "pharmacy" | "laundry" | "other";
     distanceMeters: number;
     source: string;
+    coordinates?: MapCoordinates;
   }[];
 };
 
 export type MapReviewCandidate = {
   listing: ListingCandidate;
   coordinates?: MapCoordinates;
+  mapPosition?: MapPosition;
   pinState: "confirmed" | "review" | "rejected" | "untriaged" | "missing-location";
   zoneLabel: string;
   zoneKind: MapContextFixture["zone"]["kind"];
@@ -54,7 +56,27 @@ export type MapReviewModel = {
     west: number;
   };
   attribution: string;
+  viewport: MapViewport;
   mobileModes: readonly ["map", "list", "detail"];
+};
+
+export type MapPosition = {
+  left: number;
+  top: number;
+};
+
+export type MapViewport = {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+};
+
+export const nycMapViewport: MapViewport = {
+  north: 40.775,
+  south: 40.69,
+  east: -73.91,
+  west: -74.03,
 };
 
 const mapContextFixtures: MapContextFixture[] = [
@@ -137,7 +159,8 @@ export function createMapReviewModel(
     selected,
     bounds: createBounds(locatedCandidates),
     attribution:
-      "Fixture context only: OpenFreeMap-compatible basemap contract, NYC open-data-style zones, MTA-style subway labels, and OSM-style amenities. No paid/proprietary data.",
+      "Map data © OpenStreetMap contributors. Subway routes/stations use the public MTA Subway Routes & Stops FeatureServer derived from MTA GTFS feeds.",
+    viewport: nycMapViewport,
     mobileModes: ["map", "list", "detail"],
   };
 }
@@ -152,6 +175,7 @@ function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
   return {
     listing,
     coordinates: fixture.coordinates,
+    mapPosition: fixture.coordinates ? projectToMapPosition(fixture.coordinates) : undefined,
     pinState: fixture.coordinates ? toPinState(listing.triageBucket) : "missing-location",
     zoneLabel: fixture.zone.label,
     zoneKind: fixture.zone.kind,
@@ -168,6 +192,23 @@ function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
     confidenceLabel: toConfidenceLabel(listing.triageBucket),
     sourceLinks,
   };
+}
+
+export function projectToMapPosition(
+  coordinates: MapCoordinates,
+  viewport: MapViewport = nycMapViewport,
+): MapPosition {
+  const left = ((coordinates.longitude - viewport.west) / (viewport.east - viewport.west)) * 100;
+  const top = ((viewport.north - coordinates.latitude) / (viewport.north - viewport.south)) * 100;
+
+  return {
+    left: clamp(left, 0, 100),
+    top: clamp(top, 0, 100),
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 function toPinState(bucket: TriageBucket): MapReviewCandidate["pinState"] {
@@ -220,20 +261,7 @@ function createContext(
       distanceMeters,
       source: "fixture:mta-open-data-style",
     })),
-    amenities: [
-      {
-        name: "Fixture grocery",
-        kind: "grocery",
-        distanceMeters: 260,
-        source: "fixture:osm-open-data-style",
-      },
-      {
-        name: "Fixture park",
-        kind: "park",
-        distanceMeters: 680,
-        source: "fixture:osm-open-data-style",
-      },
-    ],
+    amenities: [],
   };
 }
 

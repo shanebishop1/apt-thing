@@ -120,17 +120,17 @@ export function createMobileAcceptanceScenario(
       {
         marker: "comments-reactions-status",
         selector:
-          '.group-actions-panel[aria-label="Group comments, reactions, and feedback"] button, .group-action-form textarea, .status-buttons button',
+          '.group-actions-panel[aria-label="Group comments, reactions, and feedback"] button, .group-action-form textarea, .status-dropdown-trigger',
         ariaLabel: "Group comments, reactions, and feedback",
-        role: "button",
+        role: "select",
         touchTargetPx: 52,
         semantics: ["comments", "reactions", "shared-status", "feedback-no-ranking-mutation"],
       },
       {
         marker: "review-status-controls",
-        selector: '.status-buttons[aria-label="Review status"] button',
+        selector: '.status-control[aria-label="Review status"] .status-dropdown-trigger',
         ariaLabel: "Review status",
-        role: "button",
+        role: "select",
         touchTargetPx: 52,
         semantics: REVIEW_STATUSES.map((status) => `sets-${status}`),
       },
@@ -218,7 +218,7 @@ export function runMobileAcceptanceScenario(
       scenario.platform === "ios-safari-equivalent" &&
       scenario.viewportFit === "cover" &&
       scenario.safeAreaInsets.length === 4 &&
-      scenario.reviewStatuses.length === 4 &&
+      scenario.reviewStatuses.length === REVIEW_STATUSES.length &&
       scenario.editableFields.length >= 7 &&
       checks.every((check) => check.passed),
     coveredAcceptanceMarkers: checks.filter((check) => check.passed).map((check) => check.marker),

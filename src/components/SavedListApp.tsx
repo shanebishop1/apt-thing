@@ -1,14 +1,40 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ToggleEvent,
+} from "react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Moon,
+  Pencil,
+  Plus,
+  Settings,
+  Sun,
+  X,
+} from "lucide-react";
+import type {
+  DivIcon,
+  LatLngBoundsExpression,
+  LayerGroup,
+  Map as LeafletMap,
+  Marker,
+} from "leaflet";
 import {
   appendGroupAction,
   createListingGroupActions,
-  createReviewDashboardModel,
   createSavedListing,
   createSelectedListingStorageKey,
   findSelectedListing,
-  getFixtureBatchRunSummary,
   getFixtureListingsForGroup,
   readGroupActions,
   readInviteIdentity,
@@ -22,7 +48,6 @@ import {
   writeSeenRejectedMemory,
   writeSavedListings,
   type ListingGroupActions,
-  type ReviewBatchRunSummary,
 } from "../lib/saved-list-storage";
 import type { GroupActionRecord, SeenRejectedMemoryRecord } from "../lib/agent-contracts";
 import { g3cBriefingRunHistoryFixture } from "../lib/agent-contract-fixtures";
@@ -64,11 +89,27 @@ const defaultIdentity = createInviteIdentity(
   defaultIdentityForm.inviteCode,
   defaultIdentityForm.displayName,
 )!;
-const fixtureBatchRunSummary = getFixtureBatchRunSummary();
 const fixtureBriefingRunHistory = g3cBriefingRunHistoryFixture;
 
 type IdentityFormState = typeof defaultIdentityForm;
-type FeedbackCategory = NonNullable<GroupActionRecord["feedback"]>["category"];
+type AppTab = "dashboard" | "map" | "briefing" | "history" | "settings";
+type ThemeMode = "dark" | "light";
+
+const themeStorageKey = "apt-thing-theme";
+const listingStatusSortOrder: Record<ReviewStatus, number> = {
+  touring: 0,
+  new: 1,
+  interested: 2,
+  unavailable: 3,
+  rejected: 4,
+};
+
+const appTabs: Array<{ id: AppTab; label: string }> = [
+  { id: "dashboard", label: "List" },
+  { id: "map", label: "Map" },
+  { id: "briefing", label: "Briefing" },
+  { id: "history", label: "Runs" },
+];
 
 type BriefingFeedbackSummaryItem = FeedbackSummary & {
   groupId: string;
@@ -87,14 +128,16 @@ export type LatestBriefingMemoryRecord = {
 };
 
 type ListingSectionProps = {
-  title: string;
-  eyebrow: string;
-  description: string;
-  listings: ListingCandidate[];
+  groups?: ListingListGroup[];
   selectedId?: string;
-  emptyText: string;
   onSelect: (listingId: string) => void;
   onSourceOpen: (listing: ListingCandidate) => void;
+};
+
+type ListingListGroup = {
+  id: string;
+  label: string;
+  listings: ListingCandidate[];
 };
 
 export type RunHistoryArtifactLink = {
@@ -161,16 +204,20 @@ export function SavedListApp() {
   const [selectedId, setSelectedId] = useState<string>(listings[0]?.id ?? "");
   const [url, setUrl] = useState("");
   const [commentText, setCommentText] = useState("");
-  const [feedbackText, setFeedbackText] = useState("");
-  const [feedbackCategory, setFeedbackCategory] = useState<FeedbackCategory>("fit");
-  const [message, setMessage] = useState(
-    "Local mock storage is ready. Add a source link or inspect the current batch review queue.",
-  );
+  const [activeTab, setActiveTab] = useState<AppTab>("dashboard");
+  const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
+  const [message, setMessage] = useState("");
   const [hasHydrated, setHasHydrated] = useState(false);
+  const addListingInputRef = useRef<HTMLInputElement | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     try {
+      const savedTheme = window.localStorage.getItem(themeStorageKey);
+      if (savedTheme === "light" || savedTheme === "dark") {
+        setThemeMode(savedTheme);
+      }
+
       const savedIdentity = readInviteIdentity(window.localStorage);
       const activeIdentity =
         savedIdentity?.kind === "valid" ? savedIdentity.identity : defaultIdentity;
@@ -202,17 +249,27 @@ export function SavedListApp() {
       setGroupActions(hydratedActions);
       setSeenRejectedMemory(hydratedMemory);
       setSelectedId(findSelectedListing(hydratedListings, savedSelectedId)?.id ?? "");
-      setMessage(
-        savedIdentity
-          ? "Re-opened the active group's locally saved listings."
-          : "Loaded fixture listings, including the latest StreetEasy batch review queue.",
-      );
+      setMessage("");
     } catch {
       setMessage("Browser storage is unavailable; using fixture listings for this session.");
     } finally {
       setHasHydrated(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    document.documentElement.dataset.theme = themeMode;
+
+    try {
+      window.localStorage.setItem(themeStorageKey, themeMode);
+    } catch {
+      setMessage("Could not persist theme preference in this browser session.");
+    }
+  }, [hasHydrated, themeMode]);
 
   useEffect(() => {
     if (!hasHydrated || !identity) {
@@ -238,16 +295,28 @@ export function SavedListApp() {
     }
   }, [hasHydrated, identity, selectedId]);
 
-  const dashboard = useMemo(
-    () => createReviewDashboardModel(listings, fixtureBatchRunSummary),
-    [listings],
-  );
   const mapReview = useMemo(
     () => createMapReviewModel(listings, selectedId),
     [listings, selectedId],
   );
   const selectedListing = identity ? findSelectedListing(listings, selectedId) : undefined;
-  const counts = dashboard.counts;
+  const listingGroups: ListingListGroup[] = useMemo(
+    () => [
+      {
+        id: "all",
+        label: "All listings",
+        listings: listings
+          .map((listing, index) => ({ listing, index }))
+          .sort(
+            (left, right) =>
+              listingStatusSortOrder[left.listing.reviewStatus] -
+                listingStatusSortOrder[right.listing.reviewStatus] || left.index - right.index,
+          )
+          .map(({ listing }) => listing),
+      },
+    ],
+    [listings],
+  );
 
   function handleIdentityChange(field: keyof IdentityFormState, value: string) {
     const nextForm = { ...identityForm, [field]: value };
@@ -326,6 +395,16 @@ export function SavedListApp() {
     });
   }
 
+  function handleThemeToggle() {
+    setThemeMode((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
+  }
+
+  function handleAddListingToggle(event: ToggleEvent<HTMLDetailsElement>) {
+    if (event.currentTarget.open) {
+      addListingInputRef.current?.focus();
+    }
+  }
+
   function handleStatusChange(listingId: string, status: ReviewStatus) {
     if (!identity) {
       setMessage("Enter a valid invite code before updating group records.");
@@ -373,7 +452,7 @@ export function SavedListApp() {
         sourceUrl: listing.url,
       }),
     );
-    setMessage("Original source opened and recorded for group review context.");
+    setMessage("");
   }
 
   function handleReaction(listing: ListingCandidate, reaction: GroupActionRecord["reaction"]) {
@@ -385,7 +464,7 @@ export function SavedListApp() {
     persistGroupActions(
       appendGroupAction(groupActions, identity, listing, { actionType: "reaction", reaction }),
     );
-    setMessage(`Reaction recorded: ${reaction}.`);
+    setMessage("Reaction saved.");
   }
 
   function handleComment(event: FormEvent<HTMLFormElement>) {
@@ -408,37 +487,7 @@ export function SavedListApp() {
       }),
     );
     setCommentText("");
-    setMessage("Comment saved with roommate identity and listing provenance.");
-  }
-
-  function handleFeedback(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!identity || !selectedListing) {
-      setMessage("Open a listing with a valid invite before leaving feedback.");
-      return;
-    }
-
-    if (!feedbackText.trim()) {
-      setMessage("Add disagreement or feedback detail before saving.");
-      return;
-    }
-
-    persistGroupActions(
-      appendGroupAction(groupActions, identity, selectedListing, {
-        actionType: "feedback",
-        feedback: {
-          category: feedbackCategory,
-          summary: feedbackText.trim(),
-          disagreement: true,
-          target: feedbackCategory === "status" ? "shared-status" : "source-evidence",
-          sourceEvidenceIds: selectedListing.evidencePointers.map((pointer) => pointer.id),
-          doesNotMutateRanking: true,
-        },
-      }),
-    );
-    setFeedbackText("");
-    setMessage("Feedback saved for briefing/history without changing ranking.");
+    setMessage("Comment saved.");
   }
 
   function handleFieldChange(listingId: string, field: FieldProvenance["field"], rawValue: string) {
@@ -464,7 +513,7 @@ export function SavedListApp() {
         identity.displayName,
       ),
     );
-    setMessage(`Saved ${field} edit with local provenance for ${identity.displayName}.`);
+    setMessage(`Saved ${field}.`);
   }
 
   function persistGroupActions(nextActions: GroupActionRecord[]) {
@@ -496,163 +545,156 @@ export function SavedListApp() {
   }
 
   return (
-    <main className="dashboard-shell">
-      <header className="hero-panel">
-        <div className="eyebrow">
-          Apt Thing / {identity ? defaultSearchGroup.name : "valid invite required"}
-        </div>
-        <h1>Current availability, not spreadsheet chaos.</h1>
-        <p>
-          Pasted roommate finds and the latest StreetEasy batch candidates land in one mobile review
-          stack: current matches first, batch review next, and user-qualified links never hidden.
-        </p>
-        <div className="hero-actions" aria-label="Active group identity">
-          <label>
-            Invite code
-            <input
-              autoCapitalize="none"
-              autoComplete="off"
-              value={identityForm.inviteCode}
-              onChange={(event) => handleIdentityChange("inviteCode", event.target.value)}
-            />
-          </label>
-          <label>
-            Display name
-            <input
-              value={identityForm.displayName}
-              onChange={(event) => handleIdentityChange("displayName", event.target.value)}
-            />
-          </label>
-          <span>{identity ? `Active group: ${identity.groupId}` : "No active group"}</span>
-        </div>
-      </header>
-
-      <section className="summary-grid" aria-label="Saved list summary">
-        <SummaryCard label="Current" value={counts.currentMatches} tone="accent" />
-        <SummaryCard label="Batch review" value={counts.reviewNeededBatch} />
-        <SummaryCard label="Pasted visible" value={counts.userQualifiedPasted} />
-        <SummaryCard label="Skipped seen" value={counts.skippedSeen + counts.skippedTriaged} />
-      </section>
-
-      <LatestBriefingPanel history={fixtureBriefingRunHistory} />
-
-      <RunHistoryPanel history={fixtureBriefingRunHistory} />
-
-      <BatchStatusPanel batchRun={fixtureBatchRunSummary} />
-
-      <section className="intake-card" aria-label="Create saved listing">
-        <div>
-          <p className="eyebrow">Local/mock intake</p>
-          <h2>Add one apartment URL</h2>
-          <p id="intake-feedback" role="status" aria-live="polite">
-            {message}
-          </p>
-        </div>
-        <form onSubmit={handleCreate} className="intake-form">
-          <label>
-            Source listing URL
-            <input
-              type="url"
-              inputMode="url"
-              enterKeyHint="go"
-              autoCapitalize="none"
-              autoComplete="url"
-              aria-describedby="intake-feedback"
-              placeholder="https://streeteasy.com/building/..."
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              required
-            />
-          </label>
-          <button type="submit" disabled={isPending || !identity}>
-            {isPending ? "Saving…" : "Save listing"}
+    <main className="dashboard-shell" data-theme={themeMode}>
+      <nav className="app-tabs" aria-label="Apartment search workspace sections">
+        {appTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={activeTab === tab.id ? "active" : undefined}
+            onClick={() => setActiveTab(tab.id)}
+            aria-pressed={activeTab === tab.id}
+          >
+            {tab.label}
           </button>
-        </form>
-      </section>
+        ))}
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={handleThemeToggle}
+          aria-pressed={themeMode === "dark"}
+          aria-label={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
+          title={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
+        >
+          <span aria-hidden="true">
+            {themeMode === "dark" ? <Sun className="nav-icon" /> : <Moon className="nav-icon" />}
+          </span>
+        </button>
+        <button
+          type="button"
+          className={`settings-toggle${activeTab === "settings" ? " active" : ""}`}
+          onClick={() => setActiveTab("settings")}
+          aria-pressed={activeTab === "settings"}
+          aria-label="Settings"
+          title="Settings"
+        >
+          <span aria-hidden="true">
+            <Settings className="nav-icon" />
+          </span>
+        </button>
+      </nav>
 
-      <MapReviewPanel
-        model={mapReview}
-        selectedId={selectedListing?.id}
-        onSelect={setSelectedId}
-        onSourceOpen={handleSourceOpen}
-      />
+      {activeTab === "dashboard" ? (
+        <>
+          <div className="workspace-grid">
+            <section className="list-panel" aria-label="Saved listing review queue">
+              <div className="panel-heading listing-panel-heading">
+                <h2>Listings</h2>
+                <details className="add-listing-control" onToggle={handleAddListingToggle}>
+                  <summary aria-label="Add listing">
+                    <Plus className="summary-icon" aria-hidden="true" />
+                  </summary>
+                  <form onSubmit={handleCreate} className="intake-form compact">
+                    <label>
+                      <span className="sr-only">Source URL</span>
+                      <input
+                        ref={addListingInputRef}
+                        type="url"
+                        inputMode="url"
+                        enterKeyHint="go"
+                        autoCapitalize="none"
+                        autoComplete="url"
+                        aria-describedby="intake-feedback"
+                        placeholder="https://streeteasy.com/building/..."
+                        value={url}
+                        onChange={(event) => setUrl(event.target.value)}
+                        required
+                      />
+                    </label>
+                    <button type="submit" disabled={isPending || !identity}>
+                      {isPending ? "Saving…" : "Add"}
+                    </button>
+                    <p id="intake-feedback" role="status" aria-live="polite">
+                      {message || " "}
+                    </p>
+                  </form>
+                </details>
+              </div>
+              <ListingSection
+                groups={listingGroups}
+                selectedId={selectedListing?.id}
+                onSelect={setSelectedId}
+                onSourceOpen={handleSourceOpen}
+              />
+            </section>
 
-      <div className="workspace-grid">
-        <section className="list-panel" aria-label="Saved listing review queue">
-          <div className="panel-heading">
-            <p className="eyebrow">Card-first queue</p>
-            <h2>Review stack</h2>
-            <p>
-              Cards are grouped for phone review. Each card exposes row fields, status, fit flags,
-              extraction/batch/triage state, source opening, and inline evidence.
-            </p>
+            <ListingEditor
+              identity={identity}
+              listing={selectedListing}
+              actions={
+                identity && selectedListing
+                  ? createListingGroupActions(groupActions, identity.groupId, selectedListing.id)
+                  : undefined
+              }
+              commentText={commentText}
+              onCommentTextChange={setCommentText}
+              onFieldChange={handleFieldChange}
+              onStatusChange={handleStatusChange}
+              onSourceOpen={handleSourceOpen}
+              onReaction={handleReaction}
+              onComment={handleComment}
+            />
           </div>
-          <div className="section-stack">
-            <ListingSection
-              eyebrow="First"
-              title="Current matches"
-              description="Confirmed or strong active candidates that should be reviewed before history."
-              listings={dashboard.currentMatches}
-              selectedId={selectedListing?.id}
-              emptyText="No current matches in this local queue yet."
-              onSelect={setSelectedId}
-              onSourceOpen={handleSourceOpen}
-            />
-            <ListingSection
-              eyebrow="Second"
-              title="Review-needed batch candidates"
-              description="StreetEasy batch records that were not skipped but need human triage."
-              listings={dashboard.reviewNeededBatch}
-              selectedId={selectedListing?.id}
-              emptyText="No batch candidates need review."
-              onSelect={setSelectedId}
-              onSourceOpen={handleSourceOpen}
-            />
-            <ListingSection
-              eyebrow="Always visible"
-              title="User-qualified pasted links"
-              description="Roommate-pasted links stay reviewable even when extraction is partial or rejected."
-              listings={dashboard.userQualifiedPasted}
-              selectedId={selectedListing?.id}
-              emptyText="No pasted links outside current matches yet."
-              onSelect={setSelectedId}
-              onSourceOpen={handleSourceOpen}
-            />
-            <ListingSection
-              eyebrow="History"
-              title="Rejected or lower-priority records"
-              description="Kept for duplicate memory without cluttering the current batch review."
-              listings={dashboard.history}
-              selectedId={selectedListing?.id}
-              emptyText="No history records yet."
-              onSelect={setSelectedId}
-              onSourceOpen={handleSourceOpen}
-            />
+        </>
+      ) : null}
+
+      {activeTab === "map" ? (
+        <MapReviewPanel
+          model={mapReview}
+          selectedId={selectedListing?.id}
+          onSelect={setSelectedId}
+          onSourceOpen={handleSourceOpen}
+        />
+      ) : null}
+
+      {activeTab === "briefing" ? (
+        <LatestBriefingPanel history={fixtureBriefingRunHistory} />
+      ) : null}
+
+      {activeTab === "history" ? <RunHistoryPanel history={fixtureBriefingRunHistory} /> : null}
+
+      {activeTab === "settings" ? (
+        <section className="settings-card" aria-label="Settings">
+          <div className="panel-heading settings-heading">
+            <div>
+              <h2>Settings</h2>
+            </div>
+          </div>
+          <div className="settings-form" aria-label="Active group identity">
+            <label className="settings-field">
+              Invite code
+              <input
+                autoCapitalize="none"
+                autoComplete="off"
+                value={identityForm.inviteCode}
+                onChange={(event) => handleIdentityChange("inviteCode", event.target.value)}
+              />
+            </label>
+            <label className="settings-field">
+              Display name
+              <input
+                value={identityForm.displayName}
+                onChange={(event) => handleIdentityChange("displayName", event.target.value)}
+              />
+            </label>
+            <div className="settings-status" role="status" aria-live="polite">
+              <span className="eyebrow">Current workspace</span>
+              <strong>{identity ? identity.groupId : "No active group"}</strong>
+              <p>{identity ? `Saving as ${identity.displayName}` : "Enter a valid invite code."}</p>
+            </div>
           </div>
         </section>
-
-        <ListingEditor
-          identity={identity}
-          listing={selectedListing}
-          actions={
-            identity && selectedListing
-              ? createListingGroupActions(groupActions, identity.groupId, selectedListing.id)
-              : undefined
-          }
-          commentText={commentText}
-          feedbackText={feedbackText}
-          feedbackCategory={feedbackCategory}
-          onCommentTextChange={setCommentText}
-          onFeedbackTextChange={setFeedbackText}
-          onFeedbackCategoryChange={setFeedbackCategory}
-          onFieldChange={handleFieldChange}
-          onStatusChange={handleStatusChange}
-          onSourceOpen={handleSourceOpen}
-          onReaction={handleReaction}
-          onComment={handleComment}
-          onFeedback={handleFeedback}
-        />
-      </div>
+      ) : null}
     </main>
   );
 }
@@ -772,11 +814,8 @@ export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContra
       <header className="run-history-header">
         <div>
           <p className="eyebrow">Run history</p>
-          <h2>Every agent pass, compact enough for the group chat.</h2>
-          <p>
-            Supported cadences: {model.supportedCadences.join(", ")}. Manual and daily records are
-            visible now, with hourly cadence preserved for the later scheduler path.
-          </p>
+          <h2>Runs</h2>
+          <p>Cadences: {model.supportedCadences.join(", ")}.</p>
         </div>
         <div className="run-history-total" aria-label="Run history total">
           <span>Records</span>
@@ -852,7 +891,7 @@ export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContra
               >
                 <h4>Failures</h4>
                 {run.failures.length === 0 ? (
-                  <p>No source failures recorded for this run.</p>
+                  <p>No failures.</p>
                 ) : (
                   <ul>
                     {run.failures.map((failure) => (
@@ -871,7 +910,7 @@ export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContra
               >
                 <h4>Provider/model metadata</h4>
                 {run.providerMetadata.length === 0 ? (
-                  <p>No provider metadata recorded.</p>
+                  <p>No provider metadata.</p>
                 ) : (
                   <ul>
                     {run.providerMetadata.map((metadata, index) => (
@@ -890,7 +929,7 @@ export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContra
               >
                 <h4>Evidence artifacts</h4>
                 {run.artifactLinks.length === 0 ? (
-                  <p>No raw artifacts recorded for this run yet.</p>
+                  <p>No artifacts.</p>
                 ) : (
                   <div className="artifact-link-grid">
                     {run.artifactLinks.map((artifact) => (
@@ -919,7 +958,7 @@ export function LatestBriefingPanel({ history }: { history: BriefingRunHistoryCo
       <header className="briefing-header">
         <div>
           <p className="eyebrow">Latest in-app briefing</p>
-          <h2>Today&apos;s agent readout, before the cards.</h2>
+          <h2>Briefing</h2>
           <p>{model.summary}</p>
         </div>
         <div className="briefing-run-pill" aria-label="Latest briefing run status">
@@ -932,20 +971,20 @@ export function LatestBriefingPanel({ history }: { history: BriefingRunHistoryCo
       <div className="briefing-layout">
         <div className="briefing-highlight-stack">
           <BriefingCandidateGroup
-            eyebrow="Best new/current matches"
+            eyebrow="Matches"
             candidates={model.bestMatches}
-            emptyText="No current match surfaced in the latest briefing."
+            emptyText="No matches."
           />
           <BriefingCandidateGroup
-            eyebrow="Review-needed candidates"
+            eyebrow="Review needed"
             candidates={model.reviewNeeded}
-            emptyText="No review-needed candidate surfaced in the latest briefing."
+            emptyText="No review-needed candidates."
           />
         </div>
 
         <section className="briefing-section" aria-label="Changed listings">
           <h3>Changed listings</h3>
-          <BulletList items={model.changedListings} emptyText="No listing changes recorded." />
+          <BulletList items={model.changedListings} emptyText="No changes." />
         </section>
 
         <section className="briefing-section memory-counts" aria-label="Skipped / seen memory">
@@ -955,10 +994,6 @@ export function LatestBriefingPanel({ history }: { history: BriefingRunHistoryCo
             <Fact label="Triaged skips" value={String(model.skippedTriagedCount)} />
             <Fact label="Memory rows" value={String(model.memoryRecordCount)} />
           </div>
-          <p>
-            Saved records remain in review/history sections; seen, rejected, and already-triaged
-            listings stay explainable in memory without re-entering current matches.
-          </p>
           <MemoryRecordList records={model.memoryRecords} />
         </section>
 
@@ -982,23 +1017,18 @@ export function LatestBriefingPanel({ history }: { history: BriefingRunHistoryCo
 
         <section className="briefing-section" aria-label="Recommendation rationale">
           <h3>Recommendation rationale</h3>
-          <BulletList
-            items={model.recommendationRationale}
-            emptyText="No recommendation rationale recorded."
-          />
+          <BulletList items={model.recommendationRationale} emptyText="No rationale." />
         </section>
 
         <section className="briefing-section" aria-label="Concerns">
           <h3>Concerns</h3>
-          <BulletList items={model.concerns} emptyText="No open concerns recorded." />
+          <BulletList items={model.concerns} emptyText="No concerns." />
         </section>
 
         <section className="briefing-section next-actions" aria-label="Next actions">
           <h3>Next actions</h3>
-          <BulletList items={model.nextActions} emptyText="No next actions recorded." />
+          <BulletList items={model.nextActions} emptyText="No actions." />
         </section>
-
-        <FeedbackSummarySection items={model.feedbackSummaries} />
       </div>
     </section>
   );
@@ -1006,7 +1036,7 @@ export function LatestBriefingPanel({ history }: { history: BriefingRunHistoryCo
 
 function MemoryRecordList({ records }: { records: LatestBriefingMemoryRecord[] }) {
   if (records.length === 0) {
-    return <p className="empty-state">No seen/rejected memory records captured for this run.</p>;
+    return <p className="empty-state">No memory records.</p>;
   }
 
   return (
@@ -1092,47 +1122,6 @@ function BulletList({ items, emptyText }: { items: string[]; emptyText: string }
   );
 }
 
-function FeedbackSummarySection({ items }: { items: BriefingFeedbackSummaryItem[] }) {
-  return (
-    <section
-      className="briefing-section feedback-summary-panel"
-      aria-label="Feedback / disagreement summary"
-    >
-      <h3>Feedback / disagreement summary</h3>
-      <p className="ranking-note">Briefing-only: does not change ranking or search behavior.</p>
-      {items.length === 0 ? (
-        <p>No comments, reactions, status disagreements, or feedback summaries recorded.</p>
-      ) : (
-        <div className="feedback-summary-list">
-          {items.map((item) => (
-            <article key={item.listingId} className="feedback-summary-item">
-              <div className="feedback-attribution">
-                <strong>Listing: {item.listingTitle}</strong>
-                <span>Group: {item.groupId}</span>
-                <span>Source: {formatLabel(item.source)}</span>
-                <a href={item.sourceUrl} target="_blank" rel="noreferrer">
-                  Source record
-                </a>
-              </div>
-              <div className="feedback-counts" aria-label={`Feedback counts for ${item.listingId}`}>
-                <span>{item.commentCount} comments</span>
-                <span>{item.reactionCount} reactions</span>
-                <span>{item.statusChangeCount} statuses</span>
-                <span>{item.disagreementCount} disagreements</span>
-              </div>
-              <BulletList items={item.summaries} emptyText="No written feedback summaries." />
-              <small>
-                Listing ID {item.listingId} · ranking/search mutation{" "}
-                {item.doesNotMutateRanking ? "off" : "unknown"}
-              </small>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function createRunHistoryHeading(run: BriefingRunHistoryRun): string {
   if (run.cadence === "manual") {
     return "Manual import catch-up";
@@ -1178,8 +1167,8 @@ function uniquePointers(pointers: EvidenceStoragePointer[]): EvidenceStoragePoin
 function slugify(value: string): string {
   return value
     .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-|-$/g, "");
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function toLatestBriefingMemoryRecord(
@@ -1232,17 +1221,104 @@ function MapReviewPanel({
   onSourceOpen: (listing: ListingCandidate) => void;
 }) {
   const selected = model.selected;
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const leafletMapRef = useRef<LeafletMap | null>(null);
+  const listingMarkersRef = useRef<Marker[]>([]);
+  const subwayOverlayRef = useRef<LayerGroup | null>(null);
+  const leafletRef = useRef<typeof import("leaflet") | null>(null);
+
+  useEffect(() => {
+    const mapContainer = mapContainerRef.current;
+    if (!mapContainer || leafletMapRef.current) {
+      return;
+    }
+
+    let disposed = false;
+
+    void import("leaflet").then((leaflet) => {
+      if (disposed || !mapContainerRef.current) {
+        return;
+      }
+
+      leafletRef.current = leaflet;
+      const map = leaflet.map(mapContainerRef.current, {
+        attributionControl: false,
+        center: [40.7328, -73.9797],
+        scrollWheelZoom: true,
+        zoom: 13,
+        zoomControl: true,
+      });
+
+      leaflet
+        .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "",
+          maxZoom: 19,
+        })
+        .addTo(map);
+      leafletMapRef.current = map;
+      const nextMarkers = syncLeafletMap({
+        fitToListings: true,
+        leaflet,
+        map,
+        model,
+        onSelect,
+        selectedId,
+      });
+      listingMarkersRef.current = nextMarkers.listingMarkers;
+      void addMtaSubwayOverlay(leaflet, map)
+        .then((overlay) => {
+          if (disposed) {
+            overlay.remove();
+            return;
+          }
+
+          subwayOverlayRef.current = overlay;
+        })
+        .catch((error: unknown) => {
+          console.error("MTA subway overlay failed to load", error);
+        });
+      setTimeout(() => map.invalidateSize(), 0);
+    });
+
+    return () => {
+      disposed = true;
+      listingMarkersRef.current.forEach((marker) => marker.remove());
+      subwayOverlayRef.current?.remove();
+      listingMarkersRef.current = [];
+      subwayOverlayRef.current = null;
+      leafletMapRef.current?.remove();
+      leafletMapRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const leaflet = leafletRef.current;
+    const map = leafletMapRef.current;
+    if (!leaflet || !map) {
+      return;
+    }
+
+    listingMarkersRef.current.forEach((marker) => marker.remove());
+    const nextMarkers = syncLeafletMap({
+      fitToListings: false,
+      leaflet,
+      map,
+      model,
+      onSelect,
+      selectedId,
+    });
+    listingMarkersRef.current = nextMarkers.listingMarkers;
+  }, [model, onSelect, selectedId]);
 
   return (
     <section className="map-review-card" aria-label="Map enhanced review">
       <div className="panel-heading map-heading">
         <div>
           <p className="eyebrow">Map-enhanced review</p>
-          <h2>Browse the saved queue by location.</h2>
+          <h2>Map</h2>
           <p>
-            Fixture-backed OpenFreeMap context is layered on top of the saved-list dashboard: pins,
-            zones, subway, amenities, confidence, concerns, and source links stay synchronized with
-            the review stack.
+            Apartment pins with interactive MTA subway lines, stations, confidence, concerns, and
+            source links.
           </p>
         </div>
         <div className="map-mode-tabs" aria-label="Mobile map review modes">
@@ -1255,23 +1331,8 @@ function MapReviewPanel({
       </div>
 
       <div className="map-review-grid">
-        <div id="map-map" className="map-shell" aria-label="Fixture candidate map shell">
-          <div className="zone-overlay preferred">Preferred Manhattan zone</div>
-          <div className="zone-overlay fallback">Brooklyn/Queens fallback context</div>
-          {model.locatedCandidates.map((candidate, index) => (
-            <button
-              type="button"
-              key={candidate.listing.id}
-              className={`map-pin ${candidate.pinState}${candidate.listing.id === selectedId ? " selected" : ""}`}
-              style={pinPosition(index, model.locatedCandidates.length)}
-              onClick={() => onSelect(candidate.listing.id)}
-              aria-pressed={candidate.listing.id === selectedId}
-              aria-label={`Select ${candidate.listing.title} on map`}
-            >
-              <span>{index + 1}</span>
-            </button>
-          ))}
-          <div className="map-attribution">{model.attribution}</div>
+        <div id="map-map" className="map-shell" aria-label="Leaflet NYC apartment map">
+          <div ref={mapContainerRef} className="leaflet-map" />
         </div>
 
         <div id="map-list" className="map-list" aria-label="Map synchronized listing list">
@@ -1307,7 +1368,7 @@ function MapCandidateButton({
       onClick={() => onSelect(candidate.listing.id)}
       aria-pressed={selected}
     >
-      <span>{candidate.pinState.replaceAll("-", " ")}</span>
+      <span>{candidate.pinState.replace(/-/g, " ")}</span>
       <strong>{candidate.listing.title}</strong>
       <small>
         {candidate.zoneLabel} · {candidate.boroughFallback}
@@ -1347,6 +1408,7 @@ function MapDetail({
         <Fact label="Rent" value={formatMoney(candidate.listing.rent)} />
         <Fact label="Beds" value={String(candidate.listing.bedrooms ?? "?")} />
         <Fact label="Baths" value={String(candidate.listing.bathrooms ?? "?")} />
+        <Fact label="Age" value={formatListingAge(candidate.listing.createdAt)} />
         <Fact label="Available" value={candidate.listing.availableAt ?? "TBD"} />
       </section>
       <div className="map-context-stack">
@@ -1373,20 +1435,6 @@ function MapDetail({
             <p>Subway context pending for this fixture.</p>
           )}
         </section>
-        <section>
-          <h4>Open amenity context</h4>
-          {candidate.contextAmenities.length > 0 ? (
-            <ul>
-              {candidate.contextAmenities.slice(0, 2).map((amenity) => (
-                <li key={`${amenity.name}-${amenity.kind}`}>
-                  {amenity.name} · {amenity.kind} · {amenity.distanceMeters}m
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>Amenity context pending for this fixture.</p>
-          )}
-        </section>
       </div>
       <div className="source-link-row" aria-label="Selected source links">
         {candidate.sourceLinks.map((sourceLink) => (
@@ -1405,84 +1453,245 @@ function MapDetail({
   );
 }
 
-function pinPosition(index: number, total: number): { left: string; top: string } {
-  const columns = Math.max(1, Math.ceil(Math.sqrt(total)));
-  const row = Math.floor(index / columns);
-  const column = index % columns;
+type LeafletModule = typeof import("leaflet");
+type LeafletGeoJsonInput = Parameters<LeafletModule["geoJSON"]>[0];
 
-  return {
-    left: `${18 + column * (68 / columns)}%`,
-    top: `${22 + row * 22}%`,
-  };
-}
+type LeafletSyncResult = {
+  listingMarkers: Marker[];
+};
 
-function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: "accent" }) {
-  return (
-    <article className={tone === "accent" ? "summary-card accent" : "summary-card"}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </article>
-  );
-}
+const MTA_SUBWAY_FEATURE_SERVICE =
+  "https://services5.arcgis.com/OKgEWPlJhc3vFb8C/arcgis/rest/services/MTA_Subway_Routes_Stops/FeatureServer";
+const MTA_SUBWAY_STATIONS_LAYER = 0;
+const MTA_SUBWAY_ROUTES_LAYER = 1;
 
-function BatchStatusPanel({ batchRun }: { batchRun: ReviewBatchRunSummary }) {
-  return (
-    <section className="batch-status-card" aria-label="StreetEasy batch status">
-      <div>
-        <p className="eyebrow">StreetEasy manual batch</p>
-        <h2>
-          {formatLabel(batchRun.status)} run · {batchRun.cadence}
-        </h2>
-        <p>
-          Found {batchRun.counts.candidatesFound} candidates, saved{" "}
-          {batchRun.counts.candidatesSaved}, skipped {batchRun.counts.candidatesSkippedSeen} seen
-          and {batchRun.counts.candidatesSkippedTriaged} already triaged.
-        </p>
-      </div>
-      <div className="batch-metrics" aria-label="Batch metrics">
-        <Fact label="Analyzed" value={String(batchRun.counts.candidatesAnalyzed)} />
-        <Fact label="Image cap" value={String(batchRun.maxImagesPerListing)} />
-        <Fact label="Rejected" value={String(batchRun.counts.candidatesRejected)} />
-      </div>
-    </section>
-  );
-}
+type SubwayGeoJsonFeature = {
+  properties?: Record<string, unknown>;
+};
 
-function ListingSection({
-  title,
-  eyebrow,
-  description,
-  listings,
-  selectedId,
-  emptyText,
+function syncLeafletMap({
+  leaflet,
+  fitToListings,
+  map,
+  model,
   onSelect,
-  onSourceOpen,
-}: ListingSectionProps) {
+  selectedId,
+}: {
+  leaflet: LeafletModule;
+  fitToListings: boolean;
+  map: LeafletMap;
+  model: ReturnType<typeof createMapReviewModel>;
+  onSelect: (listingId: string) => void;
+  selectedId?: string;
+}): LeafletSyncResult {
+  const listingMarkers = model.locatedCandidates.map((candidate, index) => {
+    const marker = leaflet
+      .marker([candidate.coordinates!.latitude, candidate.coordinates!.longitude], {
+        icon: createListingLeafletIcon(
+          leaflet,
+          candidate,
+          index + 1,
+          candidate.listing.id === selectedId,
+        ),
+        keyboard: true,
+        title: candidate.listing.title,
+      })
+      .addTo(map);
+
+    marker.bindPopup(createListingPopup(candidate));
+    marker.on("click", () => onSelect(candidate.listing.id));
+    return marker;
+  });
+
+  if (fitToListings && model.locatedCandidates.length > 0) {
+    const bounds = model.locatedCandidates.map((candidate) => [
+      candidate.coordinates!.latitude,
+      candidate.coordinates!.longitude,
+    ]) as LatLngBoundsExpression;
+    map.fitBounds(bounds, { maxZoom: 14, padding: [34, 34] });
+  }
+
+  return { listingMarkers };
+}
+
+async function addMtaSubwayOverlay(leaflet: LeafletModule, map: LeafletMap): Promise<LayerGroup> {
+  const overlay = leaflet.layerGroup().addTo(map);
+  const [routes, stations] = await Promise.all([
+    fetchSubwayGeoJson(MTA_SUBWAY_ROUTES_LAYER),
+    fetchSubwayGeoJson(MTA_SUBWAY_STATIONS_LAYER),
+  ]);
+
+  leaflet
+    .geoJSON(routes, {
+      onEachFeature: (feature, layer) => {
+        const properties = getFeatureProperties(feature);
+        const route =
+          getPropertyText(properties, "route_shor") || getPropertyText(properties, "route_id");
+        const name = getPropertyText(properties, "route_long");
+        layer.bindPopup(
+          `<strong>${escapeHtml(route || "Subway route")}</strong><br>${escapeHtml(
+            name || "MTA subway route",
+          )}<br>Source: MTA Subway Routes & Stops`,
+        );
+      },
+      style: (feature) => {
+        const properties = getFeatureProperties(feature);
+        const color = normalizeRouteColor(getPropertyText(properties, "color"));
+        return {
+          color,
+          interactive: true,
+          opacity: 0.82,
+          weight: 4,
+        };
+      },
+    })
+    .addTo(overlay);
+
+  leaflet
+    .geoJSON(stations, {
+      onEachFeature: (feature, layer) => {
+        const properties = getFeatureProperties(feature);
+        const station = getPropertyText(properties, "stop_name") || "Subway station";
+        const trains = getPropertyText(properties, "trains") || "Routes unavailable";
+        layer.bindPopup(
+          `<strong>${escapeHtml(station)}</strong><br>Routes: ${escapeHtml(
+            trains,
+          )}<br>Source: MTA Subway Routes & Stops`,
+        );
+      },
+      pointToLayer: (feature, latlng) => {
+        const properties = getFeatureProperties(feature);
+        const trains = getPropertyText(properties, "trains");
+        return leaflet.circleMarker(latlng, {
+          className: "leaflet-subway-station",
+          color: "#1e1915",
+          fillColor: normalizeRouteColor(firstRouteColor(trains)),
+          fillOpacity: 0.96,
+          opacity: 0.86,
+          radius: 4.5,
+          weight: 1.5,
+        });
+      },
+    })
+    .addTo(overlay);
+
+  return overlay;
+}
+
+async function fetchSubwayGeoJson(layerId: number): Promise<LeafletGeoJsonInput> {
+  const response = await fetch(
+    `${MTA_SUBWAY_FEATURE_SERVICE}/${layerId}/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to load MTA subway layer ${layerId}: ${response.status}`);
+  }
+
+  return response.json() as Promise<LeafletGeoJsonInput>;
+}
+
+function getFeatureProperties(feature: unknown): Record<string, unknown> {
+  return ((feature as SubwayGeoJsonFeature | undefined)?.properties ?? {}) as Record<
+    string,
+    unknown
+  >;
+}
+
+function getPropertyText(properties: Record<string, unknown>, key: string): string {
+  const value = properties[key];
+  return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+}
+
+function normalizeRouteColor(value: string): string {
+  const color = value.replace(/^#/, "").trim();
+  return /^[0-9a-f]{6}$/i.test(color) ? `#${color}` : "#6b6257";
+}
+
+function firstRouteColor(routes: string): string {
+  const route =
+    routes
+      .split(/[\s,/]+/)
+      .find(Boolean)
+      ?.toUpperCase() ?? "";
+  const colors: Record<string, string> = {
+    "1": "EE352E",
+    "2": "EE352E",
+    "3": "EE352E",
+    "4": "00933C",
+    "5": "00933C",
+    "6": "00933C",
+    "7": "B933AD",
+    A: "0039A6",
+    C: "0039A6",
+    E: "0039A6",
+    B: "FF6319",
+    D: "FF6319",
+    F: "FF6319",
+    M: "FF6319",
+    G: "6CBE45",
+    J: "996633",
+    Z: "996633",
+    L: "A7A9AC",
+    N: "FCCC0A",
+    Q: "FCCC0A",
+    R: "FCCC0A",
+    W: "FCCC0A",
+    S: "808183",
+  };
+  return colors[route] ?? "6b6257";
+}
+
+function createListingLeafletIcon(
+  leaflet: LeafletModule,
+  candidate: MapReviewCandidate,
+  label: number,
+  selected: boolean,
+): DivIcon {
+  return leaflet.divIcon({
+    className: "",
+    html: `<span class="leaflet-listing-pin ${candidate.pinState}${selected ? " selected" : ""}">${label}</span>`,
+    iconAnchor: [20, 20],
+    iconSize: [40, 40],
+    popupAnchor: [0, -22],
+  });
+}
+
+function createListingPopup(candidate: MapReviewCandidate): string {
+  return `<strong>${escapeHtml(candidate.listing.title)}</strong><br>${escapeHtml(
+    candidate.listing.address,
+  )}<br>${escapeHtml(formatMoney(candidate.listing.rent))} · ${candidate.listing.bedrooms ?? "?"} beds`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function ListingSection({ groups = [], selectedId, onSelect, onSourceOpen }: ListingSectionProps) {
+  const safeGroups = groups.map((group) => ({ ...group, listings: group.listings ?? [] }));
+  const visibleListings = safeGroups.flatMap((group) => group.listings);
+  const hasListings = visibleListings.length > 0;
+
+  if (!hasListings) {
+    return <p className="empty-state">No listings.</p>;
+  }
+
   return (
-    <section className="listing-section" aria-label={title}>
-      <header className="section-header">
-        <div>
-          <p className="eyebrow">{eyebrow}</p>
-          <h3>{title}</h3>
-          <p>{description}</p>
-        </div>
-        <span>{listings.length}</span>
-      </header>
-      {listings.length === 0 ? (
-        <p className="empty-state">{emptyText}</p>
-      ) : (
-        <div className="listing-cards">
-          {listings.map((listing) => (
-            <ListingCard
-              key={listing.id}
-              listing={listing}
-              selected={listing.id === selectedId}
-              onSelect={onSelect}
-              onSourceOpen={onSourceOpen}
-            />
-          ))}
-        </div>
-      )}
+    <section className="listing-section" aria-label="Listing table">
+      <div className="listing-table-head" aria-hidden="true">
+        <span>Status</span>
+        <span>Listing</span>
+        <span>Rent</span>
+      </div>
+      <div className="listing-cards">
+        {visibleListings.map((listing) => (
+          <ListingCard
+            key={listing.id}
+            listing={listing}
+            selected={listing.id === selectedId}
+            onSelect={onSelect}
+            onSourceOpen={onSourceOpen}
+          />
+        ))}
+      </div>
     </section>
   );
 }
@@ -1498,94 +1707,228 @@ function ListingCard({
   onSelect: (listingId: string) => void;
   onSourceOpen: (listing: ListingCandidate) => void;
 }) {
-  const evidenceSummary = getEvidenceSummary(listing);
-  const concernSummary = getConcernSummary(listing);
-  const intakeKind = getProviderIntakeKind(listing);
-
   return (
     <article className={selected ? "listing-card selected" : "listing-card"}>
-      <div className="card-topline">
-        <span className="card-status">{listing.reviewStatus}</span>
-        <span>{listing.userQualified ? "pasted" : "batch"}</span>
-      </div>
-      <h4>{listing.title}</h4>
-      <div className="listing-rowgrid" aria-label="Minimum listing row fields">
-        <span>{listing.neighborhood ?? "Neighborhood TBD"}</span>
+      <button
+        type="button"
+        className="listing-row-button"
+        onClick={() => onSelect(listing.id)}
+        aria-pressed={selected}
+        aria-label={`${selected ? "Selected" : "Select"} ${listing.title}`}
+      >
+        <span className={`card-status status-${listing.reviewStatus}`}>
+          {formatLabel(listing.reviewStatus)}
+        </span>
+        <span className="listing-row-main">
+          <strong>{listing.title}</strong>
+          <small>{listing.neighborhood ?? listing.address}</small>
+        </span>
         <strong>{formatMoney(listing.rent)}</strong>
-        <span>{listing.bedrooms ?? "?"}BR</span>
-        <a
-          href={listing.url}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`Open source for ${listing.title}`}
-          onClick={() => onSourceOpen(listing)}
-        >
-          Source
-        </a>
-      </div>
-      <div className="state-grid" aria-label="Extraction and triage status">
-        <span>{listing.source}</span>
-        <span>{formatLabel(listing.extractionStatus)}</span>
-        <span>{formatLabel(intakeKind)}</span>
-        <span>{formatLabel(listing.triageStatus)}</span>
-        <span>{formatLabel(listing.triageBucket)}</span>
-      </div>
-      <div className="pills compact" aria-label="Light fit flags">
-        {listing.fitFlags.slice(0, 4).map((flag) => (
-          <span key={flag}>{formatLabel(flag)}</span>
-        ))}
-        {listing.fitFlags.length === 0 ? <span>No flags yet</span> : null}
-      </div>
-      <p className="card-summary">{evidenceSummary}</p>
-      <p className="card-concern">{concernSummary}</p>
-      <div className="card-actions">
-        <button type="button" onClick={() => onSelect(listing.id)} aria-pressed={selected}>
-          {selected ? "Opened in panel" : "Open details"}
-        </button>
-        <details>
-          <summary>Evidence</summary>
-          <p>{evidenceSummary}</p>
-          <p>{concernSummary}</p>
-          <small>{listing.url}</small>
-        </details>
-      </div>
+      </button>
+      <a
+        href={listing.url}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`Open source for ${listing.title}`}
+        onClick={() => onSourceOpen(listing)}
+      >
+        ↗<span className="sr-only"> Source</span>
+      </a>
     </article>
   );
 }
 
-function ListingEditor({
+function ReviewStatusDropdown({
+  listing,
+  onStatusChange,
+}: {
+  listing: ListingCandidate;
+  onStatusChange: (listingId: string, status: ReviewStatus) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeStatus, setActiveStatus] = useState<ReviewStatus>(listing.reviewStatus);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const valueId = useId();
+  const listboxId = useId();
+  const activeOptionId = `${listboxId}-${activeStatus}`;
+
+  useEffect(() => {
+    setActiveStatus(listing.reviewStatus);
+  }, [listing.reviewStatus]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!dropdownRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isOpen]);
+
+  function selectStatus(status: ReviewStatus) {
+    setActiveStatus(status);
+    setIsOpen(false);
+    if (status !== listing.reviewStatus) {
+      onStatusChange(listing.id, status);
+    }
+  }
+
+  function moveActiveStatus(direction: 1 | -1) {
+    const currentIndex = REVIEW_STATUSES.indexOf(activeStatus);
+    const nextIndex = (currentIndex + direction + REVIEW_STATUSES.length) % REVIEW_STATUSES.length;
+    setActiveStatus(REVIEW_STATUSES[nextIndex]);
+  }
+
+  function handleTriggerKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "Escape") {
+      setIsOpen(false);
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setIsOpen(true);
+      moveActiveStatus(event.key === "ArrowDown" ? 1 : -1);
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (isOpen) {
+        selectStatus(activeStatus);
+      } else {
+        setIsOpen(true);
+      }
+    }
+  }
+
+  return (
+    <div
+      ref={dropdownRef}
+      className="status-control detail-status-control"
+      aria-label="Review status"
+    >
+      <button
+        type="button"
+        className={`status-dropdown-trigger status-${listing.reviewStatus}`}
+        aria-label={`Change review status for ${listing.title}`}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={listboxId}
+        aria-activedescendant={isOpen ? activeOptionId : undefined}
+        onClick={() => setIsOpen((current) => !current)}
+        onKeyDown={handleTriggerKeyDown}
+      >
+        <span className="status-option-dot" aria-hidden="true" />
+        <span id={valueId}>{formatLabel(listing.reviewStatus)}</span>
+        <ChevronDown className="status-dropdown-chevron" aria-hidden="true" />
+      </button>
+      <div
+        id={listboxId}
+        className="status-dropdown-menu"
+        role="listbox"
+        aria-label={`Review status for ${listing.title}`}
+        hidden={!isOpen}
+      >
+        {REVIEW_STATUSES.map((status) => {
+          const isSelected = status === listing.reviewStatus;
+          const isActive = status === activeStatus;
+          return (
+            <button
+              type="button"
+              key={status}
+              id={`${listboxId}-${status}`}
+              className={`status-dropdown-option status-${status}${isActive ? " active" : ""}`}
+              role="option"
+              aria-selected={isSelected}
+              onClick={() => selectStatus(status)}
+              onMouseEnter={() => setActiveStatus(status)}
+            >
+              <span className="status-option-dot" aria-hidden="true" />
+              <span>{formatLabel(status)}</span>
+              {isSelected ? <span className="status-option-check" aria-hidden="true" /> : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function ListingEditor({
   identity,
   listing,
   actions,
   commentText,
-  feedbackText,
-  feedbackCategory,
   onCommentTextChange,
-  onFeedbackTextChange,
-  onFeedbackCategoryChange,
   onFieldChange,
   onStatusChange,
   onSourceOpen,
   onReaction,
   onComment,
-  onFeedback,
 }: {
   identity?: InviteIdentity;
   listing?: ListingCandidate;
   actions?: ListingGroupActions;
   commentText: string;
-  feedbackText: string;
-  feedbackCategory: FeedbackCategory;
   onCommentTextChange: (value: string) => void;
-  onFeedbackTextChange: (value: string) => void;
-  onFeedbackCategoryChange: (value: FeedbackCategory) => void;
   onFieldChange: (listingId: string, field: FieldProvenance["field"], rawValue: string) => void;
   onStatusChange: (listingId: string, status: ReviewStatus) => void;
   onSourceOpen: (listing: ListingCandidate) => void;
   onReaction: (listing: ListingCandidate, reaction: GroupActionRecord["reaction"]) => void;
   onComment: (event: FormEvent<HTMLFormElement>) => void;
-  onFeedback: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const [isEditingFields, setIsEditingFields] = useState(false);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const firstEditInputRef = useRef<HTMLInputElement | null>(null);
+  const commentInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const selectedListingId = listing?.id;
+
+  useEffect(() => {
+    setIsEditingFields(false);
+    setSelectedPhotoIndex(0);
+    setIsPhotoModalOpen(false);
+  }, [selectedListingId]);
+
+  useEffect(() => {
+    if (!isPhotoModalOpen) {
+      return;
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsPhotoModalOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isPhotoModalOpen]);
+
+  useEffect(() => {
+    if (!isEditingFields) {
+      return;
+    }
+
+    firstEditInputRef.current?.focus();
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsEditingFields(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isEditingFields]);
+
   if (!listing) {
     return (
       <section className="editor-panel" aria-label="Listing detail panel">
@@ -1595,211 +1938,437 @@ function ListingEditor({
   }
 
   const intakeKind = getProviderIntakeKind(listing);
+  const addedByLabel = getAddedByLabel(listing);
+  const lastFieldProvenance = listing.fieldProvenance[listing.fieldProvenance.length - 1];
+  const editFieldsDialogId = `${listing.id}-edit-fields-dialog`;
+  const editFieldsTitleId = `${listing.id}-edit-fields-title`;
+  const photoUrls = listing.photos.filter(Boolean);
+  const selectedPhotoUrl = photoUrls[selectedPhotoIndex] ?? photoUrls[0];
+  const showPhotoControls = photoUrls.length > 1;
+  const photoPositionLabel = `${selectedPhotoIndex + 1} of ${photoUrls.length}`;
+  const selectPhoto = (index: number) => setSelectedPhotoIndex(index);
+  const handlePreviousPhoto = () => {
+    setSelectedPhotoIndex((currentIndex) =>
+      currentIndex === 0 ? photoUrls.length - 1 : currentIndex - 1,
+    );
+  };
+  const handleNextPhoto = () => {
+    setSelectedPhotoIndex((currentIndex) =>
+      currentIndex === photoUrls.length - 1 ? 0 : currentIndex + 1,
+    );
+  };
+  const handleCommentToggle = (event: ToggleEvent<HTMLDetailsElement>) => {
+    if (event.currentTarget.open) {
+      commentInputRef.current?.focus();
+    }
+  };
 
   return (
     <article className="editor-panel" aria-label="Listing detail panel">
       <header className="editor-header">
-        <div>
-          <p className="eyebrow">Opened saved record</p>
+        <div className="listing-title-stack">
           <h2>{listing.title}</h2>
+          <ReactionScoreBadge reactions={actions?.reactions ?? []} />
           <span>
             {listing.address}
             {listing.neighborhood ? `, ${listing.neighborhood}` : ""}
           </span>
         </div>
-        <a
-          href={listing.url}
-          target="_blank"
-          rel="noreferrer"
-          onClick={() => onSourceOpen(listing)}
-        >
-          Open source
-        </a>
+        <div className="editor-header-actions">
+          <span className="listing-added-by">{addedByLabel}</span>
+          <button
+            type="button"
+            className="editor-icon-button"
+            aria-label={`${isEditingFields ? "Close" : "Edit"} fields for ${listing.title}`}
+            aria-controls={editFieldsDialogId}
+            aria-expanded={isEditingFields}
+            aria-pressed={isEditingFields}
+            onClick={() => setIsEditingFields((current) => !current)}
+          >
+            <Pencil className="summary-icon" aria-hidden="true" />
+          </button>
+          <a
+            href={listing.url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open source for ${listing.title}`}
+            onClick={() => onSourceOpen(listing)}
+          >
+            <ExternalLinkIcon />
+          </a>
+        </div>
       </header>
+
+      <ReviewStatusDropdown listing={listing} onStatusChange={onStatusChange} />
+
+      {photoUrls.length > 0 ? (
+        <section className="listing-photo-carousel" aria-label={`Photos for ${listing.title}`}>
+          <figure className="listing-photo-frame">
+            <button
+              type="button"
+              className="listing-photo-open"
+              aria-label={`Enlarge photo ${selectedPhotoIndex + 1} of ${photoUrls.length} for ${listing.title}`}
+              onClick={() => setIsPhotoModalOpen(true)}
+            >
+              <img
+                src={selectedPhotoUrl}
+                alt={`${listing.title} photo ${selectedPhotoIndex + 1}`}
+                loading="lazy"
+              />
+            </button>
+            <figcaption className="listing-photo-count">{photoPositionLabel}</figcaption>
+            {showPhotoControls ? (
+              <div className="listing-photo-controls" aria-label="Photo navigation controls">
+                <button
+                  type="button"
+                  className="listing-photo-arrow listing-photo-arrow-previous"
+                  aria-label={`Show previous photo for ${listing.title}`}
+                  onClick={handlePreviousPhoto}
+                >
+                  <ChevronLeft aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="listing-photo-arrow listing-photo-arrow-next"
+                  aria-label={`Show next photo for ${listing.title}`}
+                  onClick={handleNextPhoto}
+                >
+                  <ChevronRight aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+          </figure>
+          {showPhotoControls ? (
+            <div className="listing-photo-thumbnails" aria-label="Choose listing photo">
+              {photoUrls.map((photoUrl, index) => (
+                <button
+                  type="button"
+                  key={`${photoUrl}-${index}`}
+                  className="listing-photo-thumbnail"
+                  aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listing.title}`}
+                  aria-current={index === selectedPhotoIndex ? "true" : undefined}
+                  onClick={() => selectPhoto(index)}
+                >
+                  <img src={photoUrl} alt="" loading="lazy" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {isPhotoModalOpen ? (
+        <div
+          className="listing-photo-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Enlarged photos for ${listing.title}`}
+        >
+          <button
+            type="button"
+            className="listing-photo-modal-backdrop"
+            aria-label="Close enlarged photo carousel"
+            onClick={() => setIsPhotoModalOpen(false)}
+          />
+          <section className="listing-photo-modal-panel" aria-label={`Photos for ${listing.title}`}>
+            <div className="listing-photo-modal-header">
+              <div>
+                <p className="eyebrow">Photos</p>
+                <h3>{listing.title}</h3>
+              </div>
+              <button
+                type="button"
+                className="listing-photo-modal-close"
+                aria-label="Close enlarged photo carousel"
+                onClick={() => setIsPhotoModalOpen(false)}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <figure className="listing-photo-frame listing-photo-modal-frame">
+              <img
+                src={selectedPhotoUrl}
+                alt={`${listing.title} photo ${selectedPhotoIndex + 1}`}
+              />
+              <figcaption className="listing-photo-count">{photoPositionLabel}</figcaption>
+              {showPhotoControls ? (
+                <div className="listing-photo-controls" aria-label="Photo navigation controls">
+                  <button
+                    type="button"
+                    className="listing-photo-arrow listing-photo-arrow-previous"
+                    aria-label={`Show previous photo for ${listing.title}`}
+                    onClick={handlePreviousPhoto}
+                  >
+                    <ChevronLeft aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="listing-photo-arrow listing-photo-arrow-next"
+                    aria-label={`Show next photo for ${listing.title}`}
+                    onClick={handleNextPhoto}
+                  >
+                    <ChevronRight aria-hidden="true" />
+                  </button>
+                </div>
+              ) : null}
+            </figure>
+            {showPhotoControls ? (
+              <div
+                className="listing-photo-thumbnails listing-photo-modal-thumbnails"
+                aria-label="Choose listing photo"
+              >
+                {photoUrls.map((photoUrl, index) => (
+                  <button
+                    type="button"
+                    key={`${photoUrl}-${index}`}
+                    className="listing-photo-thumbnail"
+                    aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listing.title}`}
+                    aria-current={index === selectedPhotoIndex ? "true" : undefined}
+                    onClick={() => selectPhoto(index)}
+                  >
+                    <img src={photoUrl} alt="" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
 
       <section className="fact-strip" aria-label="Listing facts">
         <Fact label="Rent" value={formatMoney(listing.rent)} />
         <Fact label="Beds" value={String(listing.bedrooms ?? "?")} />
         <Fact label="Baths" value={String(listing.bathrooms ?? "?")} />
+        <Fact label="Age" value={formatListingAge(listing.createdAt)} />
         <Fact label="Available" value={listing.availableAt ?? "TBD"} />
       </section>
 
-      <section className="state-grid panel-state" aria-label="Extraction, batch, and triage state">
-        <span>{listing.source}</span>
-        <span>{formatLabel(listing.extractionStatus)}</span>
-        <span>{formatLabel(intakeKind)}</span>
-        <span>{formatLabel(listing.triageStatus)}</span>
-        <span>{formatLabel(listing.triageBucket)}</span>
-      </section>
-
-      <section className="status-buttons" aria-label="Review status">
-        {REVIEW_STATUSES.map((status) => (
-          <button
-            type="button"
-            key={status}
-            className={listing.reviewStatus === status ? "active" : ""}
-            aria-pressed={listing.reviewStatus === status}
-            aria-label={`Set review status to ${status}`}
-            onClick={() => onStatusChange(listing.id, status)}
-          >
-            {status}
-          </button>
-        ))}
-      </section>
-
-      <section className="group-actions-panel" aria-label="Group comments, reactions, and feedback">
-        <div className="reaction-row" aria-label="Roommate reactions">
-          {(["thumbs-up", "thumbs-down", "tour", "question"] as const).map((reaction) => (
-            <button
-              type="button"
-              key={reaction}
-              aria-label={`React ${formatLabel(reaction)} to ${listing.title}`}
-              onClick={() => onReaction(listing, reaction)}
-            >
-              {formatLabel(reaction)}
-            </button>
-          ))}
+      <section className="group-actions-panel" aria-label="Group comments and reactions">
+        <div className="group-actions-header">
+          <h3>Group</h3>
         </div>
-        <form className="group-action-form" onSubmit={onComment}>
-          <label>
-            Comment
-            <textarea
-              enterKeyHint="done"
-              aria-label={`Comment on ${listing.title}`}
-              value={commentText}
-              onChange={(event) => onCommentTextChange(event.target.value)}
-              placeholder="Add a roommate-visible note"
-            />
-          </label>
-          <button type="submit" disabled={!identity}>
-            Save comment
-          </button>
-        </form>
-        <form className="group-action-form" onSubmit={onFeedback}>
-          <label>
-            Feedback type
-            <select
-              aria-label={`Feedback type for ${listing.title}`}
-              value={feedbackCategory}
-              onChange={(event) => onFeedbackCategoryChange(event.target.value as FeedbackCategory)}
-            >
-              {(["fit", "status", "evidence", "location", "price", "other"] as const).map(
-                (category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ),
-              )}
-            </select>
-          </label>
-          <label>
-            Disagreement / feedback
-            <textarea
-              enterKeyHint="done"
-              aria-label={`Disagreement or feedback for ${listing.title}`}
-              value={feedbackText}
-              onChange={(event) => onFeedbackTextChange(event.target.value)}
-              placeholder="Flag disagreement for briefing, not ranking changes"
-            />
-          </label>
-          <button type="submit" disabled={!identity}>
-            Save feedback
-          </button>
-        </form>
+        <div className="group-control-row">
+          <div className="reaction-row" aria-label="Roommate reactions">
+            {(["thumbs-up", "thumbs-down"] as const).map((reaction) => (
+              <button
+                type="button"
+                key={reaction}
+                aria-label={`React ${formatLabel(reaction)} to ${listing.title}`}
+                title={formatLabel(reaction)}
+                onClick={() => onReaction(listing, reaction)}
+              >
+                <span aria-hidden="true">{reactionGlyph(reaction)}</span>
+                <small>{reactionShortLabel(reaction)}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+        <details className="detail-disclosure" onToggle={handleCommentToggle}>
+          <summary>
+            <CommentIcon />
+            <span>Add comment</span>
+          </summary>
+          <form className="group-action-form" onSubmit={onComment}>
+            <label>
+              Comment
+              <textarea
+                ref={commentInputRef}
+                enterKeyHint="done"
+                aria-label={`Comment on ${listing.title}`}
+                value={commentText}
+                onChange={(event) => onCommentTextChange(event.target.value)}
+                placeholder="Note"
+              />
+            </label>
+            <button type="submit" disabled={!identity}>
+              Save
+            </button>
+          </form>
+        </details>
         <GroupActionSummary actions={actions} />
       </section>
 
-      <section className="edit-grid" aria-label="Editable saved-list fields">
-        {editableFields.map((field) => (
-          <label key={field}>
-            {field}
-            <input
-              type={numericFields.has(field) ? "number" : "text"}
-              inputMode={numericFields.has(field) ? "decimal" : "text"}
-              enterKeyHint="done"
-              value={String(listing[field] ?? "")}
-              onChange={(event) => onFieldChange(listing.id, field, event.target.value)}
-            />
-          </label>
-        ))}
-      </section>
-
-      <section className="trust-grid" aria-label="Fit flags, evidence, concerns, and provenance">
-        <div>
-          <h3>Light fit flags</h3>
-          <div className="pills">
-            {listing.fitFlags.length > 0 ? (
-              listing.fitFlags.map((flag) => <span key={flag}>{formatLabel(flag)}</span>)
-            ) : (
-              <span>No flags yet</span>
-            )}
+      <details className="detail-disclosure">
+        <summary>Evidence</summary>
+        <section className="trust-grid" aria-label="Fit flags, evidence, concerns, and provenance">
+          <div>
+            <h3>Flags</h3>
+            <div className="pills">
+              {listing.fitFlags.length > 0 ? (
+                listing.fitFlags.map((flag) => <span key={flag}>{formatLabel(flag)}</span>)
+              ) : (
+                <span>No flags</span>
+              )}
+            </div>
           </div>
+          <div>
+            <h3>Evidence</h3>
+            <p>{getEvidenceSummary(listing)}</p>
+            <p>{getConcernSummary(listing)}</p>
+          </div>
+          <div>
+            <h3>Last edit</h3>
+            <p>
+              {lastFieldProvenance?.actorDisplayName ??
+                identity?.displayName ??
+                "No active reviewer"}{" "}
+              · {lastFieldProvenance?.field ?? "fixture seed"}
+            </p>
+          </div>
+          <div className="source-details">
+            <h3>Source details</h3>
+            <a
+              href={listing.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => onSourceOpen(listing)}
+            >
+              {listing.url}
+            </a>
+            <div className="state-grid compact" aria-label="Extraction, batch, and triage state">
+              <span>{listing.source}</span>
+              <span>{formatLabel(listing.extractionStatus)}</span>
+              <span>{formatLabel(intakeKind)}</span>
+              <span>{formatLabel(listing.triageStatus)}</span>
+              <span>{formatLabel(listing.triageBucket)}</span>
+            </div>
+          </div>
+        </section>
+      </details>
+
+      {isEditingFields ? (
+        <div className="field-modal-backdrop" onClick={() => setIsEditingFields(false)}>
+          <section
+            id={editFieldsDialogId}
+            className="field-edit-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={editFieldsTitleId}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="field-modal-header">
+              <div>
+                <p className="eyebrow">Edit listing</p>
+                <h3 id={editFieldsTitleId}>{listing.title}</h3>
+                <p>{listing.address}</p>
+              </div>
+              <button
+                type="button"
+                className="editor-icon-button"
+                aria-label={`Close field editor for ${listing.title}`}
+                onClick={() => setIsEditingFields(false)}
+              >
+                <X className="summary-icon" aria-hidden="true" />
+              </button>
+            </header>
+            <section className="edit-grid" aria-label="Editable saved-list fields">
+              {editableFields.map((field) => (
+                <label key={field}>
+                  {field}
+                  <input
+                    ref={field === editableFields[0] ? firstEditInputRef : undefined}
+                    type={numericFields.has(field) ? "number" : "text"}
+                    inputMode={numericFields.has(field) ? "decimal" : "text"}
+                    enterKeyHint="done"
+                    value={String(listing[field] ?? "")}
+                    onChange={(event) => onFieldChange(listing.id, field, event.target.value)}
+                  />
+                </label>
+              ))}
+            </section>
+          </section>
         </div>
-        <div>
-          <h3>Evidence / concerns</h3>
-          <p>{getEvidenceSummary(listing)}</p>
-          <p>{getConcernSummary(listing)}</p>
-        </div>
-        <div>
-          <h3>Last local edit</h3>
-          <p>
-            {listing.fieldProvenance.at(-1)?.actorDisplayName ??
-              identity?.displayName ??
-              "No active reviewer"}{" "}
-            · {listing.fieldProvenance.at(-1)?.field ?? "fixture seed"}
-          </p>
-        </div>
-      </section>
+      ) : null}
     </article>
   );
 }
 
-function GroupActionSummary({ actions }: { actions?: ListingGroupActions }) {
+export function GroupActionSummary({ actions }: { actions?: ListingGroupActions }) {
   if (!actions) {
     return (
       <p className="empty-state">Group actions load after a valid invite opens this record.</p>
     );
   }
 
-  const latestActions = [
-    ...actions.comments,
-    ...actions.reactions,
-    ...actions.statusChanges,
-    ...actions.sourceLinkOpens,
-    ...actions.feedback,
-  ].slice(0, 6);
+  const hasDigestItems = actions.comments.length > 0;
+
+  if (!hasDigestItems) {
+    return null;
+  }
 
   return (
     <div className="group-action-summary" aria-label="Saved group action summary">
-      <div className="action-counts">
-        <span>{actions.comments.length} comments</span>
-        <span>{actions.reactions.length} reactions</span>
-        <span>{actions.statusChanges.length} statuses</span>
-        <span>{actions.feedback.length} feedback</span>
-      </div>
-      {latestActions.length === 0 ? (
-        <p className="empty-state">No group actions yet for this listing.</p>
-      ) : (
+      <section className="group-action-digest-section" aria-label="Comments">
+        <h4>Comments</h4>
         <ul>
-          {latestActions.map((action) => (
+          {actions.comments.map((action) => (
             <li key={action.id}>
-              <strong>{action.actorDisplayName}</strong> · {formatGroupAction(action)}
+              <strong>{action.actorDisplayName}</strong> · {action.commentBody}
             </li>
           ))}
         </ul>
-      )}
+      </section>
     </div>
   );
 }
 
-function formatGroupAction(action: GroupActionRecord): string {
-  if (action.commentBody) return action.commentBody;
-  if (action.reaction) return `reacted ${formatLabel(action.reaction)}`;
-  if (action.status) return `set status to ${action.status}`;
-  if (action.feedback?.summary) return `${action.feedback.category}: ${action.feedback.summary}`;
-  if (action.actionType === "source-link-open") return "opened the original source";
+export function ReactionScoreBadge({ reactions }: { reactions: GroupActionRecord[] }) {
+  const reactionDigest = createReactionScoreDigest(reactions);
 
-  return formatLabel(action.actionType);
+  if (reactionDigest.score === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className={`reaction-score-badge ${reactionDigest.tone}`}
+      tabIndex={0}
+      aria-label={`Reaction score: ${reactionDigest.accessibleScore}. Hover or focus to see who liked or passed.`}
+    >
+      <strong>{reactionDigest.displayScore}</strong>
+      <div className="reaction-score-popover" role="tooltip">
+        <ReactionNameGroup label="Liked" names={reactionDigest.likedNames} />
+        <ReactionNameGroup label="Passed" names={reactionDigest.passedNames} />
+      </div>
+    </div>
+  );
+}
+
+function createReactionScoreDigest(reactions: GroupActionRecord[]) {
+  const likedNames = reactions
+    .filter((action) => action.reaction === "thumbs-up")
+    .map((action) => action.actorDisplayName);
+  const passedNames = reactions
+    .filter((action) => action.reaction === "thumbs-down")
+    .map((action) => action.actorDisplayName);
+  const score = likedNames.length;
+  const displayScore = `+${score}`;
+
+  return {
+    score,
+    displayScore,
+    accessibleScore: `plus ${score}`,
+    tone: "positive",
+    likedNames,
+    passedNames,
+  };
+}
+
+function ReactionNameGroup({ label, names }: { label: string; names: string[] }) {
+  return (
+    <section className="reaction-name-group" aria-label={label}>
+      <h4>{label}</h4>
+      {names.length === 0 ? (
+        <p>No one yet.</p>
+      ) : (
+        <ul>
+          {names.map((name) => (
+            <li key={name}>{name}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
@@ -1823,7 +2392,7 @@ function getEvidenceSummary(listing: ListingCandidate): string {
 
 function getConcernSummary(listing: ListingCandidate): string {
   if (listing.concerns.length === 0) {
-    return "No concerns recorded.";
+    return "No concerns.";
   }
 
   return listing.concerns.slice(0, 2).join(" · ");
@@ -1841,6 +2410,90 @@ function formatMoney(value?: number) {
   }).format(value);
 }
 
+function formatListingAge(createdAt: string) {
+  const createdTime = new Date(createdAt).getTime();
+
+  if (!Number.isFinite(createdTime)) {
+    return "Age TBD";
+  }
+
+  const dayInMilliseconds = 24 * 60 * 60 * 1000;
+  const ageDays = Math.max(0, Math.floor((Date.now() - createdTime) / dayInMilliseconds));
+
+  return `${ageDays} ${ageDays === 1 ? "day" : "days"}`;
+}
+
+function reactionGlyph(reaction: NonNullable<GroupActionRecord["reaction"]>) {
+  switch (reaction) {
+    case "thumbs-up":
+      return <ThumbIcon direction="up" />;
+    case "thumbs-down":
+      return <ThumbIcon direction="down" />;
+    default:
+      return null;
+  }
+}
+
+function reactionShortLabel(reaction: NonNullable<GroupActionRecord["reaction"]>) {
+  switch (reaction) {
+    case "thumbs-up":
+      return "Like";
+    case "thumbs-down":
+      return "Pass";
+    default:
+      return "React";
+  }
+}
+
+function ThumbIcon({ direction }: { direction: "up" | "down" }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className={direction === "down" ? "reaction-icon down" : "reaction-icon"}
+    >
+      <path
+        d="M7 10v10M7 10H4.8c-.7 0-1.3.6-1.3 1.3v7.4c0 .7.6 1.3 1.3 1.3H7m0-10 4.2-6.3c.4-.6 1.1-.9 1.8-.7.9.2 1.5 1 1.3 1.9l-.7 3.1h4.3c1.4 0 2.4 1.3 2.1 2.6l-1.3 5.8c-.3 1.2-1.2 2-2.5 2H7"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function CommentIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="summary-icon">
+      <path
+        d="M5 5.5h14v10H9l-4 3.5V5.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="summary-icon">
+      <path
+        d="M8 8h8v8M16 8l-9 9"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+    </svg>
+  );
+}
+
 function formatDateTimeLabel(value: string) {
   return value.slice(0, 16).replace("T", " ");
 }
@@ -1855,6 +2508,16 @@ function getProviderIntakeKind(listing: ListingCandidate): string {
   );
 }
 
+function getAddedByLabel(listing: ListingCandidate): string {
+  const intakeKind = listing.providerRouting?.intakeKind;
+
+  if (intakeKind === "batch-search" || listing.userQualified === false) {
+    return "Added by AI";
+  }
+
+  return `Added by ${listing.submittedBy?.trim() || "AI"}`;
+}
+
 function formatLabel(value: string) {
-  return value.replaceAll(/[-_]/g, " ");
+  return value.replace(/[-_]/g, " ");
 }

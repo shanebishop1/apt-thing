@@ -5,15 +5,19 @@ import { describe, expect, it } from "vitest";
 import { g3cBriefingRunHistoryFixture } from "../lib/agent-contract-fixtures";
 import type { BriefingRunHistoryContract, BriefingRunHistoryRun } from "../lib/agent-contracts";
 import { fixtureListings } from "../lib/fixtures";
-import { defaultSearchGroup } from "../lib/listings";
+import { defaultSearchGroup, type ListingCandidate } from "../lib/listings";
 import {
+  GroupActionSummary,
   LatestBriefingPanel,
+  ListingEditor,
+  ReactionScoreBadge,
   RunHistoryPanel,
   SavedListApp,
   createLatestBriefingPanelModel,
   createRunHistoryPanelModel,
 } from "./SavedListApp";
 import { runMobileAcceptanceScenario, type MobileAcceptanceMarker } from "../lib/mobile-acceptance";
+import type { GroupActionRecord } from "../lib/agent-contracts";
 
 const savedListingsStorageKey = `apt-thing:v1:groups:${defaultSearchGroup.id}:saved-listings`;
 
@@ -94,7 +98,7 @@ describe("latest briefing dashboard panel", () => {
           duplicateKey: "streeteasy.com/building/rejected-downgraded/5",
           groupScopedDuplicateKey: `${g3cBriefingRunHistoryFixture.groupId}:streeteasy.com/building/rejected-downgraded/5`,
           sourceUrl: "https://streeteasy.com/building/rejected-downgraded/5",
-          lastSeenLabel: "2026-06-07",
+          lastSeenLabel: "2026-06-08",
         }),
       ]),
     );
@@ -122,23 +126,13 @@ describe("latest briefing dashboard panel", () => {
     expect(markup).toContain("Next actions");
   });
 
-  it("renders fixture feedback summaries with attribution and no ranking mutation notice", () => {
+  it("does not render feedback as a separate briefing section", () => {
     const markup = renderToStaticMarkup(
       React.createElement(LatestBriefingPanel, { history: g3cBriefingRunHistoryFixture }),
     );
 
-    expect(markup).toContain("Feedback / disagreement summary");
-    expect(markup).toContain("1 comments");
-    expect(markup).toContain("0 reactions");
-    expect(markup).toContain("1 reactions");
-    expect(markup).toContain("0 statuses");
-    expect(markup).toContain("1 statuses");
-    expect(markup).toContain("1 disagreements");
-    expect(markup).toContain("Listing: New Chelsea five bed batch candidate");
-    expect(markup).toContain(`Group: ${g3cBriefingRunHistoryFixture.groupId}`);
-    expect(markup).toContain("Source: streeteasy");
-    expect(markup).toContain("Looks viable if the bedrooms are legal; ask about floorplan.");
-    expect(markup).toContain("Briefing-only: does not change ranking or search behavior.");
+    expect(markup).not.toContain("Feedback / disagreement summary");
+    expect(markup).not.toContain("ranking/search mutation off");
   });
 });
 
@@ -161,7 +155,7 @@ describe("run history panel", () => {
       ]),
     );
     expect(model.runs[1]?.providerMetadata).toContain("google-direct / gemini-3.5-flash");
-    expect(model.runs[1]?.artifactLinks.some((link) => link.ownerLabel === "R2")).toBe(true);
+    expect(model.runs[1]?.artifactLinks.some((link) => link.ownerLabel === "D1")).toBe(true);
   });
 
   it("renders timestamps, statuses, source failures, provider/model metadata, counts, and artifact links", () => {
@@ -169,7 +163,7 @@ describe("run history panel", () => {
     const markup = renderToStaticMarkup(React.createElement(RunHistoryPanel, { history }));
 
     expect(markup).toContain('aria-label="Agent run history"');
-    expect(markup).toContain("Supported cadences: manual, daily, hourly");
+    expect(markup).toContain("Cadences: manual, daily, hourly");
     expect(markup).toContain("Manual import catch-up");
     expect(markup).toContain("Daily scheduled search");
     expect(markup).toContain("Hourly-ready smoke run");
@@ -180,7 +174,7 @@ describe("run history panel", () => {
     expect(markup).toContain("Provider/model metadata");
     expect(markup).toContain("google-direct / gemini-3.5-flash");
     expect(markup).toContain("Evidence artifacts");
-    expect(markup).toContain("R2 artifact");
+    expect(markup).toContain("D1 artifact");
   });
 });
 
@@ -210,6 +204,106 @@ describe("briefing/history verification guardrails", () => {
     expect(componentSource).not.toMatch(
       /\b(Notification|PushManager|pushManager|serviceWorker|showNotification)\b/,
     );
+  });
+});
+
+describe("map review realism guardrails", () => {
+  it("uses Leaflet with apartment pins and an interactive MTA subway overlay", () => {
+    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+
+    expect(componentSource).toContain("https://tile.openstreetmap.org/");
+    expect(componentSource).toContain("Leaflet NYC apartment map");
+    expect(componentSource).toContain("syncLeafletMap");
+    expect(componentSource).toContain("MTA_SUBWAY_FEATURE_SERVICE");
+    expect(componentSource).toContain("MTA_Subway_Routes_Stops/FeatureServer");
+    expect(componentSource).toContain("fetchSubwayGeoJson");
+    expect(componentSource).toContain("leaflet.circleMarker");
+    expect(componentSource).toContain("Routes: ");
+    expect(componentSource).toContain('import("leaflet")');
+    expect(componentSource).not.toContain("createPoiLeafletIcon");
+    expect(componentSource).not.toContain("leaflet-poi-pin");
+    expect(componentSource).toContain("scrollWheelZoom: true");
+    expect(componentSource).not.toContain("onWheel={handleWheel}");
+    expect(componentSource).not.toContain('<div className="map-attribution">');
+    expect(componentSource).not.toContain("Listing coordinates use source/provider fixtures");
+    expect(componentSource).not.toContain("Fixture candidate map shell");
+    expect(css).toContain('@import "leaflet/dist/leaflet.css";');
+    expect(css).toContain(".leaflet-map");
+    expect(css).toContain(".leaflet-control-zoom");
+    expect(css).toContain(".leaflet-listing-pin");
+    expect(css).toContain(".leaflet-subway-station");
+    expect(css).not.toContain(".leaflet-poi-pin");
+    expect(css.includes(".map-attribution")).toBe(false);
+    expect(css.includes(".zone-overlay")).toBe(false);
+    expect(css.includes(".map-tile-layer")).toBe(false);
+    expect(css.includes(".map-zoom-controls")).toBe(false);
+    expect(css.includes(".map-pin")).toBe(false);
+    expect(componentSource.includes("Preferred Manhattan zone")).toBe(false);
+    expect(componentSource.includes("Brooklyn/Queens fallback context")).toBe(false);
+    const mapShellBlock = css.slice(css.indexOf(".map-shell {"), css.indexOf(".leaflet-map"));
+    expect(mapShellBlock).not.toContain("repeating-linear-gradient");
+    expect(mapShellBlock).not.toContain("#d8d3c2");
+  });
+});
+
+describe("listing detail attribution", () => {
+  it("shows AI attribution for batch-created listings in the detail header", () => {
+    const batchListing = fixtureListings.find((listing) => !listing.userQualified)!;
+    const markup = renderListingEditorMarkup(batchListing);
+
+    expect(markup).toContain("Added by AI");
+  });
+
+  it("shows the submitting user for pasted URL listings in the detail header", () => {
+    const userListing = fixtureListings.find((listing) => listing.userQualified)!;
+    const markup = renderListingEditorMarkup(userListing);
+
+    expect(markup).toContain(`Added by ${userListing.submittedBy}`);
+  });
+
+  it("keeps detail attribution right-aligned with the header actions", () => {
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+
+    expect(css).toMatch(/\.editor-header-actions \{[\s\S]*justify-content: flex-end;/);
+    expect(css).toMatch(/\.listing-added-by \{[\s\S]*text-align: right;/);
+  });
+
+  it("renders status above the conditional listing photo carousel", () => {
+    const listingWithPhotos = fixtureListings.find((listing) => listing.photos.length > 0)!;
+    const markup = renderListingEditorMarkup(listingWithPhotos);
+
+    expect(markup).toContain('class="listing-photo-carousel"');
+    expect(markup).toContain(`aria-label="Photos for ${listingWithPhotos.title}"`);
+    expect(markup.indexOf('class="status-control detail-status-control"')).toBeGreaterThan(
+      markup.indexOf(listingWithPhotos.address),
+    );
+    expect(markup.indexOf('class="listing-photo-carousel"')).toBeGreaterThan(
+      markup.indexOf('class="status-control detail-status-control"'),
+    );
+    expect(markup.indexOf('aria-label="Listing facts"')).toBeGreaterThan(
+      markup.indexOf('class="listing-photo-carousel"'),
+    );
+  });
+
+  it("shows listing age in days with the detail facts", () => {
+    const fourDayOldListing: ListingCandidate = {
+      ...fixtureListings[0]!,
+      createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    const markup = renderListingEditorMarkup(fourDayOldListing);
+
+    expect(markup).toContain("Age");
+    expect(markup).toContain("4 days");
+  });
+
+  it("does not render the photo carousel or note-count label when there are no photos", () => {
+    const listingWithoutPhotos = fixtureListings.find((listing) => listing.photos.length === 0)!;
+    const markup = renderListingEditorMarkup(listingWithoutPhotos);
+
+    expect(markup).not.toContain('class="listing-photo-carousel"');
+    expect(markup).not.toMatch(/\d+ notes/);
+    expect(markup).not.toContain("No invite");
   });
 });
 
@@ -244,19 +338,200 @@ describe("T-1.6 mobile-first and accessibility acceptance guardrails", () => {
     const markup = renderToStaticMarkup(React.createElement(SavedListApp));
 
     expect(markup).toContain('class="dashboard-shell"');
+    expect(markup).toContain('aria-label="Apartment search workspace sections"');
+    expect(markup).toContain('class="theme-toggle"');
+    expect(markup).toContain('aria-label="Switch to light mode"');
+    expect(markup).toContain("nav-icon");
+    expect(markup).not.toContain("☀");
+    expect(markup).not.toContain("☾");
+    expect(markup).not.toContain("⚙");
+    expect(markup).not.toContain(">Light</button>");
+    expect(markup).not.toContain(">Dark</button>");
+    expect(markup).not.toContain('class="summary-grid"');
+    expect(markup).not.toContain('class="intake-card"');
+    expect(markup).not.toContain("Queue</p>");
+    expect(markup).not.toContain('aria-label="StreetEasy batch status"');
+    expect(markup).not.toContain("StreetEasy manual batch");
     expect(markup).toContain('aria-label="Saved listing review queue"');
-    expect(markup).toContain('aria-label="Map enhanced review"');
+    expect(markup).toContain('aria-label="Add listing"');
+    expect(markup).toContain('aria-label="Listing table"');
+    expect(markup).toContain('class="listing-table-head"');
+    expect(markup).toContain("Map");
+    expect(markup).not.toContain('aria-label="Map enhanced review"');
     expect(markup).toContain('aria-label="Listing detail panel"');
-    expect(markup).toContain('aria-label="Group comments, reactions, and feedback"');
+    expect(markup).toContain('aria-label="Group comments and reactions"');
+    expect(markup.indexOf('aria-label="Extraction, batch, and triage state"')).toBeGreaterThan(
+      markup.indexOf("<summary>Evidence</summary>"),
+    );
+    expect(markup).toContain('class="source-details"');
+    expect(markup).not.toContain('class="state-grid panel-state"');
     expect(markup).toContain('aria-live="polite"');
     expect(markup).toContain('inputMode="url"');
     expect(markup).toContain('enterKeyHint="go"');
     expect(markup).toContain('enterKeyHint="done"');
     expect(markup).toContain('aria-pressed="true"');
-    expect(markup).toContain('aria-label="Set review status to');
+    expect(markup).toContain('class="status-control detail-status-control"');
+    expect(markup).toContain('class="status-dropdown-trigger status-');
+    expect(markup).toContain('aria-label="Change review status for');
     expect(markup).toContain('aria-label="React thumbs up to');
+    expect(markup).toContain("Add comment");
+    expect(markup).toContain('class="reaction-icon"');
+    expect(markup).toContain('class="summary-icon"');
+    expect(markup).not.toContain("Add feedback");
+    expect(markup).not.toContain("👍");
+    expect(markup).not.toContain("👎");
+    expect(markup).not.toContain("👀");
+    expect(markup).not.toContain("❓");
+    expect(markup).not.toContain(">thumbs up</button>");
+    expect(markup).not.toContain("records · click a row");
+    expect(markup).not.toContain("Source opened.");
     expect(markup).not.toContain("<table");
     expect(markup).not.toContain('role="table"');
+  });
+
+  it("does not ship unsupported newer JS calls in iOS Safari runtime paths", () => {
+    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const listingSource = readFileSync(new URL("../lib/listings.ts", import.meta.url), "utf8");
+
+    expect(componentSource).not.toMatch(/\.at\(/);
+    expect(componentSource).not.toMatch(/\.replaceAll\(/);
+    expect(listingSource).not.toMatch(/\.at\(/);
+    expect(listingSource).not.toMatch(/\.replaceAll\(/);
+  });
+
+  it("renders the reaction score badge with a partitioned hover popup", () => {
+    const actions = {
+      reactions: [
+        createGroupAction("reaction-1", "Ari", {
+          actionType: "reaction",
+          reaction: "thumbs-up",
+        }),
+        createGroupAction("reaction-2", "Shane", {
+          actionType: "reaction",
+          reaction: "thumbs-up",
+        }),
+        createGroupAction("reaction-3", "Local reviewer", {
+          actionType: "reaction",
+          reaction: "thumbs-down",
+        }),
+      ],
+      comments: [
+        createGroupAction("comment-1", "Bo", {
+          actionType: "comment",
+          commentBody: "Ask whether the flex room has a window.",
+        }),
+      ],
+      statusChanges: [
+        createGroupAction("status-1", "Cam", {
+          actionType: "status-change",
+          status: "touring",
+        }),
+      ],
+      sourceLinkOpens: [],
+      feedback: [],
+    };
+    const markup = renderToStaticMarkup(
+      React.createElement(ReactionScoreBadge, { reactions: actions.reactions }),
+    );
+
+    expect(markup).toContain('class="reaction-score-badge positive"');
+    expect(markup).toContain('tabindex="0"');
+    expect(markup).toContain(
+      'aria-label="Reaction score: plus 2. Hover or focus to see who liked or passed."',
+    );
+    expect(markup).toContain("+2");
+    expect(markup).toContain('class="reaction-score-popover"');
+    expect(markup).toContain('class="reaction-name-group" aria-label="Liked"');
+    expect(markup).toContain("<h4>Liked</h4>");
+    expect(markup).toContain("<li>Ari</li>");
+    expect(markup).toContain("<li>Shane</li>");
+    expect(markup).toContain('class="reaction-name-group" aria-label="Passed"');
+    expect(markup).toContain("<h4>Passed</h4>");
+    expect(markup).toContain("<li>Local reviewer</li>");
+    expect(markup).not.toContain("Current reactions");
+    expect(markup).not.toContain("Score");
+    expect(markup).not.toContain("likes ·");
+    expect(markup).not.toContain("passs");
+    expect(markup).not.toContain("statuses");
+    expect(markup).not.toContain("status-change");
+    expect(markup).not.toContain("set status");
+    expect(markup).not.toContain("1 reactions");
+  });
+
+  it("hides the reaction score badge when there are no likes", () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(ReactionScoreBadge, {
+        reactions: [
+          createGroupAction("reaction-1", "Bo", {
+            actionType: "reaction",
+            reaction: "thumbs-down",
+          }),
+        ],
+      }),
+    );
+
+    expect(markup).toBe("");
+  });
+
+  it("counts likes without subtracting passes from the visible score", () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(ReactionScoreBadge, {
+        reactions: [
+          createGroupAction("reaction-1", "Ari", {
+            actionType: "reaction",
+            reaction: "thumbs-up",
+          }),
+          createGroupAction("reaction-2", "Bo", {
+            actionType: "reaction",
+            reaction: "thumbs-down",
+          }),
+        ],
+      }),
+    );
+
+    expect(markup).toContain("+1");
+    expect(markup).toContain("<h4>Passed</h4>");
+    expect(markup).toContain("<li>Bo</li>");
+  });
+
+  it("renders the score below the listing title and above listing facts", () => {
+    const source = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const titleIndex = source.indexOf("<h2>{listing.title}</h2>");
+    const badgeIndex = source.indexOf(
+      "<ReactionScoreBadge reactions={actions?.reactions ?? []} />",
+    );
+    const addressIndex = source.indexOf("{listing.address}");
+    const factStripIndex = source.indexOf('<section className="fact-strip"');
+
+    expect(badgeIndex).toBeGreaterThan(titleIndex);
+    expect(badgeIndex).toBeLessThan(addressIndex);
+    expect(badgeIndex).toBeLessThan(factStripIndex);
+  });
+
+  it("renders group digest comments without duplicating the reaction score", () => {
+    const actions = {
+      reactions: [
+        createGroupAction("reaction-1", "Ari", {
+          actionType: "reaction",
+          reaction: "thumbs-up",
+        }),
+      ],
+      comments: [
+        createGroupAction("comment-1", "Bo", {
+          actionType: "comment",
+          commentBody: "Ask whether the flex room has a window.",
+        }),
+      ],
+      statusChanges: [],
+      sourceLinkOpens: [],
+      feedback: [],
+    };
+    const markup = renderToStaticMarkup(React.createElement(GroupActionSummary, { actions }));
+
+    expect(markup).toContain("Comments");
+    expect(markup).toContain("Bo");
+    expect(markup).toContain("Ask whether the flex room has a window.");
+    expect(markup).not.toContain('class="reaction-score-badge');
   });
 
   it("locks safe-area, focus-visible, touch-target, map, and viewport CSS for iPhone Safari checks", () => {
@@ -270,14 +545,81 @@ describe("T-1.6 mobile-first and accessibility acceptance guardrails", () => {
     expect(css).toMatch(
       /\.map-heading,[\s\S]*\.map-review-grid \{[\s\S]*grid-template-columns: 1fr;/,
     );
+    expect(css).toMatch(
+      /\.listing-table-head,[\s\S]*\.listing-row-button \{[\s\S]*grid-template-columns: 118px minmax\(0, 0\.82fr\) 84px;/,
+    );
+    expect(css).toContain("--line-dark: #514036;");
+    expect(css).toContain("--line-light: #cdbfae;");
+    expect(css).toMatch(/\.listing-card \{[\s\S]*gap: 0;/);
+    expect(css).toMatch(/\.listing-group-label \{[\s\S]*border-top: 1px solid var\(--line\);/);
+    expect(css).toMatch(
+      /@media \(max-width: 860px\)[\s\S]*\.listing-row-button \{[\s\S]*grid-template-columns: 112px minmax\(0, 0\.8fr\) 78px;/,
+    );
     expect(css).toMatch(/padding-right: max\(10px, env\(safe-area-inset-right\)\)/);
     expect(css).toMatch(/padding-left: max\(10px, env\(safe-area-inset-left\)\)/);
+    expect(css).toMatch(/\.memory-source-link,[\s\S]*textarea \{[\s\S]*min-height: 52px;/);
+    expect(css).toMatch(/\.reaction-score-badge \{[\s\S]*background: color-mix/);
+    expect(css).toMatch(/\.reaction-score-badge strong \{[\s\S]*background: transparent;/);
+    expect(css).toMatch(/\.reaction-score-badge\.positive \{[\s\S]*#18864b/);
+    expect(css).toMatch(/\.reaction-score-badge\.negative \{[\s\S]*#ba2c2c/);
+    expect(css).toMatch(/\.reaction-score-badge\.neutral \{[\s\S]*var\(--neutral-score\)/);
+    expect(css).toMatch(/\.reaction-name-group \+ \.reaction-name-group \{/);
     expect(css).toMatch(
-      /\.memory-source-link,[\s\S]*\.feedback-attribution a,[\s\S]*textarea \{[\s\S]*min-height: 52px;/,
+      /\.reaction-score-badge:is\(:hover, :focus-visible\) \.reaction-score-popover \{[\s\S]*opacity: 1;/,
     );
-    expect(css).not.toMatch(/hover:[\s\S]*display|display:\s*table|table-layout:/);
+    expect(css).toMatch(
+      /\.listing-card\.selected \.listing-row-button \{[\s\S]*box-shadow: inset 3px 0 0 var\(--accent\);/,
+    );
+    expect(css).toMatch(
+      /\.fact-strip \{[\s\S]*grid-template-columns: repeat\(5, minmax\(0, 1fr\)\);/,
+    );
+    expect(css).toMatch(
+      /\.listing-card\.selected \.listing-row-button:hover,[\s\S]*\.listing-card\.selected \.listing-row-button:focus-visible \{[\s\S]*background: color-mix\(in srgb, var\(--accent-soft\) 72%, var\(--panel\)\);/,
+    );
+    expect(css).not.toMatch(/[^-]hover:[\s\S]*display|display:\s*table|table-layout:/);
   });
 });
+
+function createGroupAction(
+  id: string,
+  actorDisplayName: string,
+  action: Pick<GroupActionRecord, "actionType" | "commentBody" | "reaction" | "status">,
+): GroupActionRecord {
+  return {
+    id,
+    contract: "group-action-v1",
+    groupId: defaultSearchGroup.id,
+    listingId: fixtureListings[0]!.id,
+    actorDisplayName,
+    actorIdentityToken: `${actorDisplayName.toLowerCase()}-token`,
+    actor: {
+      displayName: actorDisplayName,
+      identityToken: `${actorDisplayName.toLowerCase()}-token`,
+    },
+    actionType: action.actionType,
+    commentBody: action.commentBody,
+    reaction: action.reaction,
+    status: action.status,
+    sourceUrl: fixtureListings[0]!.url,
+    provenance: { source: "user-entered", visibleToGroup: true },
+    createdAt: "2026-06-07T00:00:00.000Z",
+  };
+}
+
+function renderListingEditorMarkup(listing: ListingCandidate): string {
+  return renderToStaticMarkup(
+    React.createElement(ListingEditor, {
+      listing,
+      commentText: "",
+      onCommentTextChange: () => undefined,
+      onFieldChange: () => undefined,
+      onStatusChange: () => undefined,
+      onSourceOpen: () => undefined,
+      onReaction: () => undefined,
+      onComment: (event) => event.preventDefault(),
+    }),
+  );
+}
 
 describe("saved-list persisted data compatibility", () => {
   it("renders older localStorage listings that do not have provider routing metadata", () => {

@@ -10,8 +10,9 @@ describe("G3A map-enhanced review model", () => {
     expect(model.selected?.listing.id).toBe(selected?.id);
     expect(model.locatedCandidates.length).toBeGreaterThan(0);
     expect(model.bounds).toMatchObject({ north: expect.any(Number), south: expect.any(Number) });
-    expect(model.attribution).toContain("No paid/proprietary data");
+    expect(model.attribution).toContain("OpenStreetMap contributors");
     expect(model.mobileModes).toEqual(["map", "list", "detail"]);
+    expect("pois" in model).toBe(false);
 
     const williamsburg = model.candidates.find(
       (candidate) => candidate.listing.id === selected?.id,
@@ -23,11 +24,17 @@ describe("G3A map-enhanced review model", () => {
       boroughFallback: "Brooklyn fallback",
       confidenceLabel: "Needs roommate review",
     });
+    expect(williamsburg?.mapPosition).toMatchObject({
+      left: expect.any(Number),
+      top: expect.any(Number),
+    });
+    expect(williamsburg?.mapPosition?.left).toBeGreaterThan(0);
+    expect(williamsburg?.mapPosition?.top).toBeGreaterThan(0);
     expect(williamsburg?.subway[0]).toMatchObject({
       station: expect.any(String),
       routes: expect.any(Array),
     });
-    expect(williamsburg?.contextAmenities[0]).toMatchObject({ kind: "grocery" });
+    expect(williamsburg?.contextAmenities).toHaveLength(0);
     expect(williamsburg?.evidenceSummary).toContain(":");
     expect(williamsburg?.sourceLinks).toContain(williamsburg?.listing.url);
   });
