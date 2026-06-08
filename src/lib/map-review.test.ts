@@ -44,6 +44,7 @@ describe("G3A map-enhanced review model", () => {
       ...fixtureListings[0]!,
       id: "fixture-unmapped",
       title: "Fixture listing without map context",
+      address: "Unknown fixture address",
       neighborhood: undefined,
       borough: undefined,
     };
@@ -55,6 +56,52 @@ describe("G3A map-enhanced review model", () => {
       pinState: "missing-location",
       zoneLabel: "Location pending",
       boroughFallback: "Borough pending",
+    });
+  });
+
+  it("geocodes known fixture addresses even when the listing title changes", () => {
+    const retitled = {
+      ...fixtureListings[0]!,
+      id: "fixture-retitled-known-address",
+      title: "Retitled broker copy should still map",
+      address: "42 W 21st St, New York, NY 10010",
+    };
+
+    const model = createMapReviewModel([retitled], retitled.id);
+
+    expect(model.locatedCandidates).toHaveLength(1);
+    expect(model.missingLocationCandidates).toHaveLength(0);
+    expect(model.selected).toMatchObject({
+      pinState: "confirmed",
+      coordinates: { latitude: 40.7412, longitude: -73.9927 },
+      zoneLabel: "Flatiron / Chelsea",
+      zoneKind: "preferred-manhattan",
+    });
+    expect(model.selected?.mapPosition).toMatchObject({
+      left: expect.any(Number),
+      top: expect.any(Number),
+    });
+  });
+
+  it("geocodes StreetEasy addresses when the saved address includes unit text", () => {
+    const listing = {
+      ...fixtureListings[0]!,
+      id: "streeteasy-325-east-14-phd",
+      title: "325 EAST 14 STREET PH-D, NEW YORK, NY 10003",
+      address: "325 East 14 Street PHD",
+      neighborhood: undefined,
+      borough: "Manhattan",
+    };
+
+    const model = createMapReviewModel([listing], listing.id);
+
+    expect(model.locatedCandidates).toHaveLength(1);
+    expect(model.missingLocationCandidates).toHaveLength(0);
+    expect(model.selected).toMatchObject({
+      pinState: "confirmed",
+      coordinates: { latitude: 40.7317, longitude: -73.9841 },
+      zoneLabel: "East Village",
+      zoneKind: "preferred-manhattan",
     });
   });
 });

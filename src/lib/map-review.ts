@@ -138,9 +138,36 @@ const mapContextFixtures: MapContextFixture[] = [
     "exceptional-fallback",
     [["Bedford Av", ["L"], 610]],
   ),
+  createContext("325 East 14 Street", 40.7317, -73.9841, "East Village", "preferred-manhattan", [
+    ["1 Av", ["L"], 220],
+    ["3 Av", ["L"], 520],
+  ]),
+  createContext("71 Broadway", 40.7075, -74.0126, "Financial District", "preferred-manhattan", [
+    ["Wall St", ["4", "5"], 80],
+    ["Rector St", ["R", "W"], 220],
+  ]),
 ];
 
 const contextByTitle = new Map(mapContextFixtures.map((fixture) => [fixture.listingId, fixture]));
+const contextByKnownAddress = new Map(
+  [
+    ["42 West 21st Street", "42 West 21st Street #5"],
+    ["100 West 14th Street", "100 West 14th Street"],
+    ["152 Manhattan Avenue", "152 Manhattan Avenue #4B"],
+    ["303 West 21st Street", "New Chelsea five bed batch candidate"],
+    ["185 North 10th Street", "Review-needed Williamsburg batch candidate"],
+    ["325 East 14 Street", "325 East 14 Street"],
+    ["325 East 14th Street", "325 East 14 Street"],
+    ["71 Broadway", "71 Broadway"],
+  ]
+    .map(([address, listingId]) => {
+      const normalizedAddress = normalizeAddress(address);
+      const fixture = contextByTitle.get(listingId);
+
+      return normalizedAddress && fixture ? [normalizedAddress, fixture] : undefined;
+    })
+    .filter((entry): entry is [string, MapContextFixture] => Boolean(entry)),
+);
 
 export function createMapReviewModel(
   listings: ListingCandidate[],
@@ -166,7 +193,7 @@ export function createMapReviewModel(
 }
 
 function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
-  const fixture = contextByTitle.get(listing.title) ?? createFallbackContext(listing);
+  const fixture = resolveMapContext(listing);
   const evidence = listing.evidence[0];
   const sourceLinks = Array.from(
     new Set([listing.url, ...listing.evidence.map((item) => item.sourceUrl)].filter(Boolean)),
@@ -192,6 +219,26 @@ function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
     confidenceLabel: toConfidenceLabel(listing.triageBucket),
     sourceLinks,
   };
+}
+
+function resolveMapContext(listing: ListingCandidate): MapContextFixture {
+  return (
+    contextByTitle.get(listing.title) ??
+    resolveKnownAddressContext(listing.address) ??
+    createFallbackContext(listing)
+  );
+}
+
+function resolveKnownAddressContext(address?: string): MapContextFixture | undefined {
+  const normalizedAddress = normalizeAddress(address);
+  if (!normalizedAddress) return undefined;
+
+  const exactMatch = contextByKnownAddress.get(normalizedAddress);
+  if (exactMatch) return exactMatch;
+
+  return [...contextByKnownAddress.entries()].find(([knownAddress]) =>
+    normalizedAddress.startsWith(`${knownAddress} `),
+  )?.[1];
 }
 
 export function projectToMapPosition(
@@ -236,6 +283,27 @@ function createFallbackContext(listing: ListingCandidate): MapContextFixture {
     subway: [],
     amenities: [],
   };
+}
+
+function normalizeAddress(address?: string): string {
+  if (!address) return "";
+
+  return address
+    .toLowerCase()
+    .split(",")[0]!
+    .replace(/#.*$/u, "")
+    .replace(/\b(?:apartment|apt|unit|suite|ste|floor|fl)\b.*$/u, "")
+    .replace(/\b(\d+)(?:st|nd|rd|th)\b/gu, "$1")
+    .replace(/[^a-z0-9\s]/gu, " ")
+    .replace(/\b(w)\b/gu, "west")
+    .replace(/\b(e)\b/gu, "east")
+    .replace(/\b(n)\b/gu, "north")
+    .replace(/\b(s)\b/gu, "south")
+    .replace(/\b(st)\b/gu, "street")
+    .replace(/\b(ave|av)\b/gu, "avenue")
+    .replace(/\b(nyc|ny|new york)\b/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 function createContext(
