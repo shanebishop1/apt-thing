@@ -179,6 +179,14 @@ describe("run history panel", () => {
 });
 
 describe("briefing/history verification guardrails", () => {
+  it("keeps group listing reads from sending invite codes in query strings", () => {
+    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+
+    expect(componentSource).toContain('"X-Invite-Code": activeIdentity.inviteCode');
+    expect(componentSource).toContain('"X-Display-Name": activeIdentity.displayName');
+    expect(componentSource).not.toContain("&inviteCode=");
+  });
+
   it("keeps briefing and history mobile-first without desktop table markup", () => {
     const markup = renderBriefingHistoryMarkup();
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
@@ -286,14 +294,14 @@ describe("listing detail attribution", () => {
     );
   });
 
-  it("shows listing age in days with the detail facts", () => {
+  it("shows time since the listing was added in the detail facts", () => {
     const fourDayOldListing: ListingCandidate = {
       ...fixtureListings[0]!,
       createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
     };
     const markup = renderListingEditorMarkup(fourDayOldListing);
 
-    expect(markup).toContain("Age");
+    expect(markup).toContain("Added");
     expect(markup).toContain("4 days");
   });
 
@@ -308,6 +316,37 @@ describe("listing detail attribution", () => {
 });
 
 describe("T-1.6 mobile-first and accessibility acceptance guardrails", () => {
+  it("renders only the invite gate before a valid identity is saved", () => {
+    const markup = renderToStaticMarkup(React.createElement(SavedListApp));
+
+    expect(markup).toContain('aria-label="Invite gate"');
+    expect(markup).toContain('aria-label="Invite identity"');
+    expect(markup).toContain("Invite code");
+    expect(markup).toContain("Display name");
+    expect(markup).toContain("Enter shared list");
+    expect(markup).toContain("No active group");
+    expect(markup).not.toContain('aria-label="Apartment search workspace sections"');
+    expect(markup).not.toContain('aria-label="Saved listing review queue"');
+    expect(markup).not.toContain('aria-label="Add listing"');
+    expect(markup).not.toContain('aria-label="Listing detail panel"');
+    expect(markup).not.toContain("Listings");
+    expect(markup).not.toContain("Map");
+    expect(markup).not.toContain("Briefing");
+    expect(markup).not.toContain("Runs");
+  });
+
+  it("keeps identity persistence behind explicit save and then loads the shared snapshot", () => {
+    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+
+    expect(componentSource).toContain("function handleIdentitySubmit");
+    expect(componentSource).toContain("writeInviteIdentity(");
+    expect(componentSource).toContain(
+      "void refreshSharedSnapshot(resolution.identity, { silent: true });",
+    );
+    expect(componentSource).toContain("Invite code or display name is invalid.");
+    expect(componentSource).toContain('if (!savedIdentity || savedIdentity.kind !== "valid")');
+  });
+
   it("covers every mobile acceptance marker required by the hardening story", () => {
     const acceptance = runMobileAcceptanceScenario();
     const expectedMarkers: MobileAcceptanceMarker[] = [
@@ -338,10 +377,11 @@ describe("T-1.6 mobile-first and accessibility acceptance guardrails", () => {
     const markup = renderToStaticMarkup(React.createElement(SavedListApp));
 
     expect(markup).toContain('class="dashboard-shell"');
-    expect(markup).toContain('aria-label="Apartment search workspace sections"');
-    expect(markup).toContain('class="theme-toggle"');
-    expect(markup).toContain('aria-label="Switch to light mode"');
-    expect(markup).toContain("nav-icon");
+    expect(markup).toContain('aria-label="Invite gate"');
+    expect(markup).toContain('aria-label="Invite identity"');
+    expect(markup).toContain("Enter shared list");
+    expect(markup).not.toContain('aria-label="Apartment search workspace sections"');
+    expect(markup).not.toContain('class="theme-toggle"');
     expect(markup).not.toContain("☀");
     expect(markup).not.toContain("☾");
     expect(markup).not.toContain("⚙");
@@ -352,31 +392,33 @@ describe("T-1.6 mobile-first and accessibility acceptance guardrails", () => {
     expect(markup).not.toContain("Queue</p>");
     expect(markup).not.toContain('aria-label="StreetEasy batch status"');
     expect(markup).not.toContain("StreetEasy manual batch");
-    expect(markup).toContain('aria-label="Saved listing review queue"');
-    expect(markup).toContain('aria-label="Add listing"');
-    expect(markup).toContain('aria-label="Listing table"');
-    expect(markup).toContain('class="listing-table-head"');
-    expect(markup).toContain("Map");
+    expect(markup).not.toContain('aria-label="Saved listing review queue"');
+    expect(markup).not.toContain('aria-label="Add listing"');
+    expect(markup).not.toContain('class="empty-state"');
+    expect(markup).not.toContain("No listings.");
+    expect(markup).not.toContain('<button type="submit" disabled="">Add</button>');
+    expect(markup).not.toContain('aria-label="Listing table"');
+    expect(markup).not.toContain('class="listing-table-head"');
+    expect(markup).not.toContain("Map");
     expect(markup).not.toContain('aria-label="Map enhanced review"');
-    expect(markup).toContain('aria-label="Listing detail panel"');
-    expect(markup).toContain('aria-label="Group comments and reactions"');
-    expect(markup.indexOf('aria-label="Extraction, batch, and triage state"')).toBeGreaterThan(
-      markup.indexOf("<summary>Evidence</summary>"),
-    );
-    expect(markup).toContain('class="source-details"');
+    expect(markup).not.toContain('aria-label="Listing detail panel"');
+    expect(markup).not.toContain("No listing selected yet.");
+    expect(markup).not.toContain('aria-label="Group comments and reactions"');
+    expect(markup).not.toContain('aria-label="Extraction, batch, and triage state"');
+    expect(markup).not.toContain('class="source-details"');
     expect(markup).not.toContain('class="state-grid panel-state"');
     expect(markup).toContain('aria-live="polite"');
-    expect(markup).toContain('inputMode="url"');
-    expect(markup).toContain('enterKeyHint="go"');
-    expect(markup).toContain('enterKeyHint="done"');
-    expect(markup).toContain('aria-pressed="true"');
-    expect(markup).toContain('class="status-control detail-status-control"');
-    expect(markup).toContain('class="status-dropdown-trigger status-');
-    expect(markup).toContain('aria-label="Change review status for');
-    expect(markup).toContain('aria-label="React thumbs up to');
-    expect(markup).toContain("Add comment");
-    expect(markup).toContain('class="reaction-icon"');
-    expect(markup).toContain('class="summary-icon"');
+    expect(markup).not.toContain('inputMode="url"');
+    expect(markup).not.toContain('enterKeyHint="go"');
+    expect(markup).not.toContain('enterKeyHint="done"');
+    expect(markup).not.toContain('aria-pressed="true"');
+    expect(markup).not.toContain('class="status-control detail-status-control"');
+    expect(markup).not.toContain('class="status-dropdown-trigger status-');
+    expect(markup).not.toContain('aria-label="Change review status for');
+    expect(markup).not.toContain('aria-label="React thumbs up to');
+    expect(markup).not.toContain("Add comment");
+    expect(markup).not.toContain('class="reaction-icon"');
+    expect(markup).not.toContain("summary-icon");
     expect(markup).not.toContain("Add feedback");
     expect(markup).not.toContain("👍");
     expect(markup).not.toContain("👎");

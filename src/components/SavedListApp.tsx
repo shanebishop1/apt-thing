@@ -30,23 +30,13 @@ import type {
   Marker,
 } from "leaflet";
 import {
-  appendGroupAction,
   createListingGroupActions,
-  createSavedListing,
   createSelectedListingStorageKey,
   findSelectedListing,
-  getFixtureListingsForGroup,
   readGroupActions,
   readInviteIdentity,
   readSeenRejectedMemory,
-  readSavedListings,
-  updateSavedListingField,
-  updateSavedListingStatus,
-  upsertRejectedMemory,
-  writeGroupActions,
   writeInviteIdentity,
-  writeSeenRejectedMemory,
-  writeSavedListings,
   type ListingGroupActions,
 } from "../lib/saved-list-storage";
 import type { GroupActionRecord, SeenRejectedMemoryRecord } from "../lib/agent-contracts";
@@ -61,8 +51,6 @@ import type {
 } from "../lib/agent-contracts";
 import { createMapReviewModel, type MapReviewCandidate } from "../lib/map-review";
 import {
-  createInviteIdentity,
-  defaultSearchGroup,
   REVIEW_STATUSES,
   type FieldProvenance,
   type InviteIdentity,
@@ -80,15 +68,36 @@ const editableFields: FieldProvenance["field"][] = [
   "availableAt",
 ];
 const numericFields = new Set<FieldProvenance["field"]>(["rent", "bedrooms", "bathrooms"]);
+const sharedSnapshotPollMs = 15000;
+
+type SharedListingSnapshot = {
+  groupId: string;
+  listings: ListingCandidate[];
+  actions: GroupActionRecord[];
+  memory: SeenRejectedMemoryRecord[];
+  updatedAt: string;
+};
+
+type SharedListingsApiResponse =
+  | { ok: true; snapshot: SharedListingSnapshot }
+  | { ok: false; error?: string };
+
+function identityPayload(identity: InviteIdentity, payload: Record<string, unknown>) {
+  return {
+    ...payload,
+    inviteCode: identity.inviteCode,
+    displayName: identity.displayName,
+  };
+}
+
+function sharedApiError(payload: SharedListingsApiResponse, fallback: string): string {
+  return payload.ok ? fallback : (payload.error ?? fallback);
+}
 
 const defaultIdentityForm = {
-  inviteCode: defaultSearchGroup.inviteCode,
-  displayName: "Local reviewer",
+  inviteCode: "",
+  displayName: "",
 };
-const defaultIdentity = createInviteIdentity(
-  defaultIdentityForm.inviteCode,
-  defaultIdentityForm.displayName,
-)!;
 const fixtureBriefingRunHistory = g3cBriefingRunHistoryFixture;
 
 type IdentityFormState = typeof defaultIdentityForm;
@@ -103,6 +112,8 @@ const listingStatusSortOrder: Record<ReviewStatus, number> = {
   unavailable: 3,
   rejected: 4,
 };
+
+const invalidIdentityMessage = "Invite code or display name is invalid.";
 
 const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "dashboard", label: "List" },
@@ -195,18 +206,17 @@ export type LatestBriefingPanelModel = {
 
 export function SavedListApp() {
   const [identityForm, setIdentityForm] = useState<IdentityFormState>(defaultIdentityForm);
-  const [identity, setIdentity] = useState<InviteIdentity | undefined>(defaultIdentity);
-  const [listings, setListings] = useState<ListingCandidate[]>(() =>
-    getFixtureListingsForGroup(defaultSearchGroup.id),
-  );
+  const [identity, setIdentity] = useState<InviteIdentity | undefined>();
+  const [listings, setListings] = useState<ListingCandidate[]>([]);
   const [groupActions, setGroupActions] = useState<GroupActionRecord[]>([]);
-  const [seenRejectedMemory, setSeenRejectedMemory] = useState<SeenRejectedMemoryRecord[]>([]);
+  const [, setSeenRejectedMemory] = useState<SeenRejectedMemoryRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string>(listings[0]?.id ?? "");
   const [url, setUrl] = useState("");
   const [commentText, setCommentText] = useState("");
   const [activeTab, setActiveTab] = useState<AppTab>("dashboard");
   const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
   const [message, setMessage] = useState("");
+  const [apiBusy, setApiBusy] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const addListingInputRef = useRef<HTMLInputElement | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -219,8 +229,6 @@ export function SavedListApp() {
       }
 
       const savedIdentity = readInviteIdentity(window.localStorage);
-      const activeIdentity =
-        savedIdentity?.kind === "valid" ? savedIdentity.identity : defaultIdentity;
 
       if (savedIdentity) {
         setIdentityForm({
@@ -233,11 +241,22 @@ export function SavedListApp() {
         setIdentity(undefined);
         setListings([]);
         setSelectedId("");
-        setMessage(savedIdentity.feedback);
+        setMessage(invalidIdentityMessage);
         return;
       }
 
-      const hydratedListings = readSavedListings(window.localStorage, activeIdentity.groupId);
+      if (!savedIdentity || savedIdentity.kind !== "valid") {
+        setIdentity(undefined);
+        setListings([]);
+        setGroupActions([]);
+        setSeenRejectedMemory([]);
+        setSelectedId("");
+        setMessage("Enter the invite code and display name to load this shared apartment search.");
+        return;
+      }
+
+      const activeIdentity = savedIdentity.identity;
+
       const hydratedActions = readGroupActions(window.localStorage, activeIdentity.groupId);
       const hydratedMemory = readSeenRejectedMemory(window.localStorage, activeIdentity.groupId);
       const savedSelectedId = window.localStorage.getItem(
@@ -245,10 +264,10 @@ export function SavedListApp() {
       );
 
       setIdentity(activeIdentity);
-      setListings(hydratedListings);
+      void refreshSharedSnapshot(activeIdentity, { silent: true });
       setGroupActions(hydratedActions);
       setSeenRejectedMemory(hydratedMemory);
-      setSelectedId(findSelectedListing(hydratedListings, savedSelectedId)?.id ?? "");
+      setSelectedId(savedSelectedId ?? "");
       setMessage("");
     } catch {
       setMessage("Browser storage is unavailable; using fixture listings for this session.");
@@ -272,18 +291,6 @@ export function SavedListApp() {
   }, [hasHydrated, themeMode]);
 
   useEffect(() => {
-    if (!hasHydrated || !identity) {
-      return;
-    }
-
-    try {
-      writeSavedListings(window.localStorage, identity.groupId, listings);
-    } catch {
-      setMessage("Could not persist saved listings in this browser session.");
-    }
-  }, [hasHydrated, identity, listings]);
-
-  useEffect(() => {
     if (!hasHydrated || !identity || !selectedId) {
       return;
     }
@@ -294,6 +301,44 @@ export function SavedListApp() {
       setMessage("Could not remember the currently opened record.");
     }
   }, [hasHydrated, identity, selectedId]);
+
+  useEffect(() => {
+    if (!hasHydrated || !identity) {
+      return;
+    }
+
+    let stopped = false;
+    let timeoutId: number | undefined;
+
+    const schedule = (delay = sharedSnapshotPollMs) => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(async () => {
+        if (stopped) return;
+        if (document.visibilityState === "visible" && navigator.onLine) {
+          await refreshSharedSnapshot(identity, { silent: true });
+        }
+        schedule();
+      }, delay);
+    };
+    const refreshNow = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        void refreshSharedSnapshot(identity, { silent: true });
+      }
+    };
+
+    schedule();
+    window.addEventListener("focus", refreshNow);
+    window.addEventListener("online", refreshNow);
+    document.addEventListener("visibilitychange", refreshNow);
+
+    return () => {
+      stopped = true;
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("focus", refreshNow);
+      window.removeEventListener("online", refreshNow);
+      document.removeEventListener("visibilitychange", refreshNow);
+    };
+  }, [hasHydrated, identity]);
 
   const mapReview = useMemo(
     () => createMapReviewModel(listings, selectedId),
@@ -319,22 +364,26 @@ export function SavedListApp() {
   );
 
   function handleIdentityChange(field: keyof IdentityFormState, value: string) {
-    const nextForm = { ...identityForm, [field]: value };
+    setIdentityForm((currentForm) => ({ ...currentForm, [field]: value }));
+  }
 
-    setIdentityForm(nextForm);
+  function handleIdentitySubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
     try {
       const resolution = writeInviteIdentity(
         window.localStorage,
-        nextForm.inviteCode,
-        nextForm.displayName,
+        identityForm.inviteCode,
+        identityForm.displayName,
       );
 
       if (resolution.kind === "invalid") {
         setIdentity(undefined);
         setListings([]);
+        setGroupActions([]);
+        setSeenRejectedMemory([]);
         setSelectedId("");
-        setMessage(resolution.feedback);
+        setMessage(invalidIdentityMessage);
         return;
       }
 
@@ -343,10 +392,6 @@ export function SavedListApp() {
       setIdentity(resolution.identity);
 
       if (groupChanged) {
-        const hydratedListings = readSavedListings(
-          window.localStorage,
-          resolution.identity.groupId,
-        );
         const hydratedActions = readGroupActions(window.localStorage, resolution.identity.groupId);
         const hydratedMemory = readSeenRejectedMemory(
           window.localStorage,
@@ -356,12 +401,12 @@ export function SavedListApp() {
           createSelectedListingStorageKey(resolution.identity.groupId),
         );
 
-        setListings(hydratedListings);
         setGroupActions(hydratedActions);
         setSeenRejectedMemory(hydratedMemory);
-        setSelectedId(findSelectedListing(hydratedListings, savedSelectedId)?.id ?? "");
+        setSelectedId(savedSelectedId ?? "");
       }
 
+      void refreshSharedSnapshot(resolution.identity, { silent: true });
       setMessage(resolution.feedback);
     } catch {
       setMessage("Could not persist invite identity in this browser session.");
@@ -376,22 +421,9 @@ export function SavedListApp() {
       return;
     }
 
+    setApiBusy(true);
     startTransition(() => {
-      try {
-        const result = createSavedListing(listings, url, identity);
-        setListings(result.listings);
-
-        if (result.kind === "rejected") {
-          setMessage(result.feedback);
-          return;
-        }
-
-        setSelectedId(result.listing.id);
-        setUrl("");
-        setMessage(result.feedback);
-      } catch {
-        setMessage("Unable to save this listing right now.");
-      }
+      void createSharedListing(identity, url);
     });
   }
 
@@ -411,33 +443,12 @@ export function SavedListApp() {
       return;
     }
 
-    const listing = listings.find(
-      (currentListing) =>
-        currentListing.groupId === identity.groupId && currentListing.id === listingId,
+    void patchSharedListing(
+      identity,
+      listingId,
+      { mutation: "status", status },
+      `Status updated to ${status}.`,
     );
-
-    const updatedListings = updateSavedListingStatus(listings, identity.groupId, listingId, status);
-    const updatedListing = updatedListings.find(
-      (currentListing) =>
-        currentListing.groupId === identity.groupId && currentListing.id === listingId,
-    );
-
-    setListings(updatedListings);
-    if (listing) {
-      persistGroupActions(
-        appendGroupAction(groupActions, identity, listing, { actionType: "status-change", status }),
-      );
-    }
-    if (updatedListing?.reviewStatus === "rejected") {
-      persistSeenRejectedMemory(
-        upsertRejectedMemory(
-          seenRejectedMemory,
-          updatedListing,
-          `Rejected by ${identity.displayName}`,
-        ),
-      );
-    }
-    setMessage(`Status updated to ${status}.`);
   }
 
   function handleSourceOpen(listing: ListingCandidate) {
@@ -446,11 +457,11 @@ export function SavedListApp() {
       return;
     }
 
-    persistGroupActions(
-      appendGroupAction(groupActions, identity, listing, {
-        actionType: "source-link-open",
-        sourceUrl: listing.url,
-      }),
+    void postSharedAction(
+      identity,
+      listing.id,
+      { actionType: "source-link-open", sourceUrl: listing.url },
+      "",
     );
     setMessage("");
   }
@@ -461,10 +472,12 @@ export function SavedListApp() {
       return;
     }
 
-    persistGroupActions(
-      appendGroupAction(groupActions, identity, listing, { actionType: "reaction", reaction }),
+    void postSharedAction(
+      identity,
+      listing.id,
+      { actionType: "reaction", reaction },
+      "Reaction saved.",
     );
-    setMessage("Reaction saved.");
   }
 
   function handleComment(event: FormEvent<HTMLFormElement>) {
@@ -480,14 +493,13 @@ export function SavedListApp() {
       return;
     }
 
-    persistGroupActions(
-      appendGroupAction(groupActions, identity, selectedListing, {
-        actionType: "comment",
-        commentBody: commentText,
-      }),
+    void postSharedAction(
+      identity,
+      selectedListing.id,
+      { actionType: "comment", commentBody: commentText },
+      "Comment saved.",
     );
     setCommentText("");
-    setMessage("Comment saved.");
   }
 
   function handleFieldChange(listingId: string, field: FieldProvenance["field"], rawValue: string) {
@@ -503,45 +515,166 @@ export function SavedListApp() {
       return;
     }
 
-    setListings((currentListings) =>
-      updateSavedListingField(
-        currentListings,
-        identity.groupId,
-        listingId,
-        field,
-        nextValue,
-        identity.displayName,
-      ),
+    void patchSharedListing(
+      identity,
+      listingId,
+      { mutation: "field", field, value: nextValue },
+      `Saved ${field}.`,
     );
-    setMessage(`Saved ${field}.`);
   }
 
-  function persistGroupActions(nextActions: GroupActionRecord[]) {
-    setGroupActions(nextActions);
-
-    if (!identity) {
-      return;
-    }
-
+  async function refreshSharedSnapshot(
+    activeIdentity: InviteIdentity,
+    options: { silent?: boolean } = {},
+  ) {
     try {
-      writeGroupActions(window.localStorage, identity.groupId, nextActions);
+      const response = await fetch(
+        `/api/group/listings?groupId=${encodeURIComponent(activeIdentity.groupId)}`,
+        {
+          headers: {
+            "X-Invite-Code": activeIdentity.inviteCode,
+            "X-Display-Name": activeIdentity.displayName,
+          },
+        },
+      );
+      const payload = (await response.json()) as SharedListingsApiResponse;
+      if (!response.ok || !payload.ok)
+        throw new Error(sharedApiError(payload, "snapshot-load-failed"));
+      applySharedSnapshot(payload.snapshot);
     } catch {
-      setMessage("Could not persist group review actions in this browser session.");
+      if (!options.silent) setMessage("Could not load shared D1 listing state.");
     }
   }
 
-  function persistSeenRejectedMemory(nextMemory: SeenRejectedMemoryRecord[]) {
-    setSeenRejectedMemory(nextMemory);
-
-    if (!identity) {
-      return;
-    }
-
+  async function createSharedListing(activeIdentity: InviteIdentity, sourceUrl: string) {
     try {
-      writeSeenRejectedMemory(window.localStorage, identity.groupId, nextMemory);
-    } catch {
-      setMessage("Could not persist seen/rejected memory in this browser session.");
+      const response = await fetch("/api/group/listings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(identityPayload(activeIdentity, { url: sourceUrl })),
+      });
+      const payload = (await response.json()) as SharedListingsApiResponse & {
+        result?: {
+          kind: "created" | "duplicate";
+          listing?: ListingCandidate;
+          extraction?: { ok: boolean; failureCode?: string };
+        };
+      };
+      if (!response.ok || !payload.ok)
+        throw new Error(sharedApiError(payload, "create-listing-failed"));
+      applySharedSnapshot(payload.snapshot);
+      if (payload.result?.listing) setSelectedId(payload.result.listing.id);
+      setUrl("");
+      setMessage(
+        payload.result?.kind === "duplicate"
+          ? "Duplicate listing found. Opening the existing shared record."
+          : payload.result?.extraction?.ok === false
+            ? `Listing saved to D1; extraction needs manual review (${payload.result.extraction.failureCode ?? "unknown"}).`
+            : "Listing extracted and saved to shared D1 state.",
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to save this listing right now.");
+    } finally {
+      setApiBusy(false);
     }
+  }
+
+  async function patchSharedListing(
+    activeIdentity: InviteIdentity,
+    listingId: string,
+    mutation: Record<string, unknown>,
+    successMessage: string,
+  ) {
+    try {
+      const response = await fetch(`/api/group/listings/${encodeURIComponent(listingId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(identityPayload(activeIdentity, mutation)),
+      });
+      const payload = (await response.json()) as SharedListingsApiResponse;
+      if (!response.ok || !payload.ok)
+        throw new Error(sharedApiError(payload, "listing-mutation-failed"));
+      applySharedSnapshot(payload.snapshot);
+      setMessage(successMessage);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not update shared listing.");
+    }
+  }
+
+  async function postSharedAction(
+    activeIdentity: InviteIdentity,
+    listingId: string,
+    action: Record<string, unknown>,
+    successMessage: string,
+  ) {
+    try {
+      const response = await fetch(`/api/group/listings/${encodeURIComponent(listingId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(identityPayload(activeIdentity, action)),
+      });
+      const payload = (await response.json()) as SharedListingsApiResponse;
+      if (!response.ok || !payload.ok)
+        throw new Error(sharedApiError(payload, "listing-action-failed"));
+      applySharedSnapshot(payload.snapshot);
+      setMessage(successMessage);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not save shared group action.");
+    }
+  }
+
+  function applySharedSnapshot(snapshot: SharedListingSnapshot) {
+    setListings(snapshot.listings);
+    setGroupActions(snapshot.actions);
+    setSeenRejectedMemory(snapshot.memory);
+    setSelectedId((currentId) => findSelectedListing(snapshot.listings, currentId)?.id ?? "");
+  }
+
+  if (!identity) {
+    return (
+      <main className="dashboard-shell" data-theme={themeMode}>
+        <section className="settings-card" aria-label="Invite gate">
+          <div className="panel-heading settings-heading">
+            <div>
+              <p className="eyebrow">Private roommate search</p>
+              <h1>Enter your invite</h1>
+            </div>
+            <p>Enter the shared invite code and your display name to load the apartment list.</p>
+          </div>
+          <form
+            className="settings-form"
+            aria-label="Invite identity"
+            onSubmit={handleIdentitySubmit}
+          >
+            <label className="settings-field">
+              Invite code
+              <input
+                autoCapitalize="none"
+                autoComplete="off"
+                value={identityForm.inviteCode}
+                onChange={(event) => handleIdentityChange("inviteCode", event.target.value)}
+                required
+              />
+            </label>
+            <label className="settings-field">
+              Display name
+              <input
+                autoComplete="name"
+                value={identityForm.displayName}
+                onChange={(event) => handleIdentityChange("displayName", event.target.value)}
+                required
+              />
+            </label>
+            <button type="submit">Enter shared list</button>
+            <div className="settings-status" role="status" aria-live="polite">
+              <span className="eyebrow">Access required</span>
+              <strong>No active group</strong>
+              <p>{message || "Enter a valid invite code and display name to continue."}</p>
+            </div>
+          </form>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -611,8 +744,8 @@ export function SavedListApp() {
                         required
                       />
                     </label>
-                    <button type="submit" disabled={isPending || !identity}>
-                      {isPending ? "Saving…" : "Add"}
+                    <button type="submit" disabled={isPending || apiBusy || !identity}>
+                      {isPending || apiBusy ? "Saving…" : "Add"}
                     </button>
                     <p id="intake-feedback" role="status" aria-live="polite">
                       {message || " "}
@@ -670,7 +803,11 @@ export function SavedListApp() {
               <h2>Settings</h2>
             </div>
           </div>
-          <div className="settings-form" aria-label="Active group identity">
+          <form
+            className="settings-form"
+            aria-label="Active group identity"
+            onSubmit={handleIdentitySubmit}
+          >
             <label className="settings-field">
               Invite code
               <input
@@ -687,12 +824,13 @@ export function SavedListApp() {
                 onChange={(event) => handleIdentityChange("displayName", event.target.value)}
               />
             </label>
+            <button type="submit">Save identity</button>
             <div className="settings-status" role="status" aria-live="polite">
               <span className="eyebrow">Current workspace</span>
               <strong>{identity ? identity.groupId : "No active group"}</strong>
               <p>{identity ? `Saving as ${identity.displayName}` : "Enter a valid invite code."}</p>
             </div>
-          </div>
+          </form>
         </section>
       ) : null}
     </main>
@@ -1408,7 +1546,7 @@ function MapDetail({
         <Fact label="Rent" value={formatMoney(candidate.listing.rent)} />
         <Fact label="Beds" value={String(candidate.listing.bedrooms ?? "?")} />
         <Fact label="Baths" value={String(candidate.listing.bathrooms ?? "?")} />
-        <Fact label="Age" value={formatListingAge(candidate.listing.createdAt)} />
+        <Fact label="Added" value={formatListingAddedAge(candidate.listing.createdAt)} />
         <Fact label="Available" value={candidate.listing.availableAt ?? "TBD"} />
       </section>
       <div className="map-context-stack">
@@ -2139,7 +2277,7 @@ export function ListingEditor({
         <Fact label="Rent" value={formatMoney(listing.rent)} />
         <Fact label="Beds" value={String(listing.bedrooms ?? "?")} />
         <Fact label="Baths" value={String(listing.bathrooms ?? "?")} />
-        <Fact label="Age" value={formatListingAge(listing.createdAt)} />
+        <Fact label="Added" value={formatListingAddedAge(listing.createdAt)} />
         <Fact label="Available" value={listing.availableAt ?? "TBD"} />
       </section>
 
@@ -2410,11 +2548,11 @@ function formatMoney(value?: number) {
   }).format(value);
 }
 
-function formatListingAge(createdAt: string) {
+function formatListingAddedAge(createdAt: string) {
   const createdTime = new Date(createdAt).getTime();
 
   if (!Number.isFinite(createdTime)) {
-    return "Age TBD";
+    return "TBD";
   }
 
   const dayInMilliseconds = 24 * 60 * 60 * 1000;
