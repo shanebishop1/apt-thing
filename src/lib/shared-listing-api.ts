@@ -45,12 +45,22 @@ export async function createListingFromSharedApi({
   }
 
   const extraction = await extractListingFromUrlLive({ rawUrl: normalizedUrl, identity, env });
+  if (extraction.listing.groupScopedDuplicateKey !== duplicateKey) {
+    const canonicalExistingListing = await findListingByDuplicateKey(
+      db,
+      identity.groupId,
+      extraction.listing.groupScopedDuplicateKey,
+    );
+    if (canonicalExistingListing) {
+      return { kind: "duplicate" as const, listing: canonicalExistingListing };
+    }
+  }
   await upsertSavedListing(db, extraction.listing);
   await recordExtractionJob(db, {
     id: `extraction-${extraction.listing.id}-${Date.now()}`,
     groupId: identity.groupId,
     listingId: extraction.listing.id,
-    sourceUrl: extraction.listing.url,
+    sourceUrl: normalizedUrl,
     status: extraction.listing.extractionStatus,
     provider: extraction.extraction.providerCalled ? "google-direct" : undefined,
     model: extraction.extraction.providerCalled ? "gemini-3.5-flash" : undefined,

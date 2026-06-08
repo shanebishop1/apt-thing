@@ -360,6 +360,7 @@ describe("single-link live extraction", () => {
       providerCalled: true,
     });
     expect(result.listing).toMatchObject({
+      url: "https://streeteasy.com/building/205-avenue-a-new_york/3",
       title: "205 Avenue A #3",
       address: "205 Avenue A #3, Manhattan, NY 10009",
       rent: 12500,
@@ -367,5 +368,10 @@ describe("single-link live extraction", () => {
       bathrooms: 2,
       extractionStatus: "success",
     });
+    expect(result.listing.evidence).toContainEqual(
+      expect.objectContaining({
+        sourceUrl: "https://streeteasy.com/building/205-avenue-a-new_york/3",
+      }),
+    );
   });
 });

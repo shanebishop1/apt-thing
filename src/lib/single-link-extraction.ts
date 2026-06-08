@@ -243,14 +243,15 @@ async function extractStreetEasyViaRealtyApi({
       if (detailResponse.ok) detailRecord = firstRecord(detailPayload);
     }
 
-    const draft = realtyApiRecordToDraft({ ...matched, ...detailRecord }, rawUrl);
-    const mergedListing = mergeExtraction(createListingFromUrl(rawUrl, identity, draft), {
+    const canonicalUrl = resolveStreetEasyMatchedUrl(matched, rawUrl);
+    const draft = realtyApiRecordToDraft({ ...matched, ...detailRecord }, canonicalUrl);
+    const mergedListing = mergeExtraction(createListingFromUrl(canonicalUrl, identity, draft), {
       ...draft,
       evidence: [
         {
           claim: "RealtyAPI exact StreetEasy URL match",
-          quote: rawUrl,
-          sourceUrl: rawUrl,
+          quote: canonicalUrl,
+          sourceUrl: canonicalUrl,
         },
       ],
       concerns: [],
@@ -258,7 +259,7 @@ async function extractStreetEasyViaRealtyApi({
     });
     const correctedAddress = selectStreetEasyAddress(
       mergedListing.address,
-      streetEasyAddressFromUrl(rawUrl),
+      streetEasyAddressFromUrl(canonicalUrl),
     );
     const listing = correctedAddress
       ? {
@@ -280,6 +281,19 @@ async function extractStreetEasyViaRealtyApi({
       error instanceof Error ? error.message : "RealtyAPI fetch failed.",
     );
   }
+}
+
+function resolveStreetEasyMatchedUrl(
+  matched: Record<string, unknown>,
+  fallbackUrl: string,
+): string {
+  const urlPath = stringField(matched, ["urlPath", "url_path"]);
+  if (urlPath) return new URL(urlPath, "https://streeteasy.com").toString();
+
+  const url = stringField(matched, ["url", "sourceUrl", "permalink", "listing_url"]);
+  if (url) return new URL(url, "https://streeteasy.com").toString();
+
+  return fallbackUrl;
 }
 
 function providerFailure(
