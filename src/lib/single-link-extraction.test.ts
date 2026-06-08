@@ -207,7 +207,10 @@ describe("single-link live extraction", () => {
           },
           description: "Penthouse duplex with private outdoor space.",
           media: {
-            photos: ["https://photos.example.com/325-east-14-street-apartment-living-room.jpg"],
+            photos: [
+              "https://photos.example.com/325-east-14-street-apartment-living-room.jpg",
+              "https://photos.zillowstatic.com/fp/02b7cbfd26996523d92232fbb9381088-se_large_800_400.webp",
+            ],
           },
         });
       }
@@ -238,6 +241,7 @@ describe("single-link live extraction", () => {
     });
     expect(result.listing.photos).toEqual([
       "https://photos.example.com/325-east-14-street-apartment-living-room.jpg",
+      "https://photos.zillowstatic.com/fp/02b7cbfd26996523d92232fbb9381088-se_large_800_400.webp",
     ]);
   });
 

@@ -294,6 +294,21 @@ describe("listing detail attribution", () => {
     );
   });
 
+  it("shows listing descriptions above the group section", () => {
+    const listingWithDescription: ListingCandidate = {
+      ...fixtureListings[0]!,
+      description: "Private roof deck, in-unit laundry, and oversized bedrooms.",
+    };
+    const markup = renderListingEditorMarkup(listingWithDescription);
+
+    expect(markup).toContain('aria-label="Listing description"');
+    expect(markup).toContain("About");
+    expect(markup).toContain(listingWithDescription.description);
+    expect(markup.indexOf('aria-label="Listing description"')).toBeLessThan(
+      markup.indexOf('aria-label="Group comments and reactions"'),
+    );
+  });
+
   it("shows time since the listing was added in the detail facts", () => {
     const fourDayOldListing: ListingCandidate = {
       ...fixtureListings[0]!,

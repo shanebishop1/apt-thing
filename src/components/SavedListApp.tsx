@@ -2281,6 +2281,13 @@ export function ListingEditor({
         <Fact label="Available" value={listing.availableAt ?? "TBD"} />
       </section>
 
+      {listing.description ? (
+        <section className="listing-about" aria-label="Listing description">
+          <h3>About</h3>
+          <p>{listing.description}</p>
+        </section>
+      ) : null}
+
       <section className="group-actions-panel" aria-label="Group comments and reactions">
         <div className="group-actions-header">
           <h3>Group</h3>

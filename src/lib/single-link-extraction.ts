@@ -859,10 +859,13 @@ function isLikelyListingPhoto(value: string): boolean {
   }
 
   return (
+    lower.includes("photos.zillowstatic.com") ||
+    lower.includes("/fp/") ||
     lower.includes("apartment") ||
     lower.includes("building") ||
     lower.includes("hero") ||
-    lower.includes("gallery")
+    lower.includes("gallery") ||
+    /\.(?:avif|jpe?g|png|webp)(?:[?#]|$)/.test(lower)
   );
 }
 

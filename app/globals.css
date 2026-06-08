@@ -1706,6 +1706,24 @@ button:disabled {
   border-radius: 18px;
 }
 
+.listing-about {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  padding: 16px;
+}
+
+.listing-about h3 {
+  margin: 0 0 8px;
+}
+
+.listing-about p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
 .listing-photo-carousel {
   display: grid;
   gap: 10px;
