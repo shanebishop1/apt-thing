@@ -242,7 +242,9 @@ export function readSavedListings(
       return fallbackListings;
     }
 
-    return parsedEnvelope.listings.filter((listing) => listing.groupId === groupId);
+    return parsedEnvelope.listings
+      .filter((listing) => listing.groupId === groupId)
+      .map(upgradePersistedFixturePhotos);
   } catch {
     return fallbackListings;
   }
@@ -350,10 +352,13 @@ export function createListingGroupActions(
   const listingActions = actions.filter(
     (action) => action.groupId === groupId && action.listingId === listingId,
   );
+  const reactions = dedupeCurrentReactions(
+    listingActions.filter((action) => action.actionType === "reaction"),
+  );
 
   return {
     comments: listingActions.filter((action) => action.actionType === "comment"),
-    reactions: listingActions.filter((action) => action.actionType === "reaction"),
+    reactions,
     statusChanges: listingActions.filter((action) => action.actionType === "status-change"),
     sourceLinkOpens: listingActions.filter((action) => action.actionType === "source-link-open"),
     feedback: listingActions.filter((action) => action.actionType === "feedback"),
@@ -401,7 +406,55 @@ export function appendGroupAction(
     createdAt,
   };
 
-  return [actionRecord, ...actions].filter((record) => record.groupId === identity.groupId);
+  const remainingActions =
+    action.actionType === "reaction"
+      ? actions.filter(
+          (record) =>
+            !isSameUserListingReaction(
+              record,
+              identity.groupId,
+              listing.id,
+              identity.identityToken,
+            ),
+        )
+      : actions;
+
+  return [actionRecord, ...remainingActions].filter(
+    (record) => record.groupId === identity.groupId,
+  );
+}
+
+function dedupeCurrentReactions(reactions: GroupActionRecord[]): GroupActionRecord[] {
+  const seenActors = new Set<string>();
+
+  return reactions.filter((reaction) => {
+    const actorKey = createReactionActorKey(reaction.actorIdentityToken, reaction.actorDisplayName);
+
+    if (seenActors.has(actorKey)) {
+      return false;
+    }
+
+    seenActors.add(actorKey);
+    return true;
+  });
+}
+
+function isSameUserListingReaction(
+  record: GroupActionRecord,
+  groupId: string,
+  listingId: string,
+  identityToken: string,
+): boolean {
+  return (
+    record.actionType === "reaction" &&
+    record.groupId === groupId &&
+    record.listingId === listingId &&
+    record.actorIdentityToken === identityToken
+  );
+}
+
+function createReactionActorKey(identityToken?: string, displayName?: string): string {
+  return identityToken ?? `display:${displayName ?? "unknown"}`;
 }
 
 export function clearSavedListings(storage: StorageLike, groupId: string): void {
@@ -540,6 +593,28 @@ function normalizeOptionalText(value?: string): string | undefined {
   return normalized ? normalized : undefined;
 }
 
+function upgradePersistedFixturePhotos(listing: ListingCandidate): ListingCandidate {
+  if (
+    !listing.photos.some((photoUrl) => photoUrl.startsWith("https://fixtures.test/streeteasy/"))
+  ) {
+    return listing;
+  }
+
+  const fixtureListing = fixtureListings.find(
+    (candidate) => candidate.groupId === listing.groupId && candidate.url === listing.url,
+  );
+
+  if (!fixtureListing || fixtureListing.photos.length === 0) {
+    return listing;
+  }
+
+  return {
+    ...listing,
+    photos: fixtureListing.photos,
+    imageEvidence: fixtureListing.imageEvidence,
+  };
+}
+
 function hashString(value: string): string {
   let hash = 0;
 
@@ -636,7 +711,9 @@ export function createReviewDashboardModel(
     reviewNeededBatch: reviewNeededBatch.length,
     userQualifiedPasted: userQualifiedPasted.length,
     history: history.length,
-    active: listings.filter((listing) => listing.reviewStatus !== "rejected").length,
+    active: listings.filter(
+      (listing) => listing.reviewStatus !== "rejected" && listing.reviewStatus !== "unavailable",
+    ).length,
     touring: listings.filter((listing) => listing.reviewStatus === "touring").length,
     manualNeeded: listings.filter((listing) => listing.extractionStatus === "manual-needed").length,
     skippedSeen: batchRun?.counts.candidatesSkippedSeen ?? 0,
@@ -668,7 +745,11 @@ function toReviewBatchRunSummary(run: StreetEasyBatchRun): ReviewBatchRunSummary
 }
 
 function isCurrentMatch(listing: ListingCandidate): boolean {
-  return listing.reviewStatus !== "rejected" && listing.triageBucket === "confirmed-match";
+  return (
+    listing.reviewStatus !== "rejected" &&
+    listing.reviewStatus !== "unavailable" &&
+    listing.triageBucket === "confirmed-match"
+  );
 }
 
 function isBatchListing(listing: ListingCandidate): boolean {
@@ -689,7 +770,8 @@ function compareActionableListings(a: ListingCandidate, b: ListingCandidate): nu
     touring: 0,
     interested: 1,
     new: 2,
-    rejected: 3,
+    unavailable: 3,
+    rejected: 4,
   };
   const statusDelta = statusRank[a.reviewStatus] - statusRank[b.reviewStatus];
 

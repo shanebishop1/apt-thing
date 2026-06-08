@@ -113,17 +113,18 @@ const sourceEvidence: SourceEvidenceRecord[] = [
     quote: "RealtyAPI fixture resolved the pasted StreetEasy URL.",
   }),
   {
-    id: "source-evidence-r2-raw-artifact-fixture",
+    id: "source-evidence-d1-metadata-fixture",
     contract: "source-evidence-v1",
     groupId: defaultSearchGroup.id,
     listingId: confirmedMatch.id,
     runId: batchResult.run.id,
     sourceUrl: confirmedMatch.url,
-    claim: "R2 raw artifact pointer fixture",
-    quote: "Raw source payload is retained in R2 while normalized state remains in D1.",
+    claim: "D1 evidence metadata fixture",
+    quote:
+      "Source image URLs and normalized evidence metadata are retained in D1 without R2 raw artifact storage.",
     pointer: {
-      owner: "r2",
-      key: `${defaultSearchGroup.id}/${batchResult.run.id}/${confirmedMatch.id}/raw-payload.json`,
+      owner: "d1",
+      key: `source_evidence_records:${confirmedMatch.id}:metadata`,
       contentType: "application/json",
       groupScoped: true,
     },
@@ -139,8 +140,8 @@ const sourceEvidence: SourceEvidenceRecord[] = [
     claim: "Review-needed source artifact retained",
     quote: "Williamsburg fallback candidate kept for manual review with source evidence.",
     pointer: {
-      owner: "r2",
-      key: `${defaultSearchGroup.id}/${batchResult.run.id}/${reviewNeeded.id}/raw-payload.json`,
+      owner: "d1",
+      key: `source_evidence_records:${reviewNeeded.id}:metadata`,
       contentType: "application/json",
       groupScoped: true,
     },
@@ -155,8 +156,8 @@ const sourceEvidence: SourceEvidenceRecord[] = [
     claim: "Source failure isolated",
     quote: "A fixture-only source failed without failing the whole scheduled run.",
     pointer: {
-      owner: "r2",
-      key: `${defaultSearchGroup.id}/${batchResult.run.id}/source-failures/fixture-source.json`,
+      owner: "d1",
+      key: `source_evidence_records:${batchResult.run.id}:source-failure`,
       contentType: "application/json",
       groupScoped: true,
     },
@@ -659,7 +660,7 @@ function rawPointersForRun(
   runId: string,
 ): EvidenceStoragePointer[] {
   return bundle.sourceEvidence
-    .filter((record) => record.runId === runId || record.pointer.owner === "r2")
+    .filter((record) => record.runId === runId || record.pointer.owner === "d1")
     .map((record) => record.pointer);
 }
 

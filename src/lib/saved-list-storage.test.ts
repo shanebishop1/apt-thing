@@ -31,6 +31,7 @@ import {
   createListingFromUrl,
   defaultSearchGroup,
 } from "./listings";
+import { fixtureListings } from "./fixtures";
 
 class MemoryStorage implements StorageLike {
   private store = new Map<string, string>();
@@ -77,6 +78,40 @@ describe("saved-list local storage helpers", () => {
     expect(envelope.listings).toHaveLength(1);
     expect(stored).toContain(defaultSearchGroup.id);
     expect(readSavedListings(storage, defaultSearchGroup.id, [])).toEqual([listing]);
+  });
+
+  it("upgrades old persisted fixture photo URLs to loadable fixture images", () => {
+    const storage = new MemoryStorage();
+    const fixtureListing = fixtureListings.find((listing) => listing.photos.length > 0)!;
+    const staleListing = {
+      ...fixtureListing,
+      photos: ["https://fixtures.test/streeteasy/batch/1.jpg"],
+      imageEvidence: [
+        {
+          url: "https://fixtures.test/streeteasy/batch/1.jpg",
+          role: "primary" as const,
+          sentToAi: true,
+        },
+      ],
+    };
+
+    storage.setItem(
+      createSavedListingsStorageKey(defaultSearchGroup.id),
+      JSON.stringify({
+        version: "v1",
+        groupId: defaultSearchGroup.id,
+        listings: [staleListing],
+        updatedAt: "2026-06-07T00:00:00.000Z",
+      }),
+    );
+
+    const hydratedListing = readSavedListings(storage, defaultSearchGroup.id, [])[0]!;
+
+    expect(hydratedListing.photos).toEqual(fixtureListing.photos);
+    expect(hydratedListing.photos.every((photoUrl) => photoUrl.startsWith("https://images."))).toBe(
+      true,
+    );
+    expect(hydratedListing.imageEvidence).toEqual(fixtureListing.imageEvidence);
   });
 
   it("stores invite code and display name indefinitely while blocking invalid invites", () => {
@@ -315,6 +350,58 @@ describe("saved-list local storage helpers", () => {
       },
       provenance: { source: "evidence-feedback", visibleToGroup: true },
     });
+  });
+
+  it("keeps only the current reaction per user and listing", () => {
+    const listing = createListingFromUrl(
+      "https://streeteasy.com/building/reaction-current/1",
+      identity,
+      {
+        title: "Reaction current listing",
+        rent: 12500,
+        bedrooms: 5,
+      },
+    );
+    const otherListing = createListingFromUrl(
+      "https://streeteasy.com/building/reaction-current/2",
+      identity,
+      {
+        title: "Other reaction listing",
+        rent: 12500,
+        bedrooms: 5,
+      },
+    );
+    const otherIdentity = createInviteIdentity(defaultSearchGroup.inviteCode, "Other Tester")!;
+
+    const actions = [
+      { actionType: "reaction" as const, reaction: "thumbs-up" as const },
+      { actionType: "reaction" as const, reaction: "thumbs-down" as const },
+    ].reduce(
+      (currentActions, action) => appendGroupAction(currentActions, identity, listing, action),
+      appendGroupAction([], identity, otherListing, {
+        actionType: "reaction",
+        reaction: "thumbs-up",
+      }),
+    );
+    const nextActions = appendGroupAction(actions, otherIdentity, listing, {
+      actionType: "reaction",
+      reaction: "thumbs-up",
+    });
+    const grouped = createListingGroupActions(nextActions, defaultSearchGroup.id, listing.id);
+    const otherGrouped = createListingGroupActions(
+      nextActions,
+      defaultSearchGroup.id,
+      otherListing.id,
+    );
+
+    expect(grouped.reactions).toHaveLength(2);
+    expect(grouped.reactions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ actorDisplayName: "Tester", reaction: "thumbs-down" }),
+        expect.objectContaining({ actorDisplayName: "Other Tester", reaction: "thumbs-up" }),
+      ]),
+    );
+    expect(otherGrouped.reactions).toHaveLength(1);
   });
 
   it("persists rejected status memory with group-scoped duplicate keys", () => {

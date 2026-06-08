@@ -53,10 +53,15 @@ const manualNeeded = createListingFromUrl(
   identity,
 );
 
-const streetEasyPhotoUrls = Array.from(
-  { length: 7 },
-  (_, index) => `https://fixtures.test/streeteasy/152-manhattan/${index + 1}.jpg`,
-);
+const streetEasyPhotoUrls = [
+  "https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1560448075-bb485b067938?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80",
+];
 
 export const streetEasyPastedFixture: StreetEasyPastedExtractionFixture = {
   kind: "streeteasy-realtyapi-url-resolution-fixture",
@@ -99,10 +104,14 @@ export const streetEasyPastedFixture: StreetEasyPastedExtractionFixture = {
   ],
 };
 
-const batchPhotoUrls = Array.from(
-  { length: 6 },
-  (_, index) => `https://fixtures.test/streeteasy/batch/${index + 1}.jpg`,
-);
+const batchPhotoUrls = [
+  "https://images.unsplash.com/photo-1560185127-6ed189bf02f4?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1560448204-603b3fc33ddc?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1560440021-33f9b867899d?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1560448204-61dc36dc98c8?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1560448075-cbc16bb4af8e?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1560448205-4d9b3e6bb6db?auto=format&fit=crop&w=1200&q=80",
+];
 
 export const streetEasyBatchFixture: StreetEasyBatchFixture = {
   kind: "streeteasy-batch-fixture",
@@ -166,7 +175,7 @@ export const streetEasyBatchFixture: StreetEasyBatchFixture = {
         sourceUrl: "https://streeteasy.com/building/batch-save/3",
         urlPath: "/building/batch-save/3",
         title: "New Chelsea five bed batch candidate",
-        address: "30 Batch Street",
+        address: "303 West 21st Street",
         neighborhood: "Chelsea",
         borough: "Manhattan",
         rent: 14950,
@@ -187,7 +196,7 @@ export const streetEasyBatchFixture: StreetEasyBatchFixture = {
         sourceUrl: "https://streeteasy.com/building/batch-review/4",
         urlPath: "/building/batch-review/4",
         title: "Review-needed Williamsburg batch candidate",
-        address: "40 Batch Review Avenue",
+        address: "185 North 10th Street",
         neighborhood: "Williamsburg",
         borough: "Brooklyn",
         rent: 11200,

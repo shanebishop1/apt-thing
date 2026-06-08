@@ -53,7 +53,7 @@ export type RunStatus = BatchJobStatus;
 
 export type Cadence = "manual" | "daily" | "hourly";
 
-export type ReviewStatus = "new" | "interested" | "touring" | "rejected";
+export type ReviewStatus = "new" | "interested" | "touring" | "unavailable" | "rejected";
 
 export type FitFlag =
   | "price_fit"
@@ -473,11 +473,11 @@ export const CONTRACT_PERSISTENCE_BOUNDARIES = {
       "D1 owns saved listings, review state, duplicate keys, provenance, and run logs after proof.",
   },
   rawEvidence: {
-    owner: "r2",
-    scope: "raw-artifact",
+    owner: "d1",
+    scope: "authoritative-relational",
     groupScoped: true,
     notes:
-      "R2 owns bulky source payloads, screenshots, and image artifacts with group/run/listing metadata.",
+      "D1 stores source links, source image URLs, quoted evidence, and extraction metadata; R2 raw artifact storage is disabled for the near-term MVP.",
   },
   cacheConfig: {
     owner: "kv",
@@ -489,7 +489,7 @@ export const CONTRACT_PERSISTENCE_BOUNDARIES = {
     owner: "local-fixture",
     scope: "local-mock",
     groupScoped: true,
-    notes: "Fixtures/local mocks mirror D1/R2 ownership fields without live credentials.",
+    notes: "Fixtures/local mocks mirror D1/KV ownership fields without live credentials.",
   },
 } satisfies Record<string, PersistenceBoundary>;
 
@@ -517,7 +517,13 @@ export const BATCH_RUN_STATUSES: RunStatus[] = [
   "failed",
   "cancelled",
 ];
-export const REVIEW_STATUSES: ReviewStatus[] = ["new", "interested", "touring", "rejected"];
+export const REVIEW_STATUSES: ReviewStatus[] = [
+  "new",
+  "interested",
+  "touring",
+  "unavailable",
+  "rejected",
+];
 
 export const hardcodedSearchGroups: SearchGroup[] = [
   {
@@ -1254,7 +1260,7 @@ function inferDraftFromUrl(normalizedUrl: string, source: SourceType): ListingDr
   if (source === "streeteasy") {
     return {
       title: "StreetEasy listing ready for extraction",
-      address: titleCase(readablePath.split("/").at(-1) || "StreetEasy listing"),
+      address: titleCase(getLastPathSegment(readablePath) || "StreetEasy listing"),
       borough: "Manhattan",
     };
   }
@@ -1262,13 +1268,18 @@ function inferDraftFromUrl(normalizedUrl: string, source: SourceType): ListingDr
   if (source === "zillow") {
     return {
       title: "Zillow listing ready for extraction",
-      address: titleCase(readablePath.split("/").at(-1) || "Zillow listing"),
+      address: titleCase(getLastPathSegment(readablePath) || "Zillow listing"),
     };
   }
 
   return {
-    title: titleCase(readablePath.split("/").filter(Boolean).at(-1) || `${source} listing`),
+    title: titleCase(getLastPathSegment(readablePath) || `${source} listing`),
   };
+}
+
+function getLastPathSegment(readablePath: string): string {
+  const segments = readablePath.split("/").filter(Boolean);
+  return segments[segments.length - 1] ?? "";
 }
 
 function createId(normalizedUrl: string): string {

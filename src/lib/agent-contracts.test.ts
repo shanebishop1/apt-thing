@@ -88,18 +88,18 @@ describe("G2B shared agent contracts and fixtures", () => {
     expect(bundle.briefingRecords[0]!.summary).toContain("strong Chelsea candidate");
   });
 
-  it("keeps evidence pointers group-scoped and places raw artifacts in R2", () => {
+  it("keeps evidence pointers group-scoped in D1 metadata", () => {
     expect(g2bAgentContractFixtureBundle.sourceEvidence).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          pointer: expect.objectContaining({ owner: "r2", groupScoped: true }),
+          pointer: expect.objectContaining({ owner: "d1", groupScoped: true }),
         }),
       ]),
     );
     expect(
       g2bAgentContractFixtureBundle.sourceEvidence
-        .filter((evidence) => evidence.pointer.owner === "r2")
-        .every((evidence) => evidence.pointer.key.includes(evidence.groupId)),
+        .filter((evidence) => evidence.pointer.owner === "d1")
+        .every((evidence) => evidence.pointer.groupScoped === true),
     ).toBe(true);
   });
 
@@ -161,7 +161,7 @@ describe("G2B shared agent contracts and fixtures", () => {
       ]),
     );
     expect(history.latestRun.rawArtifactPointers).toEqual(
-      expect.arrayContaining([expect.objectContaining({ owner: "r2", groupScoped: true })]),
+      expect.arrayContaining([expect.objectContaining({ owner: "d1", groupScoped: true })]),
     );
     expect(history.seenRejectedMemory).toEqual(
       expect.arrayContaining([expect.objectContaining({ memoryState: "rejected" })]),

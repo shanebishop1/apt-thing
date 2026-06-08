@@ -388,7 +388,7 @@ describe("listing contracts", () => {
       "failed",
       "cancelled",
     ]);
-    expect(REVIEW_STATUSES).toEqual(["new", "interested", "touring", "rejected"]);
+    expect(REVIEW_STATUSES).toEqual(["new", "interested", "touring", "unavailable", "rejected"]);
 
     const state = createGroupScopedListingState(
       "group-a",
@@ -446,15 +446,15 @@ describe("listing contracts", () => {
     });
   });
 
-  it("documents future D1/R2/KV ownership boundaries in local-compatible shapes", () => {
+  it("documents near-term D1/KV ownership boundaries in local-compatible shapes", () => {
     expect(CONTRACT_PERSISTENCE_BOUNDARIES.savedListings).toMatchObject({
       owner: "d1",
       scope: "authoritative-relational",
       groupScoped: true,
     });
     expect(CONTRACT_PERSISTENCE_BOUNDARIES.rawEvidence).toMatchObject({
-      owner: "r2",
-      scope: "raw-artifact",
+      owner: "d1",
+      scope: "authoritative-relational",
       groupScoped: true,
     });
     expect(CONTRACT_PERSISTENCE_BOUNDARIES.cacheConfig).toMatchObject({
