@@ -43,11 +43,9 @@ import {
 import type { GroupActionRecord, SeenRejectedMemoryRecord } from "../lib/agent-contracts";
 import { g3cBriefingRunHistoryFixture } from "../lib/agent-contract-fixtures";
 import type {
-  BriefingCandidateSummary,
   BriefingRunHistoryContract,
   BriefingRunHistoryRun,
   EvidenceStoragePointer,
-  FeedbackSummary,
   SourceCoverageSummary,
 } from "../lib/agent-contracts";
 import { createMapReviewModel, type MapReviewCandidate } from "../lib/map-review";
@@ -102,7 +100,7 @@ const defaultIdentityForm = {
 const fixtureBriefingRunHistory = g3cBriefingRunHistoryFixture;
 
 type IdentityFormState = typeof defaultIdentityForm;
-type AppTab = "dashboard" | "map" | "briefing" | "history" | "settings";
+type AppTab = "dashboard" | "map" | "history" | "settings";
 type ThemeMode = "dark" | "light";
 
 const themeStorageKey = "apt-thing-theme";
@@ -120,25 +118,8 @@ const noopSelectListing = () => {};
 const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "dashboard", label: "List" },
   { id: "map", label: "Map" },
-  { id: "briefing", label: "Briefing" },
   { id: "history", label: "Runs" },
 ];
-
-type BriefingFeedbackSummaryItem = FeedbackSummary & {
-  groupId: string;
-  listingTitle: string;
-  source: string;
-};
-
-export type LatestBriefingMemoryRecord = {
-  id: string;
-  state: SeenRejectedMemoryRecord["memoryState"];
-  reason: string;
-  duplicateKey: string;
-  groupScopedDuplicateKey: string;
-  lastSeenLabel: string;
-  sourceUrl?: string;
-};
 
 type ListingSectionProps = {
   groups?: ListingListGroup[];
@@ -184,26 +165,6 @@ export type RunHistoryPanelRunModel = {
 export type RunHistoryPanelModel = {
   supportedCadences: BriefingRunHistoryContract["supportedCadences"];
   runs: RunHistoryPanelRunModel[];
-};
-
-export type LatestBriefingPanelModel = {
-  runStatus: string;
-  runCadence: string;
-  generatedAt: string;
-  completedAt?: string;
-  summary: string;
-  bestMatches: BriefingCandidateSummary[];
-  reviewNeeded: BriefingCandidateSummary[];
-  changedListings: string[];
-  skippedSeenCount: number;
-  skippedTriagedCount: number;
-  memoryRecordCount: number;
-  memoryRecords: LatestBriefingMemoryRecord[];
-  sourceCoverage: SourceCoverageSummary[];
-  recommendationRationale: string[];
-  concerns: string[];
-  nextActions: string[];
-  feedbackSummaries: BriefingFeedbackSummaryItem[];
 };
 
 export function SavedListApp() {
@@ -792,10 +753,6 @@ export function SavedListApp() {
         />
       ) : null}
 
-      {activeTab === "briefing" ? (
-        <LatestBriefingPanel history={fixtureBriefingRunHistory} />
-      ) : null}
-
       {activeTab === "history" ? <RunHistoryPanel history={fixtureBriefingRunHistory} /> : null}
 
       {activeTab === "settings" ? (
@@ -837,69 +794,6 @@ export function SavedListApp() {
       ) : null}
     </main>
   );
-}
-
-export function createLatestBriefingPanelModel(
-  history: BriefingRunHistoryContract,
-): LatestBriefingPanelModel {
-  const latestRun = history.latestRun;
-  const latestBriefing = history.latestBriefing;
-  const candidatesById = new Map(
-    latestRun.candidateSummaries.map((candidate) => [candidate.listingId, candidate]),
-  );
-  const bestMatchIds = new Set([
-    ...latestBriefing.bestNewListingIds,
-    ...latestRun.candidateSummaries
-      .filter((candidate) => candidate.bucket === "confirmed-match")
-      .map((candidate) => candidate.listingId),
-  ]);
-  const reviewNeededIds = new Set([
-    ...latestBriefing.reviewNeededListingIds,
-    ...latestRun.candidateSummaries
-      .filter((candidate) => candidate.bucket === "review-needed")
-      .map((candidate) => candidate.listingId),
-  ]);
-  const bestMatches = candidatesFromIds(bestMatchIds, candidatesById);
-  const reviewNeeded = candidatesFromIds(reviewNeededIds, candidatesById);
-  const concerns = uniqueNonEmpty(
-    latestRun.candidateSummaries
-      .flatMap((candidate) => candidate.evidenceSummary.concerns)
-      .concat(
-        latestBriefing.sourceCoverage.flatMap(
-          (coverage) => coverage.failureMessage ?? coverage.failureCode ?? [],
-        ),
-      ),
-  );
-  const feedbackSummaries = history.feedbackSummaries.map((summary) => {
-    const candidate = candidatesById.get(summary.listingId);
-
-    return {
-      ...summary,
-      groupId: history.groupId,
-      listingTitle: candidate?.title ?? summary.listingId,
-      source: candidate?.source ?? sourceLabelFromUrl(summary.sourceUrl),
-    };
-  });
-
-  return {
-    runStatus: latestRun.status,
-    runCadence: latestRun.cadence,
-    generatedAt: latestBriefing.generatedAt,
-    completedAt: latestRun.completedAt,
-    summary: latestBriefing.summary,
-    bestMatches,
-    reviewNeeded,
-    changedListings: latestBriefing.whatChanged,
-    skippedSeenCount: latestBriefing.skippedSeenCount,
-    skippedTriagedCount: latestRun.counts.candidatesSkippedTriaged,
-    memoryRecordCount: history.seenRejectedMemory.length,
-    memoryRecords: history.seenRejectedMemory.map(toLatestBriefingMemoryRecord),
-    sourceCoverage: latestBriefing.sourceCoverage,
-    recommendationRationale: latestBriefing.recommendationRationale,
-    concerns,
-    nextActions: latestBriefing.suggestedActions,
-    feedbackSummaries,
-  };
 }
 
 export function createRunHistoryPanelModel(
@@ -1090,178 +984,6 @@ export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContra
   );
 }
 
-export function LatestBriefingPanel({ history }: { history: BriefingRunHistoryContract }) {
-  const model = createLatestBriefingPanelModel(history);
-
-  return (
-    <section className="briefing-card" aria-label="Latest agent briefing">
-      <header className="briefing-header">
-        <div>
-          <p className="eyebrow">Latest in-app briefing</p>
-          <h2>Briefing</h2>
-          <p>{model.summary}</p>
-        </div>
-        <div className="briefing-run-pill" aria-label="Latest briefing run status">
-          <span>{formatLabel(model.runStatus)}</span>
-          <strong>{model.runCadence}</strong>
-          <small>{formatDateLabel(model.completedAt ?? model.generatedAt)}</small>
-        </div>
-      </header>
-
-      <div className="briefing-layout">
-        <div className="briefing-highlight-stack">
-          <BriefingCandidateGroup
-            eyebrow="Matches"
-            candidates={model.bestMatches}
-            emptyText="No matches."
-          />
-          <BriefingCandidateGroup
-            eyebrow="Review needed"
-            candidates={model.reviewNeeded}
-            emptyText="No review-needed candidates."
-          />
-        </div>
-
-        <section className="briefing-section" aria-label="Changed listings">
-          <h3>Changed listings</h3>
-          <BulletList items={model.changedListings} emptyText="No changes." />
-        </section>
-
-        <section className="briefing-section memory-counts" aria-label="Skipped / seen memory">
-          <h3>Skipped / seen memory</h3>
-          <div className="briefing-count-grid">
-            <Fact label="Seen skips" value={String(model.skippedSeenCount)} />
-            <Fact label="Triaged skips" value={String(model.skippedTriagedCount)} />
-            <Fact label="Memory rows" value={String(model.memoryRecordCount)} />
-          </div>
-          <MemoryRecordList records={model.memoryRecords} />
-        </section>
-
-        <section className="briefing-section source-coverage" aria-label="Source coverage">
-          <h3>Source coverage</h3>
-          <div className="source-coverage-list">
-            {model.sourceCoverage.map((coverage) => (
-              <article key={coverage.source} className={`source-coverage-item ${coverage.status}`}>
-                <div>
-                  <strong>{coverage.source}</strong>
-                  <span>{formatLabel(coverage.status)}</span>
-                </div>
-                <p>
-                  Checked {coverage.checkedCount}; candidates {coverage.candidateCount}
-                  {coverage.failureCode ? ` · ${coverage.failureCode}` : ""}
-                </p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="briefing-section" aria-label="Recommendation rationale">
-          <h3>Recommendation rationale</h3>
-          <BulletList items={model.recommendationRationale} emptyText="No rationale." />
-        </section>
-
-        <section className="briefing-section" aria-label="Concerns">
-          <h3>Concerns</h3>
-          <BulletList items={model.concerns} emptyText="No concerns." />
-        </section>
-
-        <section className="briefing-section next-actions" aria-label="Next actions">
-          <h3>Next actions</h3>
-          <BulletList items={model.nextActions} emptyText="No actions." />
-        </section>
-      </div>
-    </section>
-  );
-}
-
-function MemoryRecordList({ records }: { records: LatestBriefingMemoryRecord[] }) {
-  if (records.length === 0) {
-    return <p className="empty-state">No memory records.</p>;
-  }
-
-  return (
-    <div className="briefing-memory-list" aria-label="Seen and rejected memory records">
-      {records.map((record) => (
-        <article key={record.id} className="briefing-memory-card">
-          <div className="briefing-memory-topline">
-            <span>{formatLabel(record.state)}</span>
-            <small>Last seen {record.lastSeenLabel}</small>
-          </div>
-          <p>{record.reason}</p>
-          <dl className="memory-key-list">
-            <div>
-              <dt>Duplicate key</dt>
-              <dd>{record.duplicateKey}</dd>
-            </div>
-            <div>
-              <dt>Group key</dt>
-              <dd>{record.groupScopedDuplicateKey}</dd>
-            </div>
-          </dl>
-          {record.sourceUrl ? (
-            <a
-              className="memory-source-link"
-              href={record.sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Source link
-            </a>
-          ) : null}
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function BriefingCandidateGroup({
-  eyebrow,
-  candidates,
-  emptyText,
-}: {
-  eyebrow: string;
-  candidates: BriefingCandidateSummary[];
-  emptyText: string;
-}) {
-  return (
-    <section className="briefing-candidate-group" aria-label={eyebrow}>
-      <p className="eyebrow">{eyebrow}</p>
-      {candidates.length === 0 ? (
-        <p>{emptyText}</p>
-      ) : (
-        <div className="briefing-candidates">
-          {candidates.map((candidate) => (
-            <article key={candidate.listingId} className="briefing-candidate-card">
-              <div>
-                <span>{formatLabel(candidate.bucket)}</span>
-                <strong>{candidate.title}</strong>
-              </div>
-              <p>{candidate.suggestedAction}</p>
-              <small>
-                Overall confidence {Math.round(candidate.evidenceSummary.confidence.overall * 100)}%
-              </small>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function BulletList({ items, emptyText }: { items: string[]; emptyText: string }) {
-  if (items.length === 0) {
-    return <p>{emptyText}</p>;
-  }
-
-  return (
-    <ul>
-      {items.map((item) => (
-        <li key={item}>{item}</li>
-      ))}
-    </ul>
-  );
-}
-
 function createRunHistoryHeading(run: BriefingRunHistoryRun): string {
   if (run.cadence === "manual") {
     return "Manual import catch-up";
@@ -1311,42 +1033,8 @@ function slugify(value: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function toLatestBriefingMemoryRecord(
-  record: SeenRejectedMemoryRecord,
-): LatestBriefingMemoryRecord {
-  return {
-    id: record.id,
-    state: record.memoryState,
-    reason: record.reason,
-    duplicateKey: record.duplicateKey,
-    groupScopedDuplicateKey: record.groupScopedDuplicateKey,
-    lastSeenLabel: formatDateLabel(record.lastSeenAt),
-    sourceUrl: record.sourceUrl,
-  };
-}
-
-function candidatesFromIds(
-  ids: Set<string>,
-  candidatesById: Map<string, BriefingCandidateSummary>,
-): BriefingCandidateSummary[] {
-  return [...ids].flatMap((id) => {
-    const candidate = candidatesById.get(id);
-
-    return candidate ? [candidate] : [];
-  });
-}
-
 function uniqueNonEmpty(items: string[]): string[] {
   return [...new Set(items.map((item) => item.trim()).filter(Boolean))];
-}
-
-function sourceLabelFromUrl(sourceUrl: string): string {
-  try {
-    const hostname = new URL(sourceUrl).hostname.replace(/^www\./, "");
-    return hostname.split(".")[0] ?? sourceUrl;
-  } catch {
-    return sourceUrl;
-  }
 }
 
 function MapReviewPanel({
@@ -2042,6 +1730,7 @@ export function ListingEditor({
   const [isEditingFields, setIsEditingFields] = useState(false);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const [isAboutExpanded, setIsAboutExpanded] = useState(false);
   const firstEditInputRef = useRef<HTMLInputElement | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedListingId = listing?.id;
@@ -2050,6 +1739,7 @@ export function ListingEditor({
     setIsEditingFields(false);
     setSelectedMediaIndex(0);
     setIsPhotoModalOpen(false);
+    setIsAboutExpanded(false);
   }, [selectedListingId]);
 
   useEffect(() => {
@@ -2107,6 +1797,9 @@ export function ListingEditor({
   const showPhotoControls = mediaItemCount > 1;
   const showModalPhotoControls = photoUrls.length > 1;
   const photoPositionLabel = `${selectedMediaIndex + 1} of ${mediaItemCount}`;
+  const aboutPreview = getListingAboutPreview(listing.description);
+  const aboutText = isAboutExpanded ? listing.description : aboutPreview;
+  const canExpandAbout = Boolean(listing.description && aboutPreview !== listing.description);
   const selectPhoto = (index: number) => setSelectedMediaIndex(index);
   const handlePreviousPhoto = () => {
     setSelectedMediaIndex((currentIndex) =>
@@ -2331,7 +2024,17 @@ export function ListingEditor({
       {listing.description ? (
         <section className="listing-about" aria-label="Listing description">
           <h3>About</h3>
-          <p>{listing.description}</p>
+          <p>{aboutText}</p>
+          {canExpandAbout ? (
+            <button
+              type="button"
+              className="text-button"
+              aria-expanded={isAboutExpanded}
+              onClick={() => setIsAboutExpanded((current) => !current)}
+            >
+              {isAboutExpanded ? "View less" : "View more"}
+            </button>
+          ) : null}
         </section>
       ) : null}
 
@@ -2628,6 +2331,25 @@ function formatListingAddedAge(createdAt: string) {
   const ageDays = Math.max(0, Math.floor((Date.now() - createdTime) / dayInMilliseconds));
 
   return `${ageDays} ${ageDays === 1 ? "day" : "days"}`;
+}
+
+function getListingAboutPreview(description?: string): string | undefined {
+  if (!description) return undefined;
+
+  const paragraphs = description
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  const previewSource =
+    paragraphs.length > 1 && paragraphs[0]!.length <= 90
+      ? `${paragraphs[0]}\n\n${paragraphs[1]}`
+      : (paragraphs[0] ?? description.trim());
+
+  if (previewSource.length <= 430) return previewSource;
+
+  const sentenceEnd = previewSource.slice(0, 430).lastIndexOf(". ");
+  const cutoff = sentenceEnd > 180 ? sentenceEnd + 1 : previewSource.slice(0, 430).lastIndexOf(" ");
+  return `${previewSource.slice(0, cutoff > 0 ? cutoff : 430).trim()}...`;
 }
 
 function reactionGlyph(reaction: NonNullable<GroupActionRecord["reaction"]>) {

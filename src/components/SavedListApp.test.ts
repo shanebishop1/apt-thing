@@ -8,133 +8,16 @@ import { fixtureListings } from "../lib/fixtures";
 import { defaultSearchGroup, type ListingCandidate } from "../lib/listings";
 import {
   GroupActionSummary,
-  LatestBriefingPanel,
   ListingEditor,
   ReactionScoreBadge,
   RunHistoryPanel,
   SavedListApp,
-  createLatestBriefingPanelModel,
   createRunHistoryPanelModel,
 } from "./SavedListApp";
 import { runMobileAcceptanceScenario, type MobileAcceptanceMarker } from "../lib/mobile-acceptance";
 import type { GroupActionRecord } from "../lib/agent-contracts";
 
 const savedListingsStorageKey = `apt-thing:v1:groups:${defaultSearchGroup.id}:saved-listings`;
-
-describe("latest briefing dashboard panel", () => {
-  it("derives best matches, review-needed candidates, changed listings, counts, coverage, rationale, concerns, and next actions", () => {
-    const model = createLatestBriefingPanelModel(g3cBriefingRunHistoryFixture);
-
-    expect(model.bestMatches.map((candidate) => candidate.title)).toContain(
-      "New Chelsea five bed batch candidate",
-    );
-    expect(model.reviewNeeded.map((candidate) => candidate.title)).toContain(
-      "Review-needed Williamsburg batch candidate",
-    );
-    expect(model.changedListings).toEqual([
-      "New Chelsea batch candidate added",
-      "Seen StreetEasy result skipped",
-    ]);
-    expect(model.skippedSeenCount).toBe(1);
-    expect(model.skippedTriagedCount).toBe(1);
-    expect(model.sourceCoverage).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ source: "streeteasy", status: "success", checkedCount: 4 }),
-        expect.objectContaining({
-          source: "fixture-secondary-source",
-          status: "failed",
-          failureCode: "fixture-source-unavailable",
-        }),
-      ]),
-    );
-    expect(model.recommendationRationale).toContain(
-      "Confirmed candidate fits price, bedroom, bathroom, and preferred Manhattan criteria.",
-    );
-    expect(model.concerns.length).toBeGreaterThan(0);
-    expect(model.nextActions).toContain("Ask broker for floorplan");
-    expect(model.feedbackSummaries).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          listingTitle: "New Chelsea five bed batch candidate",
-          sourceUrl: "https://streeteasy.com/building/batch-save/3",
-          commentCount: 1,
-          reactionCount: 0,
-          statusChangeCount: 0,
-          disagreementCount: 1,
-          summaries: expect.arrayContaining([
-            "Looks viable if the bedrooms are legal; ask about floorplan.",
-            "One roommate wants the floorplan before agreeing this is a real 5BR.",
-          ]),
-          doesNotMutateRanking: true,
-        }),
-        expect.objectContaining({
-          listingTitle: "Review-needed Williamsburg batch candidate",
-          commentCount: 0,
-          reactionCount: 1,
-          statusChangeCount: 0,
-          disagreementCount: 0,
-          doesNotMutateRanking: true,
-        }),
-        expect.objectContaining({
-          listingTitle: "Downgraded four bed over ceiling",
-          commentCount: 0,
-          reactionCount: 0,
-          statusChangeCount: 1,
-          disagreementCount: 0,
-          doesNotMutateRanking: true,
-        }),
-      ]),
-    );
-  });
-
-  it("derives compact seen/rejected memory explainer records without promoting them to current briefing candidates", () => {
-    const model = createLatestBriefingPanelModel(g3cBriefingRunHistoryFixture);
-
-    expect(model.memoryRecords).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          state: "rejected",
-          reason: "Over budget and not a credible 5BR.",
-          duplicateKey: "streeteasy.com/building/rejected-downgraded/5",
-          groupScopedDuplicateKey: `${g3cBriefingRunHistoryFixture.groupId}:streeteasy.com/building/rejected-downgraded/5`,
-          sourceUrl: "https://streeteasy.com/building/rejected-downgraded/5",
-          lastSeenLabel: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-        }),
-      ]),
-    );
-    expect(
-      [...model.bestMatches, ...model.reviewNeeded].map((candidate) => candidate.listingId),
-    ).not.toContain("listing-rejected-downgraded-fixture");
-  });
-
-  it("renders as a secondary panel without replacing listing card markup", () => {
-    const markup = renderToStaticMarkup(
-      React.createElement(LatestBriefingPanel, { history: g3cBriefingRunHistoryFixture }),
-    );
-
-    expect(markup).toContain('aria-label="Latest agent briefing"');
-    expect(markup).toContain("New Chelsea five bed batch candidate");
-    expect(markup).toContain("Review-needed Williamsburg batch candidate");
-    expect(markup).toContain("Changed listings");
-    expect(markup).toContain("Skipped / seen memory");
-    expect(markup).toContain("Over budget and not a credible 5BR.");
-    expect(markup).toContain("Group key");
-    expect(markup).toContain("https://streeteasy.com/building/rejected-downgraded/5");
-    expect(markup).toContain("Source coverage");
-    expect(markup).toContain("Recommendation rationale");
-    expect(markup).toContain("Concerns");
-    expect(markup).toContain("Next actions");
-  });
-
-  it("does not render feedback as a separate briefing section", () => {
-    const markup = renderToStaticMarkup(
-      React.createElement(LatestBriefingPanel, { history: g3cBriefingRunHistoryFixture }),
-    );
-
-    expect(markup).not.toContain("Feedback / disagreement summary");
-    expect(markup).not.toContain("ranking/search mutation off");
-  });
-});
 
 describe("run history panel", () => {
   it("derives compact list/detail rows for manual, daily, and future hourly-compatible runs", () => {
@@ -178,7 +61,7 @@ describe("run history panel", () => {
   });
 });
 
-describe("briefing/history verification guardrails", () => {
+describe("run history verification guardrails", () => {
   it("keeps group listing reads from sending invite codes in query strings", () => {
     const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
 
@@ -187,25 +70,22 @@ describe("briefing/history verification guardrails", () => {
     expect(componentSource).not.toContain("&inviteCode=");
   });
 
-  it("keeps briefing and history mobile-first without desktop table markup", () => {
-    const markup = renderBriefingHistoryMarkup();
+  it("keeps history mobile-first without desktop table markup", () => {
+    const markup = renderRunHistoryMarkup();
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
 
-    expect(markup).toContain('class="briefing-layout"');
     expect(markup).toContain('class="run-history-list"');
     expect(markup).not.toContain("<table");
     expect(markup).not.toContain('role="table"');
     expect(css).toMatch(
-      /@media \(max-width: 860px\)[\s\S]*\.briefing-layout,[\s\S]*\.run-history-header,[\s\S]*grid-template-columns: 1fr;/,
+      /@media \(max-width: 860px\)[\s\S]*\.run-history-header,[\s\S]*grid-template-columns: 1fr;/,
     );
-    expect(css).toMatch(
-      /@media \(max-width: 560px\)[\s\S]*\.briefing-count-grid,[\s\S]*\.run-history-facts,[\s\S]*grid-template-columns: 1fr;/,
-    );
+    expect(css).toMatch(/@media \(max-width: 560px\)[\s\S]*\.run-history-facts/);
     expect(css).not.toMatch(/display:\s*table|table-layout:/);
   });
 
-  it("does not expose a push-notification dependency in briefing/history surfaces", () => {
-    const markup = renderBriefingHistoryMarkup();
+  it("does not expose a push-notification dependency in history surfaces", () => {
+    const markup = renderRunHistoryMarkup();
     const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
 
     expect(markup).not.toMatch(/push notification|email|slack|sms/i);
@@ -320,6 +200,20 @@ describe("listing detail attribution", () => {
     );
   });
 
+  it("collapses long listing descriptions behind a view more control", () => {
+    const listingWithLongDescription: ListingCandidate = {
+      ...fixtureListings[0]!,
+      description:
+        "Private roof deck headline\n\nThis first paragraph gives enough context about the apartment, bedrooms, shared space, and location without forcing the whole broker writeup into the first screen.\n\nThis second paragraph should stay hidden until the roommate chooses to expand the About section.",
+    };
+    const markup = renderListingEditorMarkup(listingWithLongDescription);
+
+    expect(markup).toContain("Private roof deck headline");
+    expect(markup).toContain("This first paragraph gives enough context");
+    expect(markup).toContain("View more");
+    expect(markup).not.toContain("This second paragraph should stay hidden");
+  });
+
   it("shows time since the listing was added in the detail facts", () => {
     const fourDayOldListing: ListingCandidate = {
       ...fixtureListings[0]!,
@@ -385,7 +279,7 @@ describe("T-1.6 mobile-first and accessibility acceptance guardrails", () => {
       "edit-field-controls",
       "detail-expansion",
       "source-link-opening",
-      "briefing-history",
+      "run-history",
       "focus-states",
       "safe-area-insets",
       "touch-targets",
@@ -726,14 +620,9 @@ describe("saved-list persisted data compatibility", () => {
   });
 });
 
-function renderBriefingHistoryMarkup(): string {
+function renderRunHistoryMarkup(): string {
   return renderToStaticMarkup(
-    React.createElement(
-      React.Fragment,
-      null,
-      React.createElement(LatestBriefingPanel, { history: g3cBriefingRunHistoryFixture }),
-      React.createElement(RunHistoryPanel, { history: createHistoryWithCadenceVariants() }),
-    ),
+    React.createElement(RunHistoryPanel, { history: createHistoryWithCadenceVariants() }),
   );
 }
 

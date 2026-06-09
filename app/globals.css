@@ -1724,6 +1724,22 @@ button:disabled {
   white-space: pre-line;
 }
 
+.text-button {
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 8px 0 0;
+  text-transform: none;
+}
+
+.text-button:hover,
+.text-button:focus-visible {
+  background: transparent;
+  color: var(--accent-strong);
+  transform: none;
+}
+
 .listing-photo-carousel {
   display: grid;
   gap: 10px;

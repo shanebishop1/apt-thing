@@ -322,7 +322,7 @@ describe("G1 saved-list exit verification", () => {
         "edit-field-controls",
         "detail-expansion",
         "source-link-opening",
-        "briefing-history",
+        "run-history",
         "focus-states",
         "safe-area-insets",
         "touch-targets",

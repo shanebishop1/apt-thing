@@ -10,7 +10,7 @@ export type MobileAcceptanceMarker =
   | "edit-field-controls"
   | "detail-expansion"
   | "source-link-opening"
-  | "briefing-history"
+  | "run-history"
   | "focus-states"
   | "safe-area-insets"
   | "touch-targets"
@@ -143,13 +143,12 @@ export function createMobileAcceptanceScenario(
         semantics: editableFields.map((field) => `edits-${field}`),
       },
       {
-        marker: "briefing-history",
-        selector:
-          '.briefing-card[aria-label="Latest agent briefing"], .run-history-card[aria-label="Agent run history"]',
-        ariaLabel: "Latest agent briefing and run history",
+        marker: "run-history",
+        selector: '.run-history-card[aria-label="Agent run history"]',
+        ariaLabel: "Agent run history",
         role: "panel",
         touchTargetPx: 52,
-        semantics: ["briefing-before-cards", "run-history-details", "source-coverage-visible"],
+        semantics: ["run-history-details", "source-coverage-visible"],
       },
       {
         marker: "detail-expansion",
