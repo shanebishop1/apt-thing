@@ -1748,6 +1748,19 @@ button:disabled {
   object-fit: cover;
 }
 
+.listing-inline-map-shell {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--map-canvas);
+}
+
+.listing-inline-map {
+  width: 100%;
+  min-height: 100%;
+  height: 100%;
+}
+
 .listing-photo-open {
   display: block;
   width: 100%;
@@ -1895,6 +1908,32 @@ button:disabled {
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
+}
+
+.listing-map-thumbnail {
+  display: grid;
+  min-height: 72px;
+  aspect-ratio: 4 / 3;
+  place-items: center;
+  background:
+    radial-gradient(
+      circle at 74% 28%,
+      color-mix(in srgb, var(--accent) 36%, transparent),
+      transparent 28%
+    ),
+    linear-gradient(135deg, color-mix(in srgb, var(--map-canvas) 82%, white), var(--paper));
+  color: var(--bg-ink);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 900;
+  gap: 2px;
+  text-transform: uppercase;
+}
+
+.listing-map-thumbnail svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.3;
 }
 
 .listing-photo-modal {

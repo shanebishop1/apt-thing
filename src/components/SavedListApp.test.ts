@@ -294,6 +294,17 @@ describe("listing detail attribution", () => {
     );
   });
 
+  it("adds a map selector to the photo carousel that uses only the current listing", () => {
+    const listingWithPhotos = fixtureListings.find((listing) => listing.photos.length > 0)!;
+    const markup = renderListingEditorMarkup(listingWithPhotos);
+    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+
+    expect(markup).toContain('class="listing-photo-thumbnail listing-map-thumbnail"');
+    expect(markup).toContain(`aria-label="Show map for ${listingWithPhotos.title}"`);
+    expect(componentSource).toContain("createMapReviewModel([listing], listing.id)");
+    expect(componentSource).toContain('className="listing-inline-map"');
+  });
+
   it("shows listing descriptions above the group section", () => {
     const listingWithDescription: ListingCandidate = {
       ...fixtureListings[0]!,

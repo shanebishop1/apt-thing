@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Map as MapIcon,
   Moon,
   Pencil,
   Plus,
@@ -114,6 +115,7 @@ const listingStatusSortOrder: Record<ReviewStatus, number> = {
 };
 
 const invalidIdentityMessage = "Invite code or display name is invalid.";
+const noopSelectListing = () => {};
 
 const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "dashboard", label: "List" },
@@ -1359,6 +1361,60 @@ function MapReviewPanel({
   onSourceOpen: (listing: ListingCandidate) => void;
 }) {
   const selected = model.selected;
+
+  return (
+    <section className="map-review-card" aria-label="Map enhanced review">
+      <div className="panel-heading map-heading">
+        <div>
+          <p className="eyebrow">Map-enhanced review</p>
+          <h2>Map</h2>
+          <p>
+            Apartment pins with interactive MTA subway lines, stations, confidence, concerns, and
+            source links.
+          </p>
+        </div>
+        <div className="map-mode-tabs" aria-label="Mobile map review modes">
+          {model.mobileModes.map((mode) => (
+            <a key={mode} href={`#map-${mode}`}>
+              {mode}
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <div className="map-review-grid">
+        <div id="map-map" className="map-shell" aria-label="Leaflet NYC apartment map">
+          <LeafletListingMap model={model} selectedId={selectedId} onSelect={onSelect} />
+        </div>
+
+        <div id="map-list" className="map-list" aria-label="Map synchronized listing list">
+          {model.candidates.map((candidate) => (
+            <MapCandidateButton
+              key={candidate.listing.id}
+              candidate={candidate}
+              selected={candidate.listing.id === selectedId}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+
+        <MapDetail id="map-detail" candidate={selected} onSourceOpen={onSourceOpen} />
+      </div>
+    </section>
+  );
+}
+
+function LeafletListingMap({
+  model,
+  selectedId,
+  onSelect,
+  className = "leaflet-map",
+}: {
+  model: ReturnType<typeof createMapReviewModel>;
+  selectedId?: string;
+  onSelect: (listingId: string) => void;
+  className?: string;
+}) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<LeafletMap | null>(null);
   const listingMarkersRef = useRef<Marker[]>([]);
@@ -1448,46 +1504,7 @@ function MapReviewPanel({
     listingMarkersRef.current = nextMarkers.listingMarkers;
   }, [model, onSelect, selectedId]);
 
-  return (
-    <section className="map-review-card" aria-label="Map enhanced review">
-      <div className="panel-heading map-heading">
-        <div>
-          <p className="eyebrow">Map-enhanced review</p>
-          <h2>Map</h2>
-          <p>
-            Apartment pins with interactive MTA subway lines, stations, confidence, concerns, and
-            source links.
-          </p>
-        </div>
-        <div className="map-mode-tabs" aria-label="Mobile map review modes">
-          {model.mobileModes.map((mode) => (
-            <a key={mode} href={`#map-${mode}`}>
-              {mode}
-            </a>
-          ))}
-        </div>
-      </div>
-
-      <div className="map-review-grid">
-        <div id="map-map" className="map-shell" aria-label="Leaflet NYC apartment map">
-          <div ref={mapContainerRef} className="leaflet-map" />
-        </div>
-
-        <div id="map-list" className="map-list" aria-label="Map synchronized listing list">
-          {model.candidates.map((candidate) => (
-            <MapCandidateButton
-              key={candidate.listing.id}
-              candidate={candidate}
-              selected={candidate.listing.id === selectedId}
-              onSelect={onSelect}
-            />
-          ))}
-        </div>
-
-        <MapDetail id="map-detail" candidate={selected} onSourceOpen={onSourceOpen} />
-      </div>
-    </section>
-  );
+  return <div ref={mapContainerRef} className={className} />;
 }
 
 function MapCandidateButton({
@@ -2023,7 +2040,7 @@ export function ListingEditor({
   onComment: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const [isEditingFields, setIsEditingFields] = useState(false);
-  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const firstEditInputRef = useRef<HTMLInputElement | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -2031,7 +2048,7 @@ export function ListingEditor({
 
   useEffect(() => {
     setIsEditingFields(false);
-    setSelectedPhotoIndex(0);
+    setSelectedMediaIndex(0);
     setIsPhotoModalOpen(false);
   }, [selectedListingId]);
 
@@ -2081,18 +2098,34 @@ export function ListingEditor({
   const editFieldsDialogId = `${listing.id}-edit-fields-dialog`;
   const editFieldsTitleId = `${listing.id}-edit-fields-title`;
   const photoUrls = listing.photos.filter(Boolean);
-  const selectedPhotoUrl = photoUrls[selectedPhotoIndex] ?? photoUrls[0];
-  const showPhotoControls = photoUrls.length > 1;
-  const photoPositionLabel = `${selectedPhotoIndex + 1} of ${photoUrls.length}`;
-  const selectPhoto = (index: number) => setSelectedPhotoIndex(index);
+  const mapMediaIndex = photoUrls.length;
+  const mediaItemCount = photoUrls.length + 1;
+  const isMapSelected = selectedMediaIndex === mapMediaIndex;
+  const selectedPhotoUrl = !isMapSelected
+    ? (photoUrls[selectedMediaIndex] ?? photoUrls[0])
+    : undefined;
+  const showPhotoControls = mediaItemCount > 1;
+  const showModalPhotoControls = photoUrls.length > 1;
+  const photoPositionLabel = `${selectedMediaIndex + 1} of ${mediaItemCount}`;
+  const selectPhoto = (index: number) => setSelectedMediaIndex(index);
   const handlePreviousPhoto = () => {
-    setSelectedPhotoIndex((currentIndex) =>
-      currentIndex === 0 ? photoUrls.length - 1 : currentIndex - 1,
+    setSelectedMediaIndex((currentIndex) =>
+      currentIndex === 0 ? mediaItemCount - 1 : currentIndex - 1,
     );
   };
   const handleNextPhoto = () => {
-    setSelectedPhotoIndex((currentIndex) =>
-      currentIndex === photoUrls.length - 1 ? 0 : currentIndex + 1,
+    setSelectedMediaIndex((currentIndex) =>
+      currentIndex === mediaItemCount - 1 ? 0 : currentIndex + 1,
+    );
+  };
+  const handlePreviousModalPhoto = () => {
+    setSelectedMediaIndex((currentIndex) =>
+      currentIndex === 0 ? photoUrls.length - 1 : Math.min(currentIndex - 1, photoUrls.length - 1),
+    );
+  };
+  const handleNextModalPhoto = () => {
+    setSelectedMediaIndex((currentIndex) =>
+      currentIndex >= photoUrls.length - 1 ? 0 : currentIndex + 1,
     );
   };
   const handleCommentToggle = (event: ToggleEvent<HTMLDetailsElement>) => {
@@ -2142,18 +2175,22 @@ export function ListingEditor({
       {photoUrls.length > 0 ? (
         <section className="listing-photo-carousel" aria-label={`Photos for ${listing.title}`}>
           <figure className="listing-photo-frame">
-            <button
-              type="button"
-              className="listing-photo-open"
-              aria-label={`Enlarge photo ${selectedPhotoIndex + 1} of ${photoUrls.length} for ${listing.title}`}
-              onClick={() => setIsPhotoModalOpen(true)}
-            >
-              <img
-                src={selectedPhotoUrl}
-                alt={`${listing.title} photo ${selectedPhotoIndex + 1}`}
-                loading="lazy"
-              />
-            </button>
+            {isMapSelected ? (
+              <ListingInlineMap listing={listing} />
+            ) : selectedPhotoUrl ? (
+              <button
+                type="button"
+                className="listing-photo-open"
+                aria-label={`Enlarge photo ${selectedMediaIndex + 1} of ${mediaItemCount} for ${listing.title}`}
+                onClick={() => setIsPhotoModalOpen(true)}
+              >
+                <img
+                  src={selectedPhotoUrl}
+                  alt={`${listing.title} photo ${selectedMediaIndex + 1}`}
+                  loading="lazy"
+                />
+              </button>
+            ) : null}
             <figcaption className="listing-photo-count">{photoPositionLabel}</figcaption>
             {showPhotoControls ? (
               <div className="listing-photo-controls" aria-label="Photo navigation controls">
@@ -2183,19 +2220,29 @@ export function ListingEditor({
                   type="button"
                   key={`${photoUrl}-${index}`}
                   className="listing-photo-thumbnail"
-                  aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listing.title}`}
-                  aria-current={index === selectedPhotoIndex ? "true" : undefined}
+                  aria-label={`Show photo ${index + 1} of ${mediaItemCount} for ${listing.title}`}
+                  aria-current={index === selectedMediaIndex ? "true" : undefined}
                   onClick={() => selectPhoto(index)}
                 >
                   <img src={photoUrl} alt="" loading="lazy" />
                 </button>
               ))}
+              <button
+                type="button"
+                className="listing-photo-thumbnail listing-map-thumbnail"
+                aria-label={`Show map for ${listing.title}`}
+                aria-current={isMapSelected ? "true" : undefined}
+                onClick={() => setSelectedMediaIndex(mapMediaIndex)}
+              >
+                <MapIcon aria-hidden="true" />
+                <span>Map</span>
+              </button>
             </div>
           ) : null}
         </section>
       ) : null}
 
-      {isPhotoModalOpen ? (
+      {isPhotoModalOpen && selectedPhotoUrl ? (
         <div
           className="listing-photo-modal"
           role="dialog"
@@ -2226,16 +2273,16 @@ export function ListingEditor({
             <figure className="listing-photo-frame listing-photo-modal-frame">
               <img
                 src={selectedPhotoUrl}
-                alt={`${listing.title} photo ${selectedPhotoIndex + 1}`}
+                alt={`${listing.title} photo ${selectedMediaIndex + 1}`}
               />
               <figcaption className="listing-photo-count">{photoPositionLabel}</figcaption>
-              {showPhotoControls ? (
+              {showModalPhotoControls ? (
                 <div className="listing-photo-controls" aria-label="Photo navigation controls">
                   <button
                     type="button"
                     className="listing-photo-arrow listing-photo-arrow-previous"
                     aria-label={`Show previous photo for ${listing.title}`}
-                    onClick={handlePreviousPhoto}
+                    onClick={handlePreviousModalPhoto}
                   >
                     <ChevronLeft aria-hidden="true" />
                   </button>
@@ -2243,14 +2290,14 @@ export function ListingEditor({
                     type="button"
                     className="listing-photo-arrow listing-photo-arrow-next"
                     aria-label={`Show next photo for ${listing.title}`}
-                    onClick={handleNextPhoto}
+                    onClick={handleNextModalPhoto}
                   >
                     <ChevronRight aria-hidden="true" />
                   </button>
                 </div>
               ) : null}
             </figure>
-            {showPhotoControls ? (
+            {showModalPhotoControls ? (
               <div
                 className="listing-photo-thumbnails listing-photo-modal-thumbnails"
                 aria-label="Choose listing photo"
@@ -2261,7 +2308,7 @@ export function ListingEditor({
                     key={`${photoUrl}-${index}`}
                     className="listing-photo-thumbnail"
                     aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listing.title}`}
-                    aria-current={index === selectedPhotoIndex ? "true" : undefined}
+                    aria-current={index === selectedMediaIndex ? "true" : undefined}
                     onClick={() => selectPhoto(index)}
                   >
                     <img src={photoUrl} alt="" loading="lazy" />
@@ -2425,6 +2472,21 @@ export function ListingEditor({
         </div>
       ) : null}
     </article>
+  );
+}
+
+function ListingInlineMap({ listing }: { listing: ListingCandidate }) {
+  const model = createMapReviewModel([listing], listing.id);
+
+  return (
+    <div className="listing-inline-map-shell" aria-label={`Interactive map for ${listing.title}`}>
+      <LeafletListingMap
+        model={model}
+        selectedId={listing.id}
+        onSelect={noopSelectListing}
+        className="listing-inline-map"
+      />
+    </div>
   );
 }
 
