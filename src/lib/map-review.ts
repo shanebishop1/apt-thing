@@ -142,6 +142,10 @@ const mapContextFixtures: MapContextFixture[] = [
     ["1 Av", ["L"], 220],
     ["3 Av", ["L"], 520],
   ]),
+  createContext("205 Avenue A", 40.7301, -73.9834, "East Village", "preferred-manhattan", [
+    ["1 Av", ["L"], 320],
+    ["3 Av", ["L"], 640],
+  ]),
   createContext("71 Broadway", 40.7075, -74.0126, "Financial District", "preferred-manhattan", [
     ["Wall St", ["4", "5"], 80],
     ["Rector St", ["R", "W"], 220],
@@ -158,6 +162,7 @@ const contextByKnownAddress = new Map(
     ["185 North 10th Street", "Review-needed Williamsburg batch candidate"],
     ["325 East 14 Street", "325 East 14 Street"],
     ["325 East 14th Street", "325 East 14 Street"],
+    ["205 Avenue A", "205 Avenue A"],
     ["71 Broadway", "71 Broadway"],
   ]
     .map(([address, listingId]) => {

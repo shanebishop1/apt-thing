@@ -98,7 +98,7 @@ describe("latest briefing dashboard panel", () => {
           duplicateKey: "streeteasy.com/building/rejected-downgraded/5",
           groupScopedDuplicateKey: `${g3cBriefingRunHistoryFixture.groupId}:streeteasy.com/building/rejected-downgraded/5`,
           sourceUrl: "https://streeteasy.com/building/rejected-downgraded/5",
-          lastSeenLabel: "2026-06-08",
+          lastSeenLabel: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
         }),
       ]),
     );

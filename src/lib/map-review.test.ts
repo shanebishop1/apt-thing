@@ -104,4 +104,26 @@ describe("G3A map-enhanced review model", () => {
       zoneKind: "preferred-manhattan",
     });
   });
+
+  it("geocodes Avenue A StreetEasy addresses with unit text", () => {
+    const listing = {
+      ...fixtureListings[0]!,
+      id: "streeteasy-205-avenue-a-5a",
+      title: "205 AVENUE A 5A, NEW YORK, NY 10009",
+      address: "205 AVENUE A 5A, NEW YORK, NY 10009",
+      neighborhood: undefined,
+      borough: "Manhattan",
+    };
+
+    const model = createMapReviewModel([listing], listing.id);
+
+    expect(model.locatedCandidates).toHaveLength(1);
+    expect(model.missingLocationCandidates).toHaveLength(0);
+    expect(model.selected).toMatchObject({
+      pinState: "confirmed",
+      coordinates: { latitude: 40.7301, longitude: -73.9834 },
+      zoneLabel: "East Village",
+      zoneKind: "preferred-manhattan",
+    });
+  });
 });
