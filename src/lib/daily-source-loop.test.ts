@@ -328,6 +328,11 @@ describe("runDailySourceAgentLoop", () => {
       prepare(sql: string) {
         return {
           bind(...values: unknown[]) {
+            if (values.some((value) => value === undefined)) {
+              throw new Error(
+                "D1_TYPE_ERROR: Type 'undefined' not supported for value 'undefined'",
+              );
+            }
             return {
               async run() {
                 statements.push({ sql, values });
@@ -352,6 +357,7 @@ describe("runDailySourceAgentLoop", () => {
       objectsWritten: 0,
     });
     expect(statements.some((statement) => statement.sql.includes("daily_loop_runs"))).toBe(true);
+    expect(result.persistence.d1.authoritativeTables).toContain("app_saved_listings");
     const runTransitions = statements.filter((statement) =>
       statement.sql.includes("daily_loop_runs"),
     );
@@ -376,8 +382,15 @@ describe("runDailySourceAgentLoop", () => {
     const authoritativeListingRows = statements.filter((statement) =>
       statement.sql.includes("listing_candidates"),
     );
+    const appSavedListingRows = statements.filter((statement) =>
+      statement.sql.includes("app_saved_listings"),
+    );
     const candidateRows = statements.filter((statement) =>
       statement.sql.includes("daily_loop_candidates"),
+    );
+    expect(appSavedListingRows).toHaveLength(result.listings.length);
+    expect(appSavedListingRows.map((statement) => statement.values[0]).sort()).toEqual(
+      result.listings.map((listing) => listing.id).sort(),
     );
     expect(authoritativeListingRows).toHaveLength(result.listings.length);
     expect(authoritativeListingRows.map((statement) => statement.values[0]).sort()).toEqual(

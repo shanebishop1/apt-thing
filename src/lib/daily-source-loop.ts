@@ -420,6 +420,7 @@ export async function runDailySourceAgentLoop(
     contract: DAILY_LOOP_CONTRACT_VERSION,
     d1: {
       authoritativeTables: [
+        "app_saved_listings",
         "listing_candidates",
         "daily_loop_runs",
         "daily_loop_sources",
@@ -2042,6 +2043,27 @@ async function persistD1(
     for (const listing of input.listings) {
       await runD1(
         db,
+        [
+          "INSERT INTO app_saved_listings",
+          "(id, group_id, url, duplicate_key, group_scoped_duplicate_key, listing_json, created_at, updated_at)",
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "ON CONFLICT(id) DO UPDATE SET",
+          "url = excluded.url, duplicate_key = excluded.duplicate_key,",
+          "group_scoped_duplicate_key = excluded.group_scoped_duplicate_key,",
+          "listing_json = excluded.listing_json, updated_at = excluded.updated_at",
+        ].join(" "),
+        listing.id,
+        input.run.groupId,
+        listing.url,
+        listing.duplicateKey,
+        listing.groupScopedDuplicateKey,
+        JSON.stringify(listing),
+        listing.createdAt,
+        listing.updatedAt,
+      );
+      rowsWritten += 1;
+      await runD1(
+        db,
         "INSERT INTO listing_candidates (id, group_id, source, url, duplicate_key, submitted_by, title, extraction_status, review_status, address, neighborhood, borough, rent, bedrooms, bathrooms, available_at, description, fit_flags_json, evidence_json, concerns_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET source = excluded.source, url = excluded.url, duplicate_key = excluded.duplicate_key, submitted_by = excluded.submitted_by, title = excluded.title, extraction_status = excluded.extraction_status, review_status = excluded.review_status, address = excluded.address, neighborhood = excluded.neighborhood, borough = excluded.borough, rent = excluded.rent, bedrooms = excluded.bedrooms, bathrooms = excluded.bathrooms, available_at = excluded.available_at, description = excluded.description, fit_flags_json = excluded.fit_flags_json, evidence_json = excluded.evidence_json, concerns_json = excluded.concerns_json, updated_at = excluded.updated_at",
         listing.id,
         input.run.groupId,
@@ -2229,7 +2251,7 @@ async function persistD1(
 async function runD1(db: DailyLoopD1Binding, sql: string, ...values: unknown[]) {
   await db
     .prepare(sql)
-    .bind(...values)
+    .bind(...values.map((value) => (value === undefined ? null : value)))
     .run();
 }
 
