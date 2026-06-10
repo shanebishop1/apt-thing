@@ -1,0 +1,700 @@
+import {
+  GEMINI_BRIEFING_SCHEMA_VERSION,
+  evidencePointerToSourceEvidenceRecord,
+  type AgentRunLogRecord,
+  type BriefingCandidateSummary,
+  type BriefingRecord,
+  type BriefingRunHistoryContract,
+  type BriefingRunHistoryRun,
+  type ConfidenceScore,
+  type ConfidenceTriageMetadata,
+  type EvidenceStoragePointer,
+  type FeedbackSummary,
+  type GeminiBriefingDraftContract,
+  type GroupAccessRecord,
+  type GroupActionRecord,
+  type LatestBriefingSummary,
+  type SharedAgentContractFixtureBundle,
+  type SourceCoverageSummary,
+  type SourceEvidenceRecord,
+} from "./agent-contracts";
+import { extractSingleLinkFixture, runStreetEasyBatchFixture } from "./extraction";
+import {
+  nonFirstClassApartmentFixture,
+  streetEasyBatchFixture,
+  streetEasyPastedFixture,
+} from "./fixtures";
+import {
+  createDuplicateKey,
+  createGroupScopedDuplicateKey,
+  createGroupScopedListingState,
+  createInviteIdentity,
+  createListingFromUrl,
+  defaultSearchGroup,
+  updateReviewStatus,
+  type AiProviderAttemptMetadata,
+  type ListingCandidate,
+} from "./listings";
+
+const generatedAt = "2026-06-07T12:00:00.000Z";
+const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "G2B Fixture")!;
+
+const pastedExtraction = extractSingleLinkFixture({
+  rawUrl: streetEasyPastedFixture.sourceUrl,
+  identity,
+  fixture: streetEasyPastedFixture,
+});
+
+const batchResult = runStreetEasyBatchFixture({
+  identity,
+  fixture: streetEasyBatchFixture,
+  priorStates: [
+    createGroupScopedListingState(
+      defaultSearchGroup.id,
+      streetEasyBatchFixture.results[0]!.sourceUrl,
+      {
+        seen: true,
+        triaged: false,
+      },
+    ),
+    createGroupScopedListingState(
+      defaultSearchGroup.id,
+      streetEasyBatchFixture.results[1]!.sourceUrl,
+      {
+        seen: true,
+        triaged: true,
+        triageBucket: "rejected",
+        reviewStatus: "rejected",
+      },
+    ),
+  ],
+  concurrencyLimit: 2,
+});
+
+const confirmedMatch = batchResult.listings.find(
+  (listing) => listing.triageBucket === "confirmed-match",
+)!;
+const reviewNeeded = batchResult.listings.find(
+  (listing) => listing.triageBucket === "review-needed",
+)!;
+
+const rejectedDowngradedBase = createListingFromUrl(
+  "https://streeteasy.com/building/rejected-downgraded/5",
+  identity,
+  {
+    sourceListingId: "rejected-downgraded-1",
+    title: "Downgraded four bed over ceiling",
+    address: "500 Rejected Street",
+    neighborhood: "Chelsea",
+    borough: "Manhattan",
+    rent: 16250,
+    bedrooms: 4,
+    bathrooms: 2,
+    availableAt: "2026-08-01",
+    description: "Fixture preserved for rejected/downgraded memory coverage.",
+  },
+);
+const rejectedDowngraded: ListingCandidate = {
+  ...updateReviewStatus(rejectedDowngradedBase, "rejected"),
+  extractionStatus: "success",
+  triageStatus: "success",
+  triageBucket: "rejected",
+  concerns: ["Rent is above the $15,000 ceiling.", "Bedroom count is below the 5BR target."],
+};
+
+const pastedIntake = pastedExtraction.listing;
+const streetEasyBatchCandidate = batchResult.listings[0]!;
+
+const sourceEvidence: SourceEvidenceRecord[] = [
+  evidencePointerToSourceEvidenceRecord({
+    pointer: pastedIntake.evidencePointers[0]!,
+    sourceUrl: pastedIntake.url,
+    claim: "Pasted StreetEasy intake source captured",
+    quote: "RealtyAPI fixture resolved the pasted StreetEasy URL.",
+  }),
+  {
+    id: "source-evidence-d1-metadata-fixture",
+    contract: "source-evidence-v1",
+    groupId: defaultSearchGroup.id,
+    listingId: confirmedMatch.id,
+    runId: batchResult.run.id,
+    sourceUrl: confirmedMatch.url,
+    claim: "D1 evidence metadata fixture",
+    quote:
+      "Source image URLs and normalized evidence metadata are retained in D1 without R2 raw artifact storage.",
+    pointer: {
+      owner: "d1",
+      key: `source_evidence_records:${confirmedMatch.id}:metadata`,
+      contentType: "application/json",
+      groupScoped: true,
+    },
+    capturedAt: generatedAt,
+  },
+  {
+    id: "source-evidence-review-needed-raw-artifact-fixture",
+    contract: "source-evidence-v1",
+    groupId: defaultSearchGroup.id,
+    listingId: reviewNeeded.id,
+    runId: batchResult.run.id,
+    sourceUrl: reviewNeeded.url,
+    claim: "Review-needed source artifact retained",
+    quote: "Williamsburg fallback candidate kept for manual review with source evidence.",
+    pointer: {
+      owner: "d1",
+      key: `source_evidence_records:${reviewNeeded.id}:metadata`,
+      contentType: "application/json",
+      groupScoped: true,
+    },
+    capturedAt: generatedAt,
+  },
+  {
+    id: "source-evidence-source-failure-fixture",
+    contract: "source-evidence-v1",
+    groupId: defaultSearchGroup.id,
+    runId: batchResult.run.id,
+    sourceUrl: nonFirstClassApartmentFixture.sourceUrl,
+    claim: "Source failure isolated",
+    quote: "A fixture-only source failed without failing the whole scheduled run.",
+    pointer: {
+      owner: "d1",
+      key: `source_evidence_records:${batchResult.run.id}:source-failure`,
+      contentType: "application/json",
+      groupScoped: true,
+    },
+    capturedAt: generatedAt,
+  },
+];
+
+const triageMetadata: ConfidenceTriageMetadata[] = [
+  toTriageMetadata(confirmedMatch, "passed", "g2b-fixture-triage-v1"),
+  toTriageMetadata(reviewNeeded, "review-needed", "g2b-fixture-triage-v1"),
+  toTriageMetadata(rejectedDowngraded, "failed", "g2b-fixture-triage-v1"),
+];
+
+const groupAccess: GroupAccessRecord[] = [
+  {
+    id: "group-access-g2b-fixture",
+    contract: "group-access-v1",
+    groupId: defaultSearchGroup.id,
+    inviteCode: defaultSearchGroup.inviteCode,
+    invitePath: defaultSearchGroup.invitePath,
+    resolvedFrom: "invite-link",
+    actorDisplayName: identity.displayName,
+    actorIdentityToken: identity.identityToken,
+    identityPersistence: "localStorage",
+    createdAt: generatedAt,
+  },
+];
+
+const shaneActor = {
+  displayName: "Shane",
+  identityToken: "actor_nyc-5br-2026_shane-fixture",
+};
+const roommateActor = {
+  displayName: "Roommate",
+  identityToken: "actor_nyc-5br-2026_roommate-fixture",
+};
+
+const groupActions: GroupActionRecord[] = [
+  {
+    id: "group-action-comment-confirmed-match",
+    contract: "group-action-v1",
+    groupId: defaultSearchGroup.id,
+    listingId: confirmedMatch.id,
+    actorDisplayName: shaneActor.displayName,
+    actorIdentityToken: shaneActor.identityToken,
+    actor: shaneActor,
+    actionType: "comment",
+    commentBody: "Looks viable if the bedrooms are legal; ask about floorplan.",
+    sourceUrl: confirmedMatch.url,
+    provenance: { source: "user-entered", visibleToGroup: true },
+    createdAt: generatedAt,
+  },
+  {
+    id: "group-action-reaction-review-needed",
+    contract: "group-action-v1",
+    groupId: defaultSearchGroup.id,
+    listingId: reviewNeeded.id,
+    actorDisplayName: roommateActor.displayName,
+    actorIdentityToken: roommateActor.identityToken,
+    actor: roommateActor,
+    actionType: "reaction",
+    reaction: "question",
+    sourceUrl: reviewNeeded.url,
+    provenance: { source: "user-entered", visibleToGroup: true },
+    createdAt: generatedAt,
+  },
+  {
+    id: "group-action-status-rejected",
+    contract: "group-action-v1",
+    groupId: defaultSearchGroup.id,
+    listingId: rejectedDowngraded.id,
+    actorDisplayName: shaneActor.displayName,
+    actorIdentityToken: shaneActor.identityToken,
+    actor: shaneActor,
+    actionType: "status-change",
+    status: "rejected",
+    sourceUrl: rejectedDowngraded.url,
+    provenance: { source: "user-entered", visibleToGroup: true },
+    createdAt: generatedAt,
+  },
+  {
+    id: "group-action-source-link-open-confirmed-match",
+    contract: "group-action-v1",
+    groupId: defaultSearchGroup.id,
+    listingId: confirmedMatch.id,
+    actorDisplayName: shaneActor.displayName,
+    actorIdentityToken: shaneActor.identityToken,
+    actor: shaneActor,
+    actionType: "source-link-open",
+    sourceUrl: confirmedMatch.url,
+    provenance: { source: "original-listing-source-link", visibleToGroup: true },
+    createdAt: generatedAt,
+  },
+  {
+    id: "group-action-feedback-confirmed-match",
+    contract: "group-action-v1",
+    groupId: defaultSearchGroup.id,
+    listingId: confirmedMatch.id,
+    actorDisplayName: roommateActor.displayName,
+    actorIdentityToken: roommateActor.identityToken,
+    actor: roommateActor,
+    actionType: "feedback",
+    sourceUrl: confirmedMatch.url,
+    feedback: {
+      category: "evidence",
+      summary: "One roommate wants the floorplan before agreeing this is a real 5BR.",
+      disagreement: true,
+      doesNotMutateRanking: true,
+    },
+    provenance: { source: "user-entered", visibleToGroup: true },
+    createdAt: generatedAt,
+  },
+];
+
+const seenRejectedState = createGroupScopedListingState(
+  defaultSearchGroup.id,
+  rejectedDowngraded.url,
+  {
+    seen: true,
+    triaged: true,
+    triageBucket: "rejected",
+    reviewStatus: "rejected",
+  },
+);
+
+const sourceFailureUnit = {
+  id: "run-unit-source-failure-fixture",
+  source: "other" as const,
+  sourceUrl: nonFirstClassApartmentFixture.sourceUrl,
+  status: "failed" as const,
+  attempt: 2,
+  maxRetries: 1,
+  errorCode: "fixture-source-unavailable",
+  startedAt: generatedAt,
+  completedAt: generatedAt,
+};
+
+const runSummary: AgentRunLogRecord = {
+  id: "agent-run-log-g2b-fixture-summary",
+  contract: "agent-run-log-v1",
+  groupId: defaultSearchGroup.id,
+  cadence: "daily",
+  trigger: "cron",
+  status: "partial",
+  startedAt: generatedAt,
+  completedAt: generatedAt,
+  counts: {
+    candidatesFound: 4,
+    candidatesSkippedSeen: 1,
+    candidatesSkippedTriaged: 1,
+    candidatesAnalyzed: 2,
+    candidatesSaved: 2,
+    candidatesRejected: 1,
+    sourceFailures: 1,
+  },
+  boundedConcurrency: 2,
+  retryPolicy: {
+    maxRetries: 1,
+    retryDelayMs: 250,
+  },
+  units: [
+    {
+      id: "run-unit-seen-skip-fixture",
+      source: "streeteasy",
+      sourceUrl: streetEasyBatchFixture.results[0]!.sourceUrl,
+      listingId: streetEasyBatchFixture.results[0]!.listingId,
+      status: "skipped-seen",
+      attempt: 0,
+      maxRetries: 1,
+      startedAt: generatedAt,
+      completedAt: generatedAt,
+    },
+    {
+      id: "run-unit-confirmed-match-fixture",
+      source: "streeteasy",
+      sourceUrl: confirmedMatch.url,
+      listingId: confirmedMatch.sourceListingId,
+      status: "success",
+      attempt: 1,
+      maxRetries: 1,
+      startedAt: generatedAt,
+      completedAt: generatedAt,
+    },
+    sourceFailureUnit,
+  ],
+};
+
+const briefing: BriefingRecord = {
+  id: "briefing-record-g2b-fixture",
+  contract: "briefing-record-v1",
+  groupId: defaultSearchGroup.id,
+  runId: runSummary.id,
+  generatedAt,
+  bestNewListingIds: [confirmedMatch.id],
+  reviewNeededListingIds: [reviewNeeded.id],
+  rejectedListingIds: [rejectedDowngraded.id],
+  summary:
+    "One strong Chelsea candidate is ready for review, one Williamsburg candidate needs location review, and one source failed in isolation.",
+  whatChanged: ["New Chelsea batch candidate added", "Seen StreetEasy result skipped"],
+  sourceCoverage: [
+    { source: "streeteasy", status: "success", checkedCount: 4 },
+    {
+      source: "fixture-secondary-source",
+      status: "failed",
+      checkedCount: 1,
+      failureCode: "fixture-source-unavailable",
+    },
+  ],
+  skippedSeenCount: 1,
+  recommendationRationale: [
+    "Confirmed candidate fits price, bedroom, bathroom, and preferred Manhattan criteria.",
+    "Review-needed candidate has strong unit fit but is outside the preferred Manhattan zone.",
+  ],
+  suggestedNextActions: [
+    "Open source link",
+    "Ask broker for floorplan",
+    "Keep failed source in run log",
+  ],
+};
+
+export const g2bAgentContractFixtureBundle: SharedAgentContractFixtureBundle = {
+  contract: "g2b-shared-agent-contract-fixtures-v1",
+  generatedAt,
+  groupId: defaultSearchGroup.id,
+  groupAccess,
+  listingCandidates: {
+    pastedIntake,
+    streetEasyBatchCandidate,
+    confirmedMatch,
+    reviewNeeded,
+    rejectedDowngraded,
+  },
+  sourceEvidence,
+  triageMetadata,
+  groupActions,
+  seenRejectedMemory: [
+    {
+      id: "seen-rejected-memory-fixture",
+      contract: "seen-rejected-memory-v1",
+      groupId: defaultSearchGroup.id,
+      sourceUrl: rejectedDowngraded.url,
+      duplicateKey: createDuplicateKey(rejectedDowngraded.url),
+      groupScopedDuplicateKey: createGroupScopedDuplicateKey(
+        defaultSearchGroup.id,
+        rejectedDowngraded.url,
+      ),
+      memoryState: "rejected",
+      reason: "Over budget and not a credible 5BR.",
+      lastSeenAt: seenRejectedState.lastSeenAt,
+    },
+  ],
+  runLogs: [runSummary],
+  briefingRecords: [briefing],
+};
+
+export function createG3CBriefingRunHistoryFixture(
+  bundle: SharedAgentContractFixtureBundle = g2bAgentContractFixtureBundle,
+): BriefingRunHistoryContract {
+  const run = bundle.runLogs[0]!;
+  const sourceBriefing = bundle.briefingRecords[0]!;
+  const candidateSummaries = [
+    bundle.listingCandidates.confirmedMatch,
+    bundle.listingCandidates.reviewNeeded,
+    bundle.listingCandidates.rejectedDowngraded,
+  ].map((listing) => toCandidateSummary(listing, bundle));
+  const rawArtifactPointers = rawPointersForRun(bundle, run.id);
+  const sourceCoverage = sourceBriefing.sourceCoverage.map(
+    (coverage): SourceCoverageSummary => ({
+      source: coverage.source,
+      status: coverage.status,
+      checkedCount: coverage.checkedCount,
+      candidateCount:
+        coverage.source === "streeteasy"
+          ? candidateSummaries.filter((candidate) => candidate.source === "streeteasy").length
+          : 0,
+      failureCode: coverage.failureCode,
+      failureMessage: coverage.failureCode
+        ? "Fixture source failed without blocking other sources."
+        : undefined,
+      rawArtifactPointers:
+        coverage.status === "failed"
+          ? rawArtifactPointers.filter((pointer) => pointer.key.includes("source-failures"))
+          : rawArtifactPointers.filter((pointer) => !pointer.key.includes("source-failures")),
+    }),
+  );
+  const latestRun: BriefingRunHistoryRun = {
+    runId: run.id,
+    cadence: run.cadence,
+    trigger: run.trigger,
+    status: run.status,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+    counts: {
+      candidatesFound: run.counts.candidatesFound,
+      candidatesSkippedSeen: run.counts.candidatesSkippedSeen,
+      candidatesSkippedTriaged: run.counts.candidatesSkippedTriaged ?? 0,
+      candidatesTriaged: candidateSummaries.length,
+      confirmedMatches: candidateSummaries.filter(
+        (candidate) => candidate.bucket === "confirmed-match",
+      ).length,
+      reviewNeeded: candidateSummaries.filter((candidate) => candidate.bucket === "review-needed")
+        .length,
+      rejected: candidateSummaries.filter((candidate) => candidate.bucket === "rejected").length,
+      sourceFailures: run.counts.sourceFailures,
+    },
+    sourceCoverage,
+    candidateSummaries,
+    providerMetadata: [briefingProviderMetadata()],
+    rawArtifactPointers,
+  };
+  const latestBriefing: LatestBriefingSummary = {
+    id: sourceBriefing.id,
+    runId: run.id,
+    generatedAt: sourceBriefing.generatedAt,
+    summary: sourceBriefing.summary,
+    bestNewListingIds: sourceBriefing.bestNewListingIds,
+    reviewNeededListingIds: sourceBriefing.reviewNeededListingIds,
+    rejectedListingIds: sourceBriefing.rejectedListingIds,
+    whatChanged: sourceBriefing.whatChanged,
+    sourceCoverage,
+    skippedSeenCount: sourceBriefing.skippedSeenCount,
+    evidenceConfidenceSummaries: candidateSummaries.map((candidate) => candidate.evidenceSummary),
+    recommendationRationale: sourceBriefing.recommendationRationale,
+    suggestedActions: sourceBriefing.suggestedNextActions,
+  };
+
+  return {
+    contract: "g3c-briefing-run-history-v1",
+    schemaVersion: "g3c-briefing-run-history-v1",
+    groupId: bundle.groupId,
+    generatedAt: bundle.generatedAt,
+    supportedCadences: ["manual", "daily", "hourly"],
+    latestRun,
+    runs: [latestRun],
+    latestBriefing,
+    seenRejectedMemory: bundle.seenRejectedMemory,
+    feedbackSummaries: createFeedbackSummaries(bundle, candidateSummaries),
+  };
+}
+
+export const g3cBriefingRunHistoryFixture = createG3CBriefingRunHistoryFixture();
+
+export function createGeminiBriefingDraftFixture(
+  history: BriefingRunHistoryContract = g3cBriefingRunHistoryFixture,
+): GeminiBriefingDraftContract {
+  const candidate = history.latestRun.candidateSummaries[0]!;
+
+  return {
+    contract: "gemini-briefing-draft-v1",
+    schemaVersion: GEMINI_BRIEFING_SCHEMA_VERSION,
+    groupId: history.groupId,
+    runId: history.latestRun.runId,
+    generatedAt: history.generatedAt,
+    summary: history.latestBriefing.summary,
+    listingReferences: [
+      {
+        listingId: candidate.listingId,
+        sourceUrl: candidate.sourceUrl,
+        rationale: candidate.suggestedAction,
+        evidenceClaims: [candidate.evidenceSummary.evidenceQuotes[0]!],
+      },
+    ],
+    sourceCoverageClaims: history.latestRun.sourceCoverage.map((coverage) => ({
+      source: coverage.source,
+      status: coverage.status,
+      checkedCount: coverage.checkedCount,
+      failureCode: coverage.failureCode,
+    })),
+    suggestedActions: history.latestBriefing.suggestedActions,
+    providerMetadata: briefingProviderMetadata(),
+    rawArtifactPointers: history.latestRun.rawArtifactPointers,
+  };
+}
+
+export function createHallucinatedGeminiBriefingDraftFixture(
+  history: BriefingRunHistoryContract = g3cBriefingRunHistoryFixture,
+): GeminiBriefingDraftContract {
+  const draft = createGeminiBriefingDraftFixture(history);
+
+  return {
+    ...draft,
+    listingReferences: [
+      {
+        ...draft.listingReferences[0]!,
+        listingId: "hallucinated-listing-id",
+        sourceUrl: "https://made-up.example/listing/never-seen",
+        evidenceClaims: ["Invented source quote not in evidence."],
+      },
+    ],
+    sourceCoverageClaims: [
+      {
+        source: "made-up-source",
+        status: "failed",
+        checkedCount: 99,
+        failureCode: "made-up-failure",
+      },
+      ...draft.sourceCoverageClaims.slice(1),
+    ],
+  };
+}
+
+function toTriageMetadata(
+  listing: ListingCandidate,
+  deterministicHardConstraintResult: ConfidenceTriageMetadata["deterministicHardConstraintResult"],
+  promptVersion: string,
+): ConfidenceTriageMetadata {
+  return {
+    contract: "confidence-triage-v1",
+    groupId: listing.groupId,
+    listingId: listing.id,
+    bucket: listing.triageBucket === "untriaged" ? "review-needed" : listing.triageBucket,
+    status: listing.triageStatus,
+    confidence: confidenceForListing(listing),
+    reasons: listing.evidence.map((evidence) => evidence.claim),
+    concerns: listing.concerns,
+    deterministicHardConstraintResult,
+    schemaValidationResult: "passed",
+    promptVersion,
+    updatedAt: listing.updatedAt,
+  };
+}
+
+function toCandidateSummary(
+  listing: ListingCandidate,
+  bundle: SharedAgentContractFixtureBundle,
+): BriefingCandidateSummary {
+  const triage = bundle.triageMetadata.find((record) => record.listingId === listing.id)!;
+  const memory = bundle.seenRejectedMemory.find((record) => record.sourceUrl === listing.url);
+  const sourceEvidenceForListing = bundle.sourceEvidence.filter(
+    (record) => record.listingId === listing.id || record.sourceUrl === listing.url,
+  );
+
+  return {
+    listingId: listing.id,
+    sourceUrl: listing.url,
+    source: listing.source,
+    title: listing.title,
+    bucket: listing.triageBucket === "untriaged" ? "review-needed" : listing.triageBucket,
+    triageStatus: listing.triageStatus,
+    reviewStatus: listing.reviewStatus,
+    providerRoute: listing.providerRoute,
+    evidenceSummary: {
+      confidence: triage.confidence,
+      reasons: triage.reasons,
+      concerns: triage.concerns,
+      evidenceQuotes: [
+        ...listing.evidence.map((evidence) => evidence.quote),
+        ...sourceEvidenceForListing.map((record) => record.quote),
+      ],
+      sourceLinks: [
+        ...new Set([listing.url, ...sourceEvidenceForListing.map((record) => record.sourceUrl)]),
+      ],
+      rawArtifactPointers: sourceEvidenceForListing.map((record) => record.pointer),
+    },
+    memoryState: memory?.memoryState,
+    suggestedAction:
+      listing.triageBucket === "confirmed-match"
+        ? "Prioritize for roommate review and ask for floorplan."
+        : listing.triageBucket === "review-needed"
+          ? "Review uncertainty before promoting to current matches."
+          : "Keep rejected in memory so it is not repeatedly reviewed.",
+  };
+}
+
+function createFeedbackSummaries(
+  bundle: SharedAgentContractFixtureBundle,
+  candidates: BriefingCandidateSummary[],
+): FeedbackSummary[] {
+  return candidates
+    .map((candidate) => {
+      const actions = bundle.groupActions.filter(
+        (action) => action.listingId === candidate.listingId,
+      );
+      const summaries: string[] = actions.flatMap((action) => {
+        if (action.commentBody) return [action.commentBody];
+        if (action.feedback?.summary) return [action.feedback.summary];
+        return [];
+      });
+
+      if (actions.length === 0) {
+        return undefined;
+      }
+
+      return {
+        listingId: candidate.listingId,
+        sourceUrl: candidate.sourceUrl,
+        commentCount: actions.filter((action) => action.actionType === "comment").length,
+        reactionCount: actions.filter((action) => action.actionType === "reaction").length,
+        statusChangeCount: actions.filter((action) => action.actionType === "status-change").length,
+        disagreementCount: actions.filter((action) => action.feedback?.disagreement).length,
+        summaries,
+        doesNotMutateRanking: true,
+      } satisfies FeedbackSummary;
+    })
+    .filter((summary): summary is FeedbackSummary => Boolean(summary));
+}
+
+function rawPointersForRun(
+  bundle: SharedAgentContractFixtureBundle,
+  runId: string,
+): EvidenceStoragePointer[] {
+  return bundle.sourceEvidence
+    .filter((record) => record.runId === runId || record.pointer.owner === "d1")
+    .map((record) => record.pointer);
+}
+
+function briefingProviderMetadata(): AiProviderAttemptMetadata {
+  return {
+    provider: "google-direct",
+    model: "gemini-3.5-flash",
+    apiKeyEnv: "GEMINI_API_KEY",
+    purpose: "briefing",
+    attemptId: "provider-attempt-g3c-briefing-fixture",
+    status: "success",
+    startedAt: generatedAt,
+    completedAt: generatedAt,
+    latencyMs: 125,
+    inputTokenCount: 900,
+    outputTokenCount: 220,
+    imageCount: 0,
+    maxImagesPerListing: 5,
+    promptVersion: "g3c-briefing-fixture-v1",
+    schemaValidation: "passed",
+  };
+}
+
+function confidenceForListing(listing: ListingCandidate): ConfidenceScore {
+  return {
+    realFiveBedroom: listing.bedrooms !== undefined && listing.bedrooms >= 5 ? 0.9 : 0.35,
+    twoPlusBathrooms: listing.bathrooms !== undefined && listing.bathrooms >= 2 ? 0.9 : 0.35,
+    priceFit: listing.rent !== undefined && listing.rent <= 15000 ? 0.95 : 0.2,
+    locationFit: listing.fitFlags.includes("location_fit") ? 0.9 : 0.45,
+    overall:
+      listing.triageBucket === "confirmed-match"
+        ? 0.86
+        : listing.triageBucket === "review-needed"
+          ? 0.62
+          : 0.25,
+  };
+}

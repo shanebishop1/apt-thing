@@ -18,15 +18,20 @@
     "cf:preview": "pnpm cf:build && wrangler dev",
     "cf:types": "wrangler types",
     "cf:deploy:dry": "pnpm cf:build && wrangler deploy --dry-run",
-    "cf:deploy": "pnpm cf:build && wrangler deploy"
+    "cf:deploy": "pnpm cf:build && wrangler deploy",
+    "proof:acquisition": "node --experimental-strip-types scripts/proof-acquisition.mjs",
+    "proof:daily-loop": "vitest run src/lib/daily-source-loop.test.ts"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.19.11",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.17.0",
     "next": "^16.2.7",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^22.15.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

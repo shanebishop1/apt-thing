@@ -1,0 +1,743 @@
+[
+  {
+    "schemaVersion": "g2a-normalized-candidate-v1",
+    "id": "g2a-fkicv6",
+    "groupId": "nyc-5br-2026",
+    "source": "nybits",
+    "sourceKey": "nybits-firecrawl-public-detail",
+    "sourceUrl": "https://www.nybits.com/apartmentlistings/fixture-3-eleven.html",
+    "sourceListingId": "nybits-3-eleven-fixture",
+    "title": "3 Eleven — public NYBits sample",
+    "address": "311 Eleventh Avenue",
+    "neighborhood": "Chelsea",
+    "borough": "Manhattan",
+    "rent": 7995,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "availableAt": "2026-05-31",
+    "visibleFacts": [
+      "NYBits public detail fixture",
+      "Chelsea address",
+      "$7,995 rent",
+      "2 bedrooms",
+      "1 bath"
+    ],
+    "quotedEvidence": [
+      {
+        "schemaVersion": "g2a-source-evidence-v1",
+        "claim": "nybits visible facts captured",
+        "quote": "2-Bedroom at 3 Eleven, 311 Eleventh Avenue, Chelsea, $7,995, 1 Bath.",
+        "sourceUrl": "https://www.nybits.com/apartmentlistings/fixture-3-eleven.html",
+        "artifactId": "g2a-cesu19",
+        "capturedAt": "2026-06-07T11:54:53.656Z"
+      }
+    ],
+    "imageEvidence": [],
+    "extractionMetadata": {
+      "extractor": "firecrawl-fixture-structured-extract",
+      "mode": "fixture",
+      "capturedAt": "2026-06-07T11:54:53.656Z",
+      "sourceClassification": "success",
+      "failureCode": "gemini-output-hard-constraint-rejected",
+      "queryMetadata": {
+        "firecrawlOperation": "scrape",
+        "liveRequiresEnv": "FIRECRAWL_API_KEY"
+      },
+      "pageMetadata": {
+        "fixtureRecord": 1
+      }
+    },
+    "aiAnalysis": {
+      "providerMetadata": {
+        "provider": "google-direct",
+        "model": "gemini-3.5-flash",
+        "apiKeyEnv": "GEMINI_API_KEY",
+        "mode": "fixture",
+        "status": "success"
+      },
+      "rawAiBucket": "review-needed",
+      "finalBucket": "rejected",
+      "editorialSummary": "3 Eleven — public NYBits sample is preserved as evidence but cannot be a confirmed match until deterministic hard constraints pass.",
+      "hardConstraintFailures": [
+        "bedrooms-below-five",
+        "bathrooms-below-two"
+      ],
+      "imageCount": 0,
+      "maxImagesPerListing": 5
+    },
+    "classification": "success"
+  },
+  {
+    "schemaVersion": "g2a-normalized-candidate-v1",
+    "id": "g2a-1t3gbob",
+    "groupId": "nyc-5br-2026",
+    "source": "openigloo",
+    "sourceKey": "openigloo-firecrawl-public-detail",
+    "sourceUrl": "https://www.openigloo.com/listing/fixture-111-worth-17d",
+    "sourceListingId": "openigloo-111-worth-17d-fixture",
+    "title": "111 Worth Street #17D",
+    "address": "111 Worth Street #17D",
+    "neighborhood": "Tribeca",
+    "borough": "Manhattan",
+    "rent": 6464,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "visibleFacts": [
+      "Openigloo public unit fixture",
+      "verified/top-rated labels",
+      "1 bed",
+      "1 bath"
+    ],
+    "quotedEvidence": [
+      {
+        "schemaVersion": "g2a-source-evidence-v1",
+        "claim": "openigloo visible facts captured",
+        "quote": "111 Worth Street #17D, Tribeca, 1 bed, 1 bath, $6,464, verified/top-rated labels.",
+        "sourceUrl": "https://www.openigloo.com/listing/fixture-111-worth-17d",
+        "artifactId": "g2a-eg11j9",
+        "capturedAt": "2026-06-07T11:54:53.656Z"
+      }
+    ],
+    "imageEvidence": [],
+    "extractionMetadata": {
+      "extractor": "firecrawl-fixture-structured-extract",
+      "mode": "fixture",
+      "capturedAt": "2026-06-07T11:54:53.656Z",
+      "sourceClassification": "success",
+      "failureCode": "gemini-output-hard-constraint-rejected",
+      "queryMetadata": {
+        "firecrawlOperation": "scrape",
+        "avoidPaths": [
+          "/api",
+          "/_nuxt"
+        ]
+      },
+      "pageMetadata": {
+        "fixtureRecord": 2
+      }
+    },
+    "aiAnalysis": {
+      "providerMetadata": {
+        "provider": "google-direct",
+        "model": "gemini-3.5-flash",
+        "apiKeyEnv": "GEMINI_API_KEY",
+        "mode": "fixture",
+        "status": "success"
+      },
+      "rawAiBucket": "review-needed",
+      "finalBucket": "rejected",
+      "editorialSummary": "111 Worth Street #17D is preserved as evidence but cannot be a confirmed match until deterministic hard constraints pass.",
+      "hardConstraintFailures": [
+        "bedrooms-below-five",
+        "bathrooms-below-two"
+      ],
+      "imageCount": 0,
+      "maxImagesPerListing": 5
+    },
+    "classification": "success"
+  },
+  {
+    "schemaVersion": "g2a-normalized-candidate-v1",
+    "id": "g2a-10z1mz6",
+    "groupId": "nyc-5br-2026",
+    "source": "streeteasy",
+    "sourceKey": "streeteasy-realtyapi-pasted-url",
+    "sourceUrl": "https://streeteasy.com/building/152-manhattan-avenue-brooklyn/4b",
+    "sourceListingId": "5062766",
+    "title": "152 Manhattan Avenue #4B",
+    "address": "152 Manhattan Avenue #4B",
+    "neighborhood": "Williamsburg",
+    "borough": "Brooklyn",
+    "rent": 10150,
+    "bedrooms": 6,
+    "bathrooms": 2,
+    "availableAt": "2026-08-01",
+    "visibleFacts": [
+      "exact urlPath match",
+      "6 beds",
+      "2 baths",
+      "August 1 availability"
+    ],
+    "quotedEvidence": [
+      {
+        "schemaVersion": "g2a-source-evidence-v1",
+        "claim": "streeteasy visible facts captured",
+        "quote": "RealtyAPI fixture matched /building/152-manhattan-avenue-brooklyn/4b and returned 6 beds, 2 baths, $10,150.",
+        "sourceUrl": "https://streeteasy.com/building/152-manhattan-avenue-brooklyn/4b",
+        "artifactId": "g2a-x3cjkh",
+        "capturedAt": "2026-06-07T11:54:53.656Z"
+      }
+    ],
+    "imageEvidence": [
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/1.jpg",
+        "role": "primary",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/2.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/3.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/4.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/5.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      }
+    ],
+    "extractionMetadata": {
+      "extractor": "realtyapi-fixture-url-resolution",
+      "mode": "fixture",
+      "capturedAt": "2026-06-07T11:54:53.656Z",
+      "sourceClassification": "success",
+      "failureCode": "none",
+      "queryMetadata": {
+        "locationCandidates": [
+          "Williamsburg",
+          "Brooklyn",
+          "NYC and NJ"
+        ],
+        "pagesScanned": [
+          1,
+          2
+        ]
+      },
+      "pageMetadata": {
+        "fixtureRecord": 3
+      },
+      "detailRetryMetadata": [
+        {
+          "endpoint": "rental_detailsbyid",
+          "attempt": 1,
+          "status": "empty-success"
+        },
+        {
+          "endpoint": "rental_detailsbyid",
+          "attempt": 2,
+          "status": "success"
+        }
+      ]
+    },
+    "aiAnalysis": {
+      "providerMetadata": {
+        "provider": "google-direct",
+        "model": "gemini-3.5-flash",
+        "apiKeyEnv": "GEMINI_API_KEY",
+        "mode": "fixture",
+        "status": "success"
+      },
+      "rawAiBucket": "review-needed",
+      "finalBucket": "review-needed",
+      "editorialSummary": "152 Manhattan Avenue #4B remains review-needed because source/provider certainty is incomplete or manual confirmation is required.",
+      "hardConstraintFailures": [],
+      "imageCount": 5,
+      "maxImagesPerListing": 5
+    },
+    "classification": "success"
+  },
+  {
+    "schemaVersion": "g2a-normalized-candidate-v1",
+    "id": "g2a-10kxsbx",
+    "groupId": "nyc-5br-2026",
+    "source": "streeteasy",
+    "sourceKey": "streeteasy-realtyapi-pasted-url",
+    "sourceUrl": "https://streeteasy.com/building/42-west-21-street-new_york/5",
+    "sourceListingId": "se-pasted-flatiron-5",
+    "title": "42 West 21st Street #5",
+    "address": "42 West 21st Street #5",
+    "neighborhood": "Flatiron",
+    "borough": "Manhattan",
+    "rent": 14500,
+    "bedrooms": 5,
+    "bathrooms": 2.5,
+    "availableAt": "2026-08-01",
+    "visibleFacts": [
+      "second pasted StreetEasy fixture",
+      "Flatiron",
+      "5 beds",
+      "2.5 baths"
+    ],
+    "quotedEvidence": [
+      {
+        "schemaVersion": "g2a-source-evidence-v1",
+        "claim": "streeteasy visible facts captured",
+        "quote": "RealtyAPI pasted-url fixture for 42 West 21st Street returned 5 beds, 2.5 baths, $14,500.",
+        "sourceUrl": "https://streeteasy.com/building/42-west-21-street-new_york/5",
+        "artifactId": "g2a-109griu",
+        "capturedAt": "2026-06-07T11:54:53.656Z"
+      }
+    ],
+    "imageEvidence": [
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/1.jpg",
+        "role": "primary",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/2.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/3.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/4.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/5.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      }
+    ],
+    "extractionMetadata": {
+      "extractor": "realtyapi-fixture-url-resolution",
+      "mode": "fixture",
+      "capturedAt": "2026-06-07T11:54:53.656Z",
+      "sourceClassification": "success",
+      "failureCode": "none",
+      "queryMetadata": {
+        "locationCandidates": [
+          "Flatiron",
+          "Manhattan"
+        ],
+        "pagesScanned": [
+          1
+        ]
+      },
+      "pageMetadata": {
+        "fixtureRecord": 4
+      },
+      "detailRetryMetadata": [
+        {
+          "endpoint": "rental_detailsbyid",
+          "attempt": 1,
+          "status": "success"
+        }
+      ]
+    },
+    "aiAnalysis": {
+      "providerMetadata": {
+        "provider": "google-direct",
+        "model": "gemini-3.5-flash",
+        "apiKeyEnv": "GEMINI_API_KEY",
+        "mode": "fixture",
+        "status": "success"
+      },
+      "rawAiBucket": "confirmed-match",
+      "finalBucket": "confirmed-match",
+      "editorialSummary": "42 West 21st Street #5 looks like a strong group candidate based on captured visible facts and capped image evidence.",
+      "hardConstraintFailures": [],
+      "imageCount": 5,
+      "maxImagesPerListing": 5
+    },
+    "classification": "success"
+  },
+  {
+    "schemaVersion": "g2a-normalized-candidate-v1",
+    "id": "g2a-1mtk4xg",
+    "groupId": "nyc-5br-2026",
+    "source": "streeteasy",
+    "sourceKey": "streeteasy-realtyapi-daily-search",
+    "sourceUrl": "https://streeteasy.com/building/daily-chelsea-five-bed/1",
+    "sourceListingId": "se-daily-chelsea",
+    "title": "Daily Chelsea five bed",
+    "address": "30 West 21st Street",
+    "neighborhood": "Chelsea",
+    "borough": "Manhattan",
+    "rent": 14950,
+    "bedrooms": 5,
+    "bathrooms": 2,
+    "availableAt": "2026-08-01",
+    "visibleFacts": [
+      "daily search query shape 1",
+      "Chelsea",
+      "5 beds",
+      "under $15,000"
+    ],
+    "quotedEvidence": [
+      {
+        "schemaVersion": "g2a-source-evidence-v1",
+        "claim": "streeteasy visible facts captured",
+        "quote": "search/rent Chelsea minBeds=5 maxRent=15000 found active 5BR under budget.",
+        "sourceUrl": "https://streeteasy.com/building/daily-chelsea-five-bed/1",
+        "artifactId": "g2a-sd0da0",
+        "capturedAt": "2026-06-07T11:54:53.656Z"
+      }
+    ],
+    "imageEvidence": [
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/1.jpg",
+        "role": "primary",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/2.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/3.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/4.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/5.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      }
+    ],
+    "extractionMetadata": {
+      "extractor": "realtyapi-fixture-daily-search",
+      "mode": "fixture",
+      "capturedAt": "2026-06-07T11:54:53.656Z",
+      "sourceClassification": "success",
+      "failureCode": "none",
+      "queryMetadata": {
+        "endpoint": "search/rent",
+        "areas": [
+          "Chelsea"
+        ],
+        "minBeds": 5,
+        "maxRent": 15000,
+        "page": 1
+      },
+      "pageMetadata": {
+        "fixtureRecord": 5
+      },
+      "detailRetryMetadata": [
+        {
+          "endpoint": "rental_detailsbyid",
+          "attempt": 1,
+          "status": "success"
+        }
+      ],
+      "skipMetadata": [
+        {
+          "listingId": "se-seen-fixture",
+          "reason": "seen"
+        },
+        {
+          "listingId": "se-triaged-fixture",
+          "reason": "triaged"
+        }
+      ]
+    },
+    "aiAnalysis": {
+      "providerMetadata": {
+        "provider": "google-direct",
+        "model": "gemini-3.5-flash",
+        "apiKeyEnv": "GEMINI_API_KEY",
+        "mode": "fixture",
+        "status": "success"
+      },
+      "rawAiBucket": "confirmed-match",
+      "finalBucket": "confirmed-match",
+      "editorialSummary": "Daily Chelsea five bed looks like a strong group candidate based on captured visible facts and capped image evidence.",
+      "hardConstraintFailures": [],
+      "imageCount": 5,
+      "maxImagesPerListing": 5
+    },
+    "classification": "success"
+  },
+  {
+    "schemaVersion": "g2a-normalized-candidate-v1",
+    "id": "g2a-odrc6w",
+    "groupId": "nyc-5br-2026",
+    "source": "streeteasy",
+    "sourceKey": "streeteasy-realtyapi-daily-search",
+    "sourceUrl": "https://streeteasy.com/building/daily-east-village-five-bed/2",
+    "sourceListingId": "se-daily-east-village",
+    "title": "Daily East Village five bed",
+    "address": "50 East 7th Street",
+    "neighborhood": "East Village",
+    "borough": "Manhattan",
+    "rent": 13800,
+    "bedrooms": 5,
+    "bathrooms": 2,
+    "visibleFacts": [
+      "daily search query shape 2",
+      "East Village",
+      "5 beds",
+      "2 baths"
+    ],
+    "quotedEvidence": [
+      {
+        "schemaVersion": "g2a-source-evidence-v1",
+        "claim": "streeteasy visible facts captured",
+        "quote": "search/rent East Village sort=newest returned active 5BR with 2 baths.",
+        "sourceUrl": "https://streeteasy.com/building/daily-east-village-five-bed/2",
+        "artifactId": "g2a-ssz4u",
+        "capturedAt": "2026-06-07T11:54:53.656Z"
+      }
+    ],
+    "imageEvidence": [
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/1.jpg",
+        "role": "primary",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/2.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/3.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/4.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/5.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      }
+    ],
+    "extractionMetadata": {
+      "extractor": "realtyapi-fixture-daily-search",
+      "mode": "fixture",
+      "capturedAt": "2026-06-07T11:54:53.656Z",
+      "sourceClassification": "success",
+      "failureCode": "none",
+      "queryMetadata": {
+        "endpoint": "search/rent",
+        "areas": [
+          "East Village",
+          "Lower East Side"
+        ],
+        "minBeds": 5,
+        "page": 2
+      },
+      "pageMetadata": {
+        "fixtureRecord": 6
+      },
+      "detailRetryMetadata": [
+        {
+          "endpoint": "rental_detailsbyid",
+          "attempt": 1,
+          "status": "success"
+        }
+      ]
+    },
+    "aiAnalysis": {
+      "providerMetadata": {
+        "provider": "google-direct",
+        "model": "gemini-3.5-flash",
+        "apiKeyEnv": "GEMINI_API_KEY",
+        "mode": "fixture",
+        "status": "success"
+      },
+      "rawAiBucket": "review-needed",
+      "finalBucket": "review-needed",
+      "editorialSummary": "Daily East Village five bed remains review-needed because source/provider certainty is incomplete or manual confirmation is required.",
+      "hardConstraintFailures": [],
+      "imageCount": 5,
+      "maxImagesPerListing": 5
+    },
+    "classification": "success"
+  },
+  {
+    "schemaVersion": "g2a-normalized-candidate-v1",
+    "id": "g2a-1c4oide",
+    "groupId": "nyc-5br-2026",
+    "source": "streeteasy",
+    "sourceKey": "streeteasy-realtyapi-daily-search",
+    "sourceUrl": "https://streeteasy.com/building/daily-nomad-over-budget/3",
+    "sourceListingId": "se-daily-over-budget",
+    "title": "Daily NoMad over-budget AI override fixture",
+    "address": "15 West 28th Street",
+    "neighborhood": "NoMad",
+    "borough": "Manhattan",
+    "rent": 15100,
+    "bedrooms": 5,
+    "bathrooms": 2,
+    "visibleFacts": [
+      "daily search query shape 3",
+      "NoMad",
+      "5 beds",
+      "$15,100 rent"
+    ],
+    "quotedEvidence": [
+      {
+        "schemaVersion": "g2a-source-evidence-v1",
+        "claim": "streeteasy visible facts captured",
+        "quote": "Gemini fixture said promising, but source rent is $15,100.",
+        "sourceUrl": "https://streeteasy.com/building/daily-nomad-over-budget/3",
+        "artifactId": "g2a-1umtez8",
+        "capturedAt": "2026-06-07T11:54:53.656Z"
+      }
+    ],
+    "imageEvidence": [
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/1.jpg",
+        "role": "primary",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/2.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/3.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/4.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      },
+      {
+        "url": "https://fixtures.test/streeteasy/acquisition/5.jpg",
+        "role": "supporting",
+        "sentToAi": true
+      }
+    ],
+    "extractionMetadata": {
+      "extractor": "realtyapi-fixture-daily-search",
+      "mode": "fixture",
+      "capturedAt": "2026-06-07T11:54:53.656Z",
+      "sourceClassification": "partial",
+      "failureCode": "gemini-output-hard-constraint-rejected",
+      "queryMetadata": {
+        "endpoint": "search/rent",
+        "areas": [
+          "NoMad",
+          "Flatiron"
+        ],
+        "minBeds": 5,
+        "maxRent": 16000,
+        "page": 1
+      },
+      "pageMetadata": {
+        "fixtureRecord": 7
+      },
+      "detailRetryMetadata": [
+        {
+          "endpoint": "rental_detailsbyid",
+          "attempt": 1,
+          "status": "success"
+        }
+      ]
+    },
+    "aiAnalysis": {
+      "providerMetadata": {
+        "provider": "google-direct",
+        "model": "gemini-3.5-flash",
+        "apiKeyEnv": "GEMINI_API_KEY",
+        "mode": "fixture",
+        "status": "success"
+      },
+      "rawAiBucket": "confirmed-match",
+      "finalBucket": "rejected",
+      "editorialSummary": "Daily NoMad over-budget AI override fixture is preserved as evidence but cannot be a confirmed match until deterministic hard constraints pass.",
+      "hardConstraintFailures": [
+        "rent-over-budget"
+      ],
+      "imageCount": 5,
+      "maxImagesPerListing": 5
+    },
+    "classification": "partial"
+  },
+  {
+    "schemaVersion": "g2a-normalized-candidate-v1",
+    "id": "g2a-1aow7bx",
+    "groupId": "nyc-5br-2026",
+    "source": "zillow",
+    "sourceKey": "zillow-user-mediated-fallback",
+    "sourceUrl": "https://www.zillow.com/homedetails/100-W-14th-St-New-York-NY/fixture_zpid/",
+    "sourceListingId": "zillow-fixture-zpid",
+    "title": "Zillow manual URL sample — 100 West 14th Street",
+    "address": "100 West 14th Street",
+    "neighborhood": "Chelsea",
+    "borough": "Manhattan",
+    "rent": 15000,
+    "bedrooms": 5,
+    "bathrooms": 3,
+    "availableAt": "2026-08-01",
+    "visibleFacts": [
+      "pasted Zillow URL sample",
+      "forwarded alert-email snippet",
+      "saved-search link captured",
+      "screenshot reference captured"
+    ],
+    "quotedEvidence": [
+      {
+        "schemaVersion": "g2a-source-evidence-v1",
+        "claim": "zillow visible facts captured",
+        "quote": "Sanitized Zillow alert sample: 5 bd, 3 ba, $15,000 near Chelsea; open the saved-search link manually.",
+        "sourceUrl": "https://www.zillow.com/homedetails/100-W-14th-St-New-York-NY/fixture_zpid/",
+        "artifactId": "g2a-1ukf7yh",
+        "capturedAt": "2026-06-07T11:54:53.656Z"
+      }
+    ],
+    "imageEvidence": [
+      {
+        "url": "screenshot://zillow-alert-card-redacted.png",
+        "role": "primary",
+        "sentToAi": true
+      }
+    ],
+    "extractionMetadata": {
+      "extractor": "zillow-user-mediated-fixture",
+      "mode": "fixture",
+      "capturedAt": "2026-06-07T11:54:53.656Z",
+      "sourceClassification": "manual_needed",
+      "failureCode": "provider-proof-pending",
+      "queryMetadata": {
+        "pastedUrls": 2,
+        "forwardedAlertEmailSamples": 1,
+        "savedSearchLinks": [
+          "https://www.zillow.com/new-york-ny/rentals/?beds=5&price=0-15000"
+        ],
+        "screenshotReferences": [
+          "zillow-alert-card-redacted.png"
+        ]
+      },
+      "pageMetadata": {
+        "fixtureRecord": 8
+      }
+    },
+    "aiAnalysis": {
+      "providerMetadata": {
+        "provider": "google-direct",
+        "model": "gemini-3.5-flash",
+        "apiKeyEnv": "GEMINI_API_KEY",
+        "mode": "fixture",
+        "status": "success"
+      },
+      "rawAiBucket": "review-needed",
+      "finalBucket": "review-needed",
+      "editorialSummary": "Zillow manual URL sample — 100 West 14th Street remains review-needed because source/provider certainty is incomplete or manual confirmation is required.",
+      "hardConstraintFailures": [],
+      "imageCount": 1,
+      "maxImagesPerListing": 5
+    },
+    "classification": "manual_needed"
+  }
+]
