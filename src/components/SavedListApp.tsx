@@ -68,6 +68,18 @@ const editableFields: FieldProvenance["field"][] = [
 ];
 const numericFields = new Set<FieldProvenance["field"]>(["rent", "bedrooms", "bathrooms"]);
 const sharedSnapshotPollMs = 15000;
+const stadiaMapsApiKey = process.env.NEXT_PUBLIC_STADIA_MAPS_API_KEY?.trim();
+const leafletTileLayer = stadiaMapsApiKey
+  ? {
+      attribution: "",
+      maxZoom: 20,
+      url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${encodeURIComponent(stadiaMapsApiKey)}`,
+    }
+  : {
+      attribution: "",
+      maxZoom: 19,
+      url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    };
 
 type SharedListingSnapshot = {
   groupId: string;
@@ -105,11 +117,13 @@ type ThemeMode = "dark" | "light";
 
 const themeStorageKey = "apt-thing-theme";
 const listingStatusSortOrder: Record<ReviewStatus, number> = {
-  touring: 0,
-  new: 1,
-  interested: 2,
-  unavailable: 3,
-  rejected: 4,
+  review: 0,
+  touring: 1,
+  new: 2,
+  interested: 3,
+  unavailable: 4,
+  gone: 5,
+  rejected: 6,
 };
 
 const invalidIdentityMessage = "Invite code or display name is invalid.";
@@ -134,9 +148,8 @@ type ListingListGroup = {
   listings: ListingCandidate[];
 };
 
-export type RunHistoryArtifactLink = {
+export type RunHistoryArtifactPointer = {
   id: string;
-  href: string;
   label: string;
   ownerLabel: string;
   storageKey: string;
@@ -152,18 +165,23 @@ export type RunHistoryPanelRunModel = {
   statusLabel: string;
   startedLabel: string;
   completedLabel: string;
-  timelineLabel: string;
   isLatest: boolean;
   counts: BriefingRunHistoryRun["counts"];
+  apiMatchedCount: number;
+  checkedOrScrapedCount: number;
+  checkedOrScrapedLabel: string;
+  skippedCount: number;
+  aiCallCount: number;
+  aiOutputLabel: string;
   sourceCoverage: SourceCoverageSummary[];
   failures: SourceCoverageSummary[];
   providerMetadata: string[];
   providerDetails: string[];
-  artifactLinks: RunHistoryArtifactLink[];
+  artifactPointers: RunHistoryArtifactPointer[];
+  candidateSummaries: BriefingRunHistoryRun["candidateSummaries"];
 };
 
 export type RunHistoryPanelModel = {
-  supportedCadences: BriefingRunHistoryContract["supportedCadences"];
   runs: RunHistoryPanelRunModel[];
 };
 
@@ -414,6 +432,20 @@ export function SavedListApp() {
     );
   }
 
+  function handleReviewDecision(listingId: string, decision: "approve" | "reject") {
+    if (!identity) {
+      setMessage("Enter a valid invite code before updating group records.");
+      return;
+    }
+
+    void patchSharedListing(
+      identity,
+      listingId,
+      { mutation: "review-decision", decision },
+      decision === "approve" ? "Review approved." : "Review rejected and removed.",
+    );
+  }
+
   function handleSourceOpen(listing: ListingCandidate) {
     if (!identity) {
       setMessage("Enter a valid invite code before opening source links as a group action.");
@@ -587,7 +619,7 @@ export function SavedListApp() {
   }
 
   function applySharedSnapshot(snapshot: SharedListingSnapshot) {
-    setListings(snapshot.listings);
+    setListings(snapshot.listings.map(normalizeReviewNeededListing));
     setGroupActions(snapshot.actions);
     setSeenRejectedMemory(snapshot.memory);
     setSelectedId((currentId) => findSelectedListing(snapshot.listings, currentId)?.id ?? "");
@@ -736,6 +768,7 @@ export function SavedListApp() {
               onCommentTextChange={setCommentText}
               onFieldChange={handleFieldChange}
               onStatusChange={handleStatusChange}
+              onReviewDecision={handleReviewDecision}
               onSourceOpen={handleSourceOpen}
               onReaction={handleReaction}
               onComment={handleComment}
@@ -800,48 +833,75 @@ export function createRunHistoryPanelModel(
   history: BriefingRunHistoryContract,
 ): RunHistoryPanelModel {
   const latestRunId = history.latestRun.runId;
+  const runs = [...history.runs]
+    .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+    .map((run) => {
+      const sourceCoverage = run.sourceCoverage.filter(
+        (coverage) => !isSyntheticFixtureCoverage(coverage),
+      );
+      const artifactPointers = createRunArtifactPointers(run, sourceCoverage);
+      const failures = sourceCoverage.filter((coverage) => coverage.status === "failed");
+      const counts = { ...run.counts, sourceFailures: failures.length };
+      const checkedCount = sourceCoverage.reduce(
+        (total, coverage) => total + coverage.checkedCount,
+        0,
+      );
+      const aiCallCount = run.providerMetadata.length;
+      const skippedCount = run.counts.candidatesSkippedSeen + run.counts.candidatesSkippedTriaged;
+      const checkedOrScrapedLabel =
+        checkedCount > 0 ? String(checkedCount) : "Not separately recorded";
+
+      return {
+        runId: run.runId,
+        heading: createRunHistoryHeading(run),
+        cadence: run.cadence,
+        trigger: run.trigger,
+        status: run.status,
+        statusLabel: formatLabel(run.status),
+        startedLabel: formatDateTimeLabel(run.startedAt),
+        completedLabel: run.completedAt ? formatDateTimeLabel(run.completedAt) : "Still running",
+        isLatest: run.runId === latestRunId,
+        counts,
+        apiMatchedCount: counts.candidatesFound,
+        checkedOrScrapedCount: checkedCount,
+        checkedOrScrapedLabel,
+        skippedCount,
+        aiCallCount,
+        aiOutputLabel: `${counts.confirmedMatches} yes / ${counts.reviewNeeded} review / ${counts.rejected} no`,
+        sourceCoverage,
+        failures,
+        providerMetadata: uniqueNonEmpty(
+          run.providerMetadata.map((metadata) => `${metadata.provider} / ${metadata.model}`),
+        ),
+        providerDetails: run.providerMetadata.map((metadata) =>
+          uniqueNonEmpty([
+            metadata.status,
+            metadata.purpose,
+            metadata.promptVersion ?? "",
+            metadata.schemaValidation ? `schema ${metadata.schemaValidation}` : "",
+          ]).join(" / "),
+        ),
+        artifactPointers,
+        candidateSummaries: run.candidateSummaries,
+      } satisfies RunHistoryPanelRunModel;
+    });
 
   return {
-    supportedCadences: history.supportedCadences,
-    runs: [...history.runs]
-      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
-      .map((run) => {
-        const artifactLinks = createRunArtifactLinks(run);
-        const failures = run.sourceCoverage.filter((coverage) => coverage.status === "failed");
-
-        return {
-          runId: run.runId,
-          heading: createRunHistoryHeading(run),
-          cadence: run.cadence,
-          trigger: run.trigger,
-          status: run.status,
-          statusLabel: formatLabel(run.status),
-          startedLabel: formatDateTimeLabel(run.startedAt),
-          completedLabel: run.completedAt ? formatDateTimeLabel(run.completedAt) : "Still running",
-          timelineLabel: `${formatDateLabel(run.startedAt)} · ${run.completedAt ? "completed" : "in progress"}`,
-          isLatest: run.runId === latestRunId,
-          counts: run.counts,
-          sourceCoverage: run.sourceCoverage,
-          failures,
-          providerMetadata: uniqueNonEmpty(
-            run.providerMetadata.map((metadata) => `${metadata.provider} / ${metadata.model}`),
-          ),
-          providerDetails: run.providerMetadata.map((metadata) =>
-            uniqueNonEmpty([
-              metadata.status,
-              metadata.purpose,
-              metadata.promptVersion ?? "",
-              metadata.schemaValidation ? `schema ${metadata.schemaValidation}` : "",
-            ]).join(" · "),
-          ),
-          artifactLinks,
-        } satisfies RunHistoryPanelRunModel;
-      }),
+    runs,
   };
 }
 
 export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContract }) {
   const model = createRunHistoryPanelModel(history);
+  const [expandedRunId, setExpandedRunId] = useState<string | undefined>();
+  const handleRunToggle = (runId: string, event: ToggleEvent<HTMLDetailsElement>) => {
+    if (event.currentTarget.open) {
+      setExpandedRunId(runId);
+      return;
+    }
+
+    setExpandedRunId((currentRunId) => (currentRunId === runId ? undefined : currentRunId));
+  };
 
   return (
     <section className="run-history-card" aria-label="Agent run history">
@@ -849,55 +909,105 @@ export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContra
         <div>
           <p className="eyebrow">Run history</p>
           <h2>Runs</h2>
-          <p>Cadences: {model.supportedCadences.join(", ")}.</p>
-        </div>
-        <div className="run-history-total" aria-label="Run history total">
-          <span>Records</span>
-          <strong>{model.runs.length}</strong>
         </div>
       </header>
 
-      <div className="run-history-list">
+      <div className="run-table" aria-label="Agent runs table">
+        <div className="run-table-head" aria-hidden="true">
+          <span>Started</span>
+          <span>Status</span>
+          <span>Trigger</span>
+          <span>Candidates</span>
+          <span>Source checks</span>
+          <span>Outcome</span>
+        </div>
         {model.runs.map((run) => (
-          <details key={run.runId} className="run-history-item" open={run.isLatest}>
+          <details
+            key={run.runId}
+            className="run-history-item"
+            open={expandedRunId === run.runId}
+            onToggle={(event) => handleRunToggle(run.runId, event)}
+          >
             <summary>
-              <span className={`run-status-dot ${run.status}`} aria-hidden="true" />
-              <div>
-                <p className="eyebrow">
-                  {formatLabel(run.cadence)} · {formatLabel(run.trigger)}
-                  {run.isLatest ? " · latest" : ""}
-                </p>
-                <h3>{run.heading}</h3>
-                <small>{run.timelineLabel}</small>
-              </div>
-              <strong>{run.statusLabel}</strong>
+              <span className="run-cell run-start-cell">
+                <span className={`run-status-dot ${run.status}`} aria-label={run.statusLabel} />
+                <span>
+                  <strong>{run.startedLabel}</strong>
+                  <small>{run.isLatest ? "Latest run" : run.heading}</small>
+                </span>
+              </span>
+              <span className="run-cell">
+                <span className={`run-status-badge ${run.status}`}>{run.statusLabel}</span>
+              </span>
+              <span className="run-cell">
+                <strong>{formatLabel(run.cadence)}</strong>
+                <small>{formatLabel(run.trigger)}</small>
+              </span>
+              <span className="run-cell">
+                <strong>{run.apiMatchedCount}</strong>
+                <small>candidate matches found</small>
+              </span>
+              <span className="run-cell">
+                <strong>{run.checkedOrScrapedLabel}</strong>
+                <small>source records checked</small>
+              </span>
+              <span className="run-cell run-output-cell">
+                <strong>{run.aiOutputLabel}</strong>
+                <small>{run.aiCallCount} AI attempt(s) recorded</small>
+              </span>
             </summary>
 
             <div className="run-history-detail">
-              <section className="run-history-facts" aria-label={`${run.heading} counts`}>
-                <Fact label="Candidates found" value={String(run.counts.candidatesFound)} />
-                <Fact
-                  label="Candidates skipped"
-                  value={String(
-                    run.counts.candidatesSkippedSeen + run.counts.candidatesSkippedTriaged,
-                  )}
-                />
-                <Fact label="Candidates triaged" value={String(run.counts.candidatesTriaged)} />
-                <Fact label="Source failures" value={String(run.counts.sourceFailures)} />
+              <section className="run-history-section" aria-label={`${run.heading} count notes`}>
+                <h4>How to read the counts</h4>
+                <p>
+                  Source checks are records inspected by source adapters. Candidate matches are the
+                  smaller set that became run candidates, so source checks can be higher than
+                  matches. AI attempts are recorded provider attempts, not necessarily one call per
+                  listing.
+                </p>
               </section>
 
-              <section className="run-history-section" aria-label={`${run.heading} timestamps`}>
-                <h4>Timestamps</h4>
-                <p>
-                  Started {run.startedLabel}; completed {run.completedLabel}.
-                </p>
+              <section className="run-detail-grid" aria-label={`${run.heading} pipeline counts`}>
+                <RunMetric label="Candidate matches found" value={String(run.apiMatchedCount)} />
+                <RunMetric label="Source records checked" value={run.checkedOrScrapedLabel} />
+                <RunMetric label="Skipped prior" value={String(run.skippedCount)} />
+                <RunMetric label="AI attempts recorded" value={String(run.aiCallCount)} />
+                <RunMetric label="Triaged" value={String(run.counts.candidatesTriaged)} />
+                <RunMetric label="Source failures" value={String(run.counts.sourceFailures)} />
+              </section>
+
+              <section className="run-output-grid" aria-label={`${run.heading} AI output`}>
+                <RunMetric label="Meets criteria" value={String(run.counts.confirmedMatches)} />
+                <RunMetric label="Needs review" value={String(run.counts.reviewNeeded)} />
+                <RunMetric label="Does not meet criteria" value={String(run.counts.rejected)} />
+              </section>
+
+              <section
+                className="run-history-section"
+                aria-label={`${run.heading} output listings`}
+              >
+                <h4>Output listings</h4>
+                {run.candidateSummaries.length === 0 ? (
+                  <p>No candidate output recorded for this run.</p>
+                ) : (
+                  <div className="run-output-list">
+                    {run.candidateSummaries.map((candidate) => (
+                      <article key={`${run.runId}-${candidate.listingId}`}>
+                        <span>{formatLabel(candidate.bucket)}</span>
+                        <strong>{candidate.title}</strong>
+                        <small>{candidate.suggestedAction}</small>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
 
               <section
                 className="run-history-section"
                 aria-label={`${run.heading} source coverage`}
               >
-                <h4>Source coverage</h4>
+                <h4>Source/API coverage</h4>
                 <div className="run-source-list">
                   {run.sourceCoverage.map((coverage) => (
                     <article
@@ -909,8 +1019,8 @@ export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContra
                         <span>{formatLabel(coverage.status)}</span>
                       </div>
                       <p>
-                        Checked {coverage.checkedCount}; candidates {coverage.candidateCount};
-                        artifacts {coverage.rawArtifactPointers.length}
+                        {coverage.candidateCount} API match(es), {coverage.checkedCount} checked,{" "}
+                        {coverage.rawArtifactPointers.length} storage pointer(s)
                         {coverage.failureCode ? ` · ${coverage.failureCode}` : ""}
                       </p>
                       {coverage.failureMessage ? <p>{coverage.failureMessage}</p> : null}
@@ -921,30 +1031,11 @@ export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContra
 
               <section
                 className="run-history-section"
-                aria-label={`${run.heading} failure summary`}
-              >
-                <h4>Failures</h4>
-                {run.failures.length === 0 ? (
-                  <p>No failures.</p>
-                ) : (
-                  <ul>
-                    {run.failures.map((failure) => (
-                      <li key={`${run.runId}-${failure.source}-${failure.failureCode ?? "failed"}`}>
-                        <strong>{failure.source}</strong>: {failure.failureCode ?? "failed"}
-                        {failure.failureMessage ? ` · ${failure.failureMessage}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-
-              <section
-                className="run-history-section"
                 aria-label={`${run.heading} provider metadata`}
               >
-                <h4>Provider/model metadata</h4>
+                <h4>AI calls</h4>
                 {run.providerMetadata.length === 0 ? (
-                  <p>No provider metadata.</p>
+                  <p>No AI call metadata recorded for this run.</p>
                 ) : (
                   <ul>
                     {run.providerMetadata.map((metadata, index) => (
@@ -959,21 +1050,27 @@ export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContra
 
               <section
                 className="run-history-section"
-                aria-label={`${run.heading} evidence artifacts`}
+                aria-label={`${run.heading} storage pointers`}
               >
-                <h4>Evidence artifacts</h4>
-                {run.artifactLinks.length === 0 ? (
-                  <p>No artifacts.</p>
+                <h4>Stored pointers</h4>
+                {run.artifactPointers.length === 0 ? (
+                  <p>No storage pointers recorded for this run.</p>
                 ) : (
-                  <div className="artifact-link-grid">
-                    {run.artifactLinks.map((artifact) => (
-                      <a id={artifact.id} key={artifact.id} href={artifact.href}>
-                        <span>{artifact.label}</span>
-                        <strong>{artifact.storageKey}</strong>
-                        {artifact.contentType ? <small>{artifact.contentType}</small> : null}
-                      </a>
-                    ))}
-                  </div>
+                  <>
+                    <p>
+                      These are D1 storage keys for evidence metadata rows retained by the run. They
+                      are not openable files yet because there is no artifact viewer route.
+                    </p>
+                    <div className="artifact-pointer-grid">
+                      {run.artifactPointers.map((artifact) => (
+                        <div id={artifact.id} key={artifact.id} className="artifact-pointer-row">
+                          <span>{artifact.label}</span>
+                          <strong>{artifact.storageKey}</strong>
+                          {artifact.contentType ? <small>{artifact.contentType}</small> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </section>
             </div>
@@ -995,20 +1092,22 @@ function createRunHistoryHeading(run: BriefingRunHistoryRun): string {
   return "Daily scheduled search";
 }
 
-function createRunArtifactLinks(run: BriefingRunHistoryRun): RunHistoryArtifactLink[] {
+function createRunArtifactPointers(
+  run: BriefingRunHistoryRun,
+  sourceCoverage: SourceCoverageSummary[],
+): RunHistoryArtifactPointer[] {
   const pointers = uniquePointers([
-    ...run.rawArtifactPointers,
-    ...run.sourceCoverage.flatMap((coverage) => coverage.rawArtifactPointers),
+    ...run.rawArtifactPointers.filter((pointer) => !isSyntheticFixturePointer(pointer)),
+    ...sourceCoverage.flatMap((coverage) => coverage.rawArtifactPointers),
     ...run.candidateSummaries.flatMap((candidate) => candidate.evidenceSummary.rawArtifactPointers),
-  ]);
+  ]).filter((pointer) => !isSyntheticFixturePointer(pointer));
 
   return pointers.map((pointer, index) => {
     const id = `artifact-${slugify(run.runId)}-${index}`;
 
     return {
       id,
-      href: `#${id}`,
-      label: `${pointer.owner.toUpperCase()} artifact`,
+      label: `${pointer.owner.toUpperCase()} pointer`,
       ownerLabel: pointer.owner.toUpperCase(),
       storageKey: pointer.key,
       contentType: pointer.contentType,
@@ -1026,6 +1125,16 @@ function uniquePointers(pointers: EvidenceStoragePointer[]): EvidenceStoragePoin
   return [...byKey.values()];
 }
 
+function isSyntheticFixtureCoverage(coverage: SourceCoverageSummary): boolean {
+  return (
+    coverage.source.startsWith("fixture-") || coverage.failureCode?.startsWith("fixture-") === true
+  );
+}
+
+function isSyntheticFixturePointer(pointer: EvidenceStoragePointer): boolean {
+  return pointer.key.includes("source-failure") || pointer.key.includes("fixture-");
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -1035,6 +1144,25 @@ function slugify(value: string): string {
 
 function uniqueNonEmpty(items: string[]): string[] {
   return [...new Set(items.map((item) => item.trim()).filter(Boolean))];
+}
+
+function normalizeReviewNeededListing(listing: ListingCandidate): ListingCandidate {
+  if (listing.triageBucket !== "review-needed" || listing.reviewStatus === "rejected") {
+    return listing;
+  }
+
+  if (listing.reviewStatus === "review") {
+    return listing;
+  }
+
+  return {
+    ...listing,
+    reviewStatus: "review",
+    display: {
+      ...listing.display,
+      reviewStatus: "review",
+    },
+  };
 }
 
 function MapReviewPanel({
@@ -1105,6 +1233,7 @@ function LeafletListingMap({
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<LeafletMap | null>(null);
+  const groceryMarkersRef = useRef<Marker[]>([]);
   const listingMarkersRef = useRef<Marker[]>([]);
   const subwayOverlayRef = useRef<LayerGroup | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
@@ -1131,12 +1260,7 @@ function LeafletListingMap({
         zoomControl: true,
       });
 
-      leaflet
-        .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "",
-          maxZoom: 19,
-        })
-        .addTo(map);
+      leaflet.tileLayer(leafletTileLayer.url, leafletTileLayer).addTo(map);
       leafletMapRef.current = map;
       const nextMarkers = syncLeafletMap({
         fitToListings: true,
@@ -1147,6 +1271,7 @@ function LeafletListingMap({
         selectedId,
       });
       listingMarkersRef.current = nextMarkers.listingMarkers;
+      groceryMarkersRef.current = nextMarkers.groceryMarkers;
       void addMtaSubwayOverlay(leaflet, map)
         .then((overlay) => {
           if (disposed) {
@@ -1164,8 +1289,10 @@ function LeafletListingMap({
 
     return () => {
       disposed = true;
+      groceryMarkersRef.current.forEach((marker) => marker.remove());
       listingMarkersRef.current.forEach((marker) => marker.remove());
       subwayOverlayRef.current?.remove();
+      groceryMarkersRef.current = [];
       listingMarkersRef.current = [];
       subwayOverlayRef.current = null;
       leafletMapRef.current?.remove();
@@ -1180,6 +1307,7 @@ function LeafletListingMap({
       return;
     }
 
+    groceryMarkersRef.current.forEach((marker) => marker.remove());
     listingMarkersRef.current.forEach((marker) => marker.remove());
     const nextMarkers = syncLeafletMap({
       fitToListings: false,
@@ -1189,6 +1317,7 @@ function LeafletListingMap({
       onSelect,
       selectedId,
     });
+    groceryMarkersRef.current = nextMarkers.groceryMarkers;
     listingMarkersRef.current = nextMarkers.listingMarkers;
   }, [model, onSelect, selectedId]);
 
@@ -1300,8 +1429,415 @@ type LeafletModule = typeof import("leaflet");
 type LeafletGeoJsonInput = Parameters<LeafletModule["geoJSON"]>[0];
 
 type LeafletSyncResult = {
+  groceryMarkers: Marker[];
   listingMarkers: Marker[];
 };
+
+type GroceryStoreBrand = "whole-foods" | "trader-joes";
+
+type GroceryStoreLocation = {
+  id: string;
+  brand: GroceryStoreBrand;
+  name: string;
+  address: string;
+  borough: string;
+  latitude: number;
+  longitude: number;
+  sourceUrl: string;
+};
+
+const groceryStoreLocations: GroceryStoreLocation[] = [
+  {
+    id: "tj-72nd-broadway",
+    brand: "trader-joes",
+    name: "Trader Joe's 72nd & Broadway",
+    address: "2073 Broadway, New York, NY 10023",
+    borough: "Manhattan",
+    latitude: 40.77895,
+    longitude: -73.98258,
+    sourceUrl: "https://locations.traderjoes.com/ny/new-york/542/",
+  },
+  {
+    id: "tj-chelsea",
+    brand: "trader-joes",
+    name: "Trader Joe's Chelsea",
+    address: "675 6th Ave, New York, NY 10010",
+    borough: "Manhattan",
+    latitude: 40.74129,
+    longitude: -73.99375,
+    sourceUrl: "https://locations.traderjoes.com/ny/new-york/543/",
+  },
+  {
+    id: "tj-east-village",
+    brand: "trader-joes",
+    name: "Trader Joe's East Village",
+    address: "436 East 14th St, New York, NY 10009",
+    borough: "Manhattan",
+    latitude: 40.73164,
+    longitude: -73.98194,
+    sourceUrl: "https://locations.traderjoes.com/ny/new-york/546/",
+  },
+  {
+    id: "tj-essex-crossing",
+    brand: "trader-joes",
+    name: "Trader Joe's Essex Crossing",
+    address: "400 Grand St. (Cellar), New York, NY 10002",
+    borough: "Manhattan",
+    latitude: 40.71567,
+    longitude: -73.98611,
+    sourceUrl: "https://locations.traderjoes.com/ny/new-york/538/",
+  },
+  {
+    id: "tj-harlem",
+    brand: "trader-joes",
+    name: "Trader Joe's Harlem",
+    address: "123 W 125th St, New York, NY 10027",
+    borough: "Manhattan",
+    latitude: 40.80844,
+    longitude: -73.94558,
+    sourceUrl: "https://locations.traderjoes.com/ny/new-york/576/",
+  },
+  {
+    id: "tj-murray-hill",
+    brand: "trader-joes",
+    name: "Trader Joe's Murray Hill",
+    address: "200 E 32nd St, New York, NY 10016",
+    borough: "Manhattan",
+    latitude: 40.74447,
+    longitude: -73.97915,
+    sourceUrl: "https://locations.traderjoes.com/ny/new-york/544/",
+  },
+  {
+    id: "tj-soho",
+    brand: "trader-joes",
+    name: "Trader Joe's SoHo",
+    address: "233 Spring Street, New York, NY 10013",
+    borough: "Manhattan",
+    latitude: 40.72568,
+    longitude: -74.00476,
+    sourceUrl: "https://locations.traderjoes.com/ny/new-york/539/",
+  },
+  {
+    id: "tj-union-square",
+    brand: "trader-joes",
+    name: "Trader Joe's Union Square",
+    address: "142 E 14th St, New York, NY 10003",
+    borough: "Manhattan",
+    latitude: 40.7341,
+    longitude: -73.98853,
+    sourceUrl: "https://locations.traderjoes.com/ny/new-york/540/",
+  },
+  {
+    id: "tj-bridgemarket",
+    brand: "trader-joes",
+    name: "Trader Joe's Upper East Side - Bridgemarket",
+    address: "405 E. 59th Street, New York, NY 10022",
+    borough: "Manhattan",
+    latitude: 40.759,
+    longitude: -73.95994,
+    sourceUrl: "https://locations.traderjoes.com/ny/new-york/571/",
+  },
+  {
+    id: "tj-upper-west-side",
+    brand: "trader-joes",
+    name: "Trader Joe's Upper West Side",
+    address: "670 Columbus Ave, New York, NY 10025",
+    borough: "Manhattan",
+    latitude: 40.79077,
+    longitude: -73.96771,
+    sourceUrl: "https://locations.traderjoes.com/ny/new-york/545/",
+  },
+  {
+    id: "tj-city-point",
+    brand: "trader-joes",
+    name: "Trader Joe's Brooklyn - City Point",
+    address: "445 Gold St, Brooklyn, NY 11201",
+    borough: "Brooklyn",
+    latitude: 40.69118,
+    longitude: -73.98306,
+    sourceUrl: "https://locations.traderjoes.com/ny/brooklyn/547/",
+  },
+  {
+    id: "tj-williamsburg",
+    brand: "trader-joes",
+    name: "Trader Joe's Brooklyn - Williamsburg",
+    address: "200 Kent Ave, Brooklyn, NY 11249",
+    borough: "Brooklyn",
+    latitude: 40.7177,
+    longitude: -73.96465,
+    sourceUrl: "https://locations.traderjoes.com/ny/brooklyn/548/",
+  },
+  {
+    id: "tj-court-street",
+    brand: "trader-joes",
+    name: "Trader Joe's Brooklyn",
+    address: "130 Court St, Brooklyn, NY 11201",
+    borough: "Brooklyn",
+    latitude: 40.69039,
+    longitude: -73.99202,
+    sourceUrl: "https://locations.traderjoes.com/ny/brooklyn/558/",
+  },
+  {
+    id: "tj-forest-hills",
+    brand: "trader-joes",
+    name: "Trader Joe's Forest Hills",
+    address: "69-65 Yellowstone Blvd, Queens, NY 11375",
+    borough: "Queens",
+    latitude: 40.72278,
+    longitude: -73.84618,
+    sourceUrl: "https://locations.traderjoes.com/ny/queens/578/",
+  },
+  {
+    id: "tj-long-island-city",
+    brand: "trader-joes",
+    name: "Trader Joe's Long Island City",
+    address: "22-43 Jackson Ave, Queens, NY 11101",
+    borough: "Queens",
+    latitude: 40.7453,
+    longitude: -73.94531,
+    sourceUrl: "https://locations.traderjoes.com/ny/queens/565/",
+  },
+  {
+    id: "tj-rego-park",
+    brand: "trader-joes",
+    name: "Trader Joe's Rego Park",
+    address: "9030 Metropolitan Ave, Queens, NY 11374",
+    borough: "Queens",
+    latitude: 40.71265,
+    longitude: -73.86155,
+    sourceUrl: "https://locations.traderjoes.com/ny/queens/557/",
+  },
+  {
+    id: "tj-south-shore",
+    brand: "trader-joes",
+    name: "Trader Joe's Staten Island - South Shore",
+    address: "6400 Amboy Rd, Staten Island, NY 10309",
+    borough: "Staten Island",
+    latitude: 40.51906,
+    longitude: -74.22085,
+    sourceUrl: "https://locations.traderjoes.com/ny/staten-island/580/",
+  },
+  {
+    id: "tj-staten-island",
+    brand: "trader-joes",
+    name: "Trader Joe's Staten Island",
+    address: "2385 Richmond Ave, Staten Island, NY 10314",
+    borough: "Staten Island",
+    latitude: 40.58162,
+    longitude: -74.16554,
+    sourceUrl: "https://locations.traderjoes.com/ny/staten-island/559/",
+  },
+  {
+    id: "wf-upper-east-side",
+    brand: "whole-foods",
+    name: "Whole Foods Market Upper East Side",
+    address: "1551 3rd Ave, New York, NY 10128",
+    borough: "Manhattan",
+    latitude: 40.78038,
+    longitude: -73.95231,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/uppereastside",
+  },
+  {
+    id: "wf-columbus-circle",
+    brand: "whole-foods",
+    name: "Whole Foods Market Columbus Circle",
+    address: "10 Columbus Cir, Ste Sc101, New York, NY 10019",
+    borough: "Manhattan",
+    latitude: 40.76847,
+    longitude: -73.98273,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/columbuscircle",
+  },
+  {
+    id: "wf-manhattan-west",
+    brand: "whole-foods",
+    name: "Whole Foods Market Manhattan West",
+    address: "450 W 33rd St, New York, NY 10001",
+    borough: "Manhattan",
+    latitude: 40.75323,
+    longitude: -73.99807,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/manhattanwest",
+  },
+  {
+    id: "wf-midtown-east",
+    brand: "whole-foods",
+    name: "Whole Foods Market Midtown East",
+    address: "226 E 57th St, New York, NY 10022",
+    borough: "Manhattan",
+    latitude: 40.76,
+    longitude: -73.96619,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/midtown-east",
+  },
+  {
+    id: "wf-stuytown",
+    brand: "whole-foods",
+    name: "Whole Foods Market Stuytown",
+    address: "409 E 14th St, New York, NY 10009",
+    borough: "Manhattan",
+    latitude: 40.73171,
+    longitude: -73.98279,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/stuytown",
+  },
+  {
+    id: "wf-hells-kitchen",
+    brand: "whole-foods",
+    name: "Whole Foods Market Hell's Kitchen",
+    address: "525 W 52nd St, New York, NY 10019",
+    borough: "Manhattan",
+    latitude: 40.76665,
+    longitude: -73.99194,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/hellskitchen",
+  },
+  {
+    id: "wf-harlem",
+    brand: "whole-foods",
+    name: "Whole Foods Market Harlem",
+    address: "100 W 125th St, New York, NY 10027",
+    borough: "Manhattan",
+    latitude: 40.80828,
+    longitude: -73.94554,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/harlem",
+  },
+  {
+    id: "wf-upper-west-side",
+    brand: "whole-foods",
+    name: "Whole Foods Market Upper West Side",
+    address: "808 Columbus Ave, New York, NY 10025",
+    borough: "Manhattan",
+    latitude: 40.79536,
+    longitude: -73.96543,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/upperwestside",
+  },
+  {
+    id: "wf-nomad",
+    brand: "whole-foods",
+    name: "Whole Foods Market NoMad",
+    address: "63 Madison Ave, New York, NY 10016",
+    borough: "Manhattan",
+    latitude: 40.74375,
+    longitude: -73.98636,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/nomad",
+  },
+  {
+    id: "wf-tribeca",
+    brand: "whole-foods",
+    name: "Whole Foods Market Tribeca",
+    address: "270 Greenwich St, New York, NY 10007",
+    borough: "Manhattan",
+    latitude: 40.71562,
+    longitude: -74.01168,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/tribeca",
+  },
+  {
+    id: "wf-bowery",
+    brand: "whole-foods",
+    name: "Whole Foods Market Bowery",
+    address: "95 East Houston St, New York, NY 10002",
+    borough: "Manhattan",
+    latitude: 40.72496,
+    longitude: -73.99229,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/bowery",
+  },
+  {
+    id: "wf-chelsea",
+    brand: "whole-foods",
+    name: "Whole Foods Market Chelsea",
+    address: "250 7th Ave, New York, NY 10001",
+    borough: "Manhattan",
+    latitude: 40.74485,
+    longitude: -73.99521,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/chelsea",
+  },
+  {
+    id: "wf-union-square",
+    brand: "whole-foods",
+    name: "Whole Foods Market Union Square",
+    address: "4 Union Square S, New York, NY 10003",
+    borough: "Manhattan",
+    latitude: 40.73591,
+    longitude: -73.99108,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/unionsquare",
+  },
+  {
+    id: "wf-one-wall-street",
+    brand: "whole-foods",
+    name: "Whole Foods Market One Wall Street",
+    address: "66 Broadway, New York, NY 10005",
+    borough: "Manhattan",
+    latitude: 40.70645,
+    longitude: -74.01305,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/onewallstreet",
+  },
+  {
+    id: "wf-bryant-park",
+    brand: "whole-foods",
+    name: "Whole Foods Market Bryant Park",
+    address: "1095 6th Ave, New York, NY 10036",
+    borough: "Manhattan",
+    latitude: 40.7544,
+    longitude: -73.9845,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/bryantpark",
+  },
+  {
+    id: "wf-lenox-hill",
+    brand: "whole-foods",
+    name: "Whole Foods Market Lenox Hill",
+    address: "1175 3rd Ave, New York, NY 10065",
+    borough: "Manhattan",
+    latitude: 40.76783,
+    longitude: -73.96294,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/lenoxhill",
+  },
+  {
+    id: "wf-brooklyn-third-street",
+    brand: "whole-foods",
+    name: "Whole Foods Market Brooklyn",
+    address: "214 3rd St, Brooklyn, NY 11215",
+    borough: "Brooklyn",
+    latitude: 40.67494,
+    longitude: -73.98764,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/thirdand3rd",
+  },
+  {
+    id: "wf-williamsburg",
+    brand: "whole-foods",
+    name: "Whole Foods Market Williamsburg",
+    address: "238 Bedford Ave, Brooklyn, NY 11249",
+    borough: "Brooklyn",
+    latitude: 40.7167,
+    longitude: -73.95962,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/williamsburg",
+  },
+  {
+    id: "wf-fort-greene",
+    brand: "whole-foods",
+    name: "Whole Foods Market Fort Greene",
+    address: "292 Ashland Pl, Brooklyn, NY 11217",
+    borough: "Brooklyn",
+    latitude: 40.68668,
+    longitude: -73.97788,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/fortgreene",
+  },
+  {
+    id: "wf-industry-city",
+    brand: "whole-foods",
+    name: "Whole Foods Market Industry City",
+    address: "167 41st St, Brooklyn, NY 11232",
+    borough: "Brooklyn",
+    latitude: 40.6551,
+    longitude: -74.00628,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/industrycity",
+  },
+  {
+    id: "wf-grand-street",
+    brand: "whole-foods",
+    name: "Whole Foods Market Grand Street",
+    address: "774 Grand Street, Brooklyn, NY 11211",
+    borough: "Brooklyn",
+    latitude: 40.71129,
+    longitude: -73.94401,
+    sourceUrl: "https://www.wholefoodsmarket.com/stores/grandstreet",
+  },
+];
 
 const MTA_SUBWAY_FEATURE_SERVICE =
   "https://services5.arcgis.com/OKgEWPlJhc3vFb8C/arcgis/rest/services/MTA_Subway_Routes_Stops/FeatureServer";
@@ -1327,6 +1863,20 @@ function syncLeafletMap({
   onSelect: (listingId: string) => void;
   selectedId?: string;
 }): LeafletSyncResult {
+  const groceryMarkers = groceryStoreLocations.map((store) => {
+    const marker = leaflet
+      .marker([store.latitude, store.longitude], {
+        icon: createGroceryLeafletIcon(leaflet, store),
+        keyboard: true,
+        title: `${store.name} grocery context`,
+        zIndexOffset: -120,
+      })
+      .addTo(map);
+
+    marker.bindPopup(createGroceryPopup(store));
+    return marker;
+  });
+
   const listingMarkers = model.locatedCandidates.map((candidate, index) => {
     const marker = leaflet
       .marker([candidate.coordinates!.latitude, candidate.coordinates!.longitude], {
@@ -1354,7 +1904,7 @@ function syncLeafletMap({
     map.fitBounds(bounds, { maxZoom: 14, padding: [34, 34] });
   }
 
-  return { listingMarkers };
+  return { groceryMarkers, listingMarkers };
 }
 
 async function addMtaSubwayOverlay(leaflet: LeafletModule, map: LeafletMap): Promise<LayerGroup> {
@@ -1491,10 +2041,25 @@ function createListingLeafletIcon(
 ): DivIcon {
   return leaflet.divIcon({
     className: "",
-    html: `<span class="leaflet-listing-pin ${candidate.pinState}${selected ? " selected" : ""}">${label}</span>`,
-    iconAnchor: [20, 20],
-    iconSize: [40, 40],
-    popupAnchor: [0, -22],
+    html: `<span class="leaflet-listing-pin ${candidate.pinState}${selected ? " selected" : ""}"><span class="leaflet-listing-pin-label">${label}</span></span>`,
+    iconAnchor: [16, 39],
+    iconSize: [32, 40],
+    popupAnchor: [0, -39],
+  });
+}
+
+function createGroceryLeafletIcon(leaflet: LeafletModule, store: GroceryStoreLocation): DivIcon {
+  const brandLabel = store.brand === "whole-foods" ? "Whole Foods" : "Trader Joe's";
+  const logoText = store.brand === "whole-foods" ? "Whole\nFoods" : "Trader\nJoe's";
+
+  return leaflet.divIcon({
+    className: "",
+    html: `<span class="leaflet-grocery-pin ${store.brand}" aria-label="${escapeHtml(
+      `${brandLabel} location`,
+    )}"><span>${escapeHtml(logoText)}</span></span>`,
+    iconAnchor: [9, 9],
+    iconSize: [18, 18],
+    popupAnchor: [0, -10],
   });
 }
 
@@ -1502,6 +2067,16 @@ function createListingPopup(candidate: MapReviewCandidate): string {
   return `<strong>${escapeHtml(candidate.listing.title)}</strong><br>${escapeHtml(
     candidate.listing.address,
   )}<br>${escapeHtml(formatMoney(candidate.listing.rent))} · ${candidate.listing.bedrooms ?? "?"} beds`;
+}
+
+function createGroceryPopup(store: GroceryStoreLocation): string {
+  const sourceLabel =
+    store.brand === "whole-foods" ? "Whole Foods store page" : "Trader Joe's store page";
+  return `<strong>${escapeHtml(store.name)}</strong><br>${escapeHtml(store.address)}<br>${escapeHtml(
+    store.borough,
+  )}<br><a href="${escapeHtml(store.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(
+    sourceLabel,
+  )}</a>`;
 }
 
 function escapeHtml(value: string): string {
@@ -1522,7 +2097,7 @@ function ListingSection({ groups = [], selectedId, onSelect, onSourceOpen }: Lis
       <div className="listing-table-head" aria-hidden="true">
         <span>Status</span>
         <span>Listing</span>
-        <span>Rent</span>
+        <span>Avg Rent</span>
       </div>
       <div className="listing-cards">
         {visibleListings.map((listing) => (
@@ -1566,7 +2141,7 @@ function ListingCard({
           <strong>{listing.title}</strong>
           <small>{listing.neighborhood ?? listing.address}</small>
         </span>
-        <strong>{formatMoney(listing.rent)}</strong>
+        <strong>{formatAverageRent(listing)}</strong>
       </button>
       <a
         href={listing.url}
@@ -1712,6 +2287,7 @@ export function ListingEditor({
   onCommentTextChange,
   onFieldChange,
   onStatusChange,
+  onReviewDecision,
   onSourceOpen,
   onReaction,
   onComment,
@@ -1723,6 +2299,7 @@ export function ListingEditor({
   onCommentTextChange: (value: string) => void;
   onFieldChange: (listingId: string, field: FieldProvenance["field"], rawValue: string) => void;
   onStatusChange: (listingId: string, status: ReviewStatus) => void;
+  onReviewDecision: (listingId: string, decision: "approve" | "reject") => void;
   onSourceOpen: (listing: ListingCandidate) => void;
   onReaction: (listing: ListingCandidate, reaction: GroupActionRecord["reaction"]) => void;
   onComment: (event: FormEvent<HTMLFormElement>) => void;
@@ -1734,6 +2311,7 @@ export function ListingEditor({
   const firstEditInputRef = useRef<HTMLInputElement | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedListingId = listing?.id;
+  const modalMediaItemCount = (listing?.photos.filter(Boolean).length ?? 0) + 1;
 
   useEffect(() => {
     setIsEditingFields(false);
@@ -1747,15 +2325,34 @@ export function ListingEditor({
       return;
     }
 
-    function handleEscape(event: KeyboardEvent) {
+    function handleModalKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsPhotoModalOpen(false);
+        return;
+      }
+
+      if (modalMediaItemCount <= 1) {
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setSelectedMediaIndex((currentIndex) =>
+          currentIndex === 0 ? modalMediaItemCount - 1 : currentIndex - 1,
+        );
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setSelectedMediaIndex((currentIndex) =>
+          currentIndex === modalMediaItemCount - 1 ? 0 : currentIndex + 1,
+        );
       }
     }
 
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [isPhotoModalOpen]);
+    window.addEventListener("keydown", handleModalKeyDown);
+    return () => window.removeEventListener("keydown", handleModalKeyDown);
+  }, [isPhotoModalOpen, modalMediaItemCount]);
 
   useEffect(() => {
     if (!isEditingFields) {
@@ -1788,18 +2385,20 @@ export function ListingEditor({
   const editFieldsDialogId = `${listing.id}-edit-fields-dialog`;
   const editFieldsTitleId = `${listing.id}-edit-fields-title`;
   const photoUrls = listing.photos.filter(Boolean);
-  const mapMediaIndex = photoUrls.length;
+  const mapMediaIndex = 0;
   const mediaItemCount = photoUrls.length + 1;
   const isMapSelected = selectedMediaIndex === mapMediaIndex;
   const selectedPhotoUrl = !isMapSelected
-    ? (photoUrls[selectedMediaIndex] ?? photoUrls[0])
+    ? (photoUrls[selectedMediaIndex - 1] ?? photoUrls[0])
     : undefined;
   const showPhotoControls = mediaItemCount > 1;
-  const showModalPhotoControls = photoUrls.length > 1;
+  const showModalPhotoControls = mediaItemCount > 1;
   const photoPositionLabel = `${selectedMediaIndex + 1} of ${mediaItemCount}`;
   const aboutPreview = getListingAboutPreview(listing.description);
   const aboutText = isAboutExpanded ? listing.description : aboutPreview;
   const canExpandAbout = Boolean(listing.description && aboutPreview !== listing.description);
+  const isReviewNeeded =
+    listing.triageBucket === "review-needed" || listing.reviewStatus === "review";
   const selectPhoto = (index: number) => setSelectedMediaIndex(index);
   const handlePreviousPhoto = () => {
     setSelectedMediaIndex((currentIndex) =>
@@ -1813,13 +2412,28 @@ export function ListingEditor({
   };
   const handlePreviousModalPhoto = () => {
     setSelectedMediaIndex((currentIndex) =>
-      currentIndex === 0 ? photoUrls.length - 1 : Math.min(currentIndex - 1, photoUrls.length - 1),
+      currentIndex === 0 ? mediaItemCount - 1 : currentIndex - 1,
     );
   };
   const handleNextModalPhoto = () => {
     setSelectedMediaIndex((currentIndex) =>
-      currentIndex >= photoUrls.length - 1 ? 0 : currentIndex + 1,
+      currentIndex === mediaItemCount - 1 ? 0 : currentIndex + 1,
     );
+  };
+  const handlePhotoCarouselKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (!showPhotoControls) {
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      handlePreviousPhoto();
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      handleNextPhoto();
+    }
   };
   const handleCommentToggle = (event: ToggleEvent<HTMLDetailsElement>) => {
     if (event.currentTarget.open) {
@@ -1865,77 +2479,107 @@ export function ListingEditor({
 
       <ReviewStatusDropdown listing={listing} onStatusChange={onStatusChange} />
 
-      {photoUrls.length > 0 ? (
-        <section className="listing-photo-carousel" aria-label={`Photos for ${listing.title}`}>
-          <figure className="listing-photo-frame">
-            {isMapSelected ? (
-              <ListingInlineMap listing={listing} />
-            ) : selectedPhotoUrl ? (
+      {isReviewNeeded ? (
+        <section className="review-decision-panel" aria-label="Review decision">
+          <div>
+            <p className="eyebrow">Needs review</p>
+            <h3>Approve or reject this candidate</h3>
+            <p>
+              Approving keeps it in the shared list as a current candidate. Rejecting removes it
+              from the list and records it in rejected memory.
+            </p>
+          </div>
+          <div className="review-decision-actions">
+            <button type="button" onClick={() => onReviewDecision(listing.id, "approve")}>
+              Approve
+            </button>
+            <button
+              type="button"
+              className="secondary-danger"
+              onClick={() => onReviewDecision(listing.id, "reject")}
+            >
+              Reject and remove
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      <section
+        className="listing-photo-carousel"
+        aria-label={`Media for ${listing.title}`}
+        tabIndex={showPhotoControls ? 0 : undefined}
+        onKeyDown={handlePhotoCarouselKeyDown}
+      >
+        <figure className="listing-photo-frame">
+          {isMapSelected ? (
+            <ListingInlineMap listing={listing} />
+          ) : selectedPhotoUrl ? (
+            <button
+              type="button"
+              className="listing-photo-open"
+              aria-label={`Enlarge photo ${selectedMediaIndex} of ${photoUrls.length} for ${listing.title}`}
+              onClick={() => setIsPhotoModalOpen(true)}
+            >
+              <img
+                src={selectedPhotoUrl}
+                alt={`${listing.title} photo ${selectedMediaIndex}`}
+                loading="lazy"
+              />
+            </button>
+          ) : null}
+          <figcaption className="listing-photo-count">{photoPositionLabel}</figcaption>
+          {showPhotoControls ? (
+            <div className="listing-photo-controls" aria-label="Photo navigation controls">
               <button
                 type="button"
-                className="listing-photo-open"
-                aria-label={`Enlarge photo ${selectedMediaIndex + 1} of ${mediaItemCount} for ${listing.title}`}
-                onClick={() => setIsPhotoModalOpen(true)}
+                className="listing-photo-arrow listing-photo-arrow-previous"
+                aria-label={`Show previous photo for ${listing.title}`}
+                onClick={handlePreviousPhoto}
               >
-                <img
-                  src={selectedPhotoUrl}
-                  alt={`${listing.title} photo ${selectedMediaIndex + 1}`}
-                  loading="lazy"
-                />
+                <ChevronLeft aria-hidden="true" />
               </button>
-            ) : null}
-            <figcaption className="listing-photo-count">{photoPositionLabel}</figcaption>
-            {showPhotoControls ? (
-              <div className="listing-photo-controls" aria-label="Photo navigation controls">
-                <button
-                  type="button"
-                  className="listing-photo-arrow listing-photo-arrow-previous"
-                  aria-label={`Show previous photo for ${listing.title}`}
-                  onClick={handlePreviousPhoto}
-                >
-                  <ChevronLeft aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="listing-photo-arrow listing-photo-arrow-next"
-                  aria-label={`Show next photo for ${listing.title}`}
-                  onClick={handleNextPhoto}
-                >
-                  <ChevronRight aria-hidden="true" />
-                </button>
-              </div>
-            ) : null}
-          </figure>
-          {showPhotoControls ? (
+              <button
+                type="button"
+                className="listing-photo-arrow listing-photo-arrow-next"
+                aria-label={`Show next photo for ${listing.title}`}
+                onClick={handleNextPhoto}
+              >
+                <ChevronRight aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+        </figure>
+        {showPhotoControls ? (
+          <div className="listing-photo-media-strip" aria-label="Choose listing photo or map">
+            <button
+              type="button"
+              className="listing-photo-thumbnail listing-map-thumbnail"
+              aria-label={`Show map for ${listing.title}`}
+              aria-current={isMapSelected ? "true" : undefined}
+              onClick={() => setSelectedMediaIndex(mapMediaIndex)}
+            >
+              <MapIcon aria-hidden="true" />
+              <span>Map</span>
+            </button>
             <div className="listing-photo-thumbnails" aria-label="Choose listing photo">
               {photoUrls.map((photoUrl, index) => (
                 <button
                   type="button"
                   key={`${photoUrl}-${index}`}
                   className="listing-photo-thumbnail"
-                  aria-label={`Show photo ${index + 1} of ${mediaItemCount} for ${listing.title}`}
-                  aria-current={index === selectedMediaIndex ? "true" : undefined}
-                  onClick={() => selectPhoto(index)}
+                  aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listing.title}`}
+                  aria-current={index + 1 === selectedMediaIndex ? "true" : undefined}
+                  onClick={() => selectPhoto(index + 1)}
                 >
                   <img src={photoUrl} alt="" loading="lazy" />
                 </button>
               ))}
-              <button
-                type="button"
-                className="listing-photo-thumbnail listing-map-thumbnail"
-                aria-label={`Show map for ${listing.title}`}
-                aria-current={isMapSelected ? "true" : undefined}
-                onClick={() => setSelectedMediaIndex(mapMediaIndex)}
-              >
-                <MapIcon aria-hidden="true" />
-                <span>Map</span>
-              </button>
             </div>
-          ) : null}
-        </section>
-      ) : null}
+          </div>
+        ) : null}
+      </section>
 
-      {isPhotoModalOpen && selectedPhotoUrl ? (
+      {isPhotoModalOpen ? (
         <div
           className="listing-photo-modal"
           role="dialog"
@@ -1964,10 +2608,11 @@ export function ListingEditor({
               </button>
             </div>
             <figure className="listing-photo-frame listing-photo-modal-frame">
-              <img
-                src={selectedPhotoUrl}
-                alt={`${listing.title} photo ${selectedMediaIndex + 1}`}
-              />
+              {isMapSelected ? (
+                <ListingInlineMap listing={listing} />
+              ) : selectedPhotoUrl ? (
+                <img src={selectedPhotoUrl} alt={`${listing.title} photo ${selectedMediaIndex}`} />
+              ) : null}
               <figcaption className="listing-photo-count">{photoPositionLabel}</figcaption>
               {showModalPhotoControls ? (
                 <div className="listing-photo-controls" aria-label="Photo navigation controls">
@@ -1992,21 +2637,36 @@ export function ListingEditor({
             </figure>
             {showModalPhotoControls ? (
               <div
-                className="listing-photo-thumbnails listing-photo-modal-thumbnails"
-                aria-label="Choose listing photo"
+                className="listing-photo-media-strip listing-photo-modal-media-strip"
+                aria-label="Choose listing photo or map"
               >
-                {photoUrls.map((photoUrl, index) => (
-                  <button
-                    type="button"
-                    key={`${photoUrl}-${index}`}
-                    className="listing-photo-thumbnail"
-                    aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listing.title}`}
-                    aria-current={index === selectedMediaIndex ? "true" : undefined}
-                    onClick={() => selectPhoto(index)}
-                  >
-                    <img src={photoUrl} alt="" loading="lazy" />
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  className="listing-photo-thumbnail listing-map-thumbnail"
+                  aria-label={`Show map for ${listing.title}`}
+                  aria-current={isMapSelected ? "true" : undefined}
+                  onClick={() => setSelectedMediaIndex(mapMediaIndex)}
+                >
+                  <MapIcon aria-hidden="true" />
+                  <span>Map</span>
+                </button>
+                <div
+                  className="listing-photo-thumbnails listing-photo-modal-thumbnails"
+                  aria-label="Choose listing photo"
+                >
+                  {photoUrls.map((photoUrl, index) => (
+                    <button
+                      type="button"
+                      key={`${photoUrl}-${index}`}
+                      className="listing-photo-thumbnail"
+                      aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listing.title}`}
+                      aria-current={index + 1 === selectedMediaIndex ? "true" : undefined}
+                      onClick={() => selectPhoto(index + 1)}
+                    >
+                      <img src={photoUrl} alt="" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
           </section>
@@ -2290,6 +2950,15 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
+function RunMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="run-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 function getEvidenceSummary(listing: ListingCandidate): string {
   const firstEvidence = listing.evidence[0];
 
@@ -2318,6 +2987,14 @@ function formatMoney(value?: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+export function formatAverageRent(listing: Pick<ListingCandidate, "rent" | "bedrooms">) {
+  if (listing.rent === undefined || listing.bedrooms === undefined || listing.bedrooms <= 0) {
+    return "?";
+  }
+
+  return formatMoney(listing.rent / listing.bedrooms);
 }
 
 function formatListingAddedAge(createdAt: string) {
@@ -2425,10 +3102,6 @@ function ExternalLinkIcon() {
 
 function formatDateTimeLabel(value: string) {
   return value.slice(0, 16).replace("T", " ");
-}
-
-function formatDateLabel(value: string) {
-  return value.slice(0, 10);
 }
 
 function getProviderIntakeKind(listing: ListingCandidate): string {

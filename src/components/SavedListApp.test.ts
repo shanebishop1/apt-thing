@@ -13,6 +13,7 @@ import {
   RunHistoryPanel,
   SavedListApp,
   createRunHistoryPanelModel,
+  formatAverageRent,
 } from "./SavedListApp";
 import { runMobileAcceptanceScenario, type MobileAcceptanceMarker } from "../lib/mobile-acceptance";
 import type { GroupActionRecord } from "../lib/agent-contracts";
@@ -20,44 +21,69 @@ import type { GroupActionRecord } from "../lib/agent-contracts";
 const savedListingsStorageKey = `apt-thing:v1:groups:${defaultSearchGroup.id}:saved-listings`;
 
 describe("run history panel", () => {
-  it("derives compact list/detail rows for manual, daily, and future hourly-compatible runs", () => {
+  it("derives table rows for manual, daily, and future hourly-compatible runs", () => {
     const history = createHistoryWithCadenceVariants();
     const model = createRunHistoryPanelModel(history);
 
-    expect(model.supportedCadences).toEqual(["manual", "daily", "hourly"]);
     expect(model.runs.map((run) => run.cadence)).toEqual(["hourly", "daily", "manual"]);
     expect(model.runs.map((run) => run.statusLabel)).toEqual(["running", "partial", "success"]);
+    expect(model.runs[1]?.apiMatchedCount).toBeGreaterThan(0);
+    expect(model.runs[1]?.checkedOrScrapedCount).toBeGreaterThan(0);
+    expect(model.runs[1]?.checkedOrScrapedLabel).not.toBe("Not separately recorded");
+    expect(model.runs[1]?.skippedCount).toBeGreaterThan(0);
+    expect(model.runs[1]?.aiOutputLabel).toContain("yes");
+    expect(model.runs[1]?.candidateSummaries.length).toBeGreaterThan(0);
+    expect(model.runs[1]?.counts.sourceFailures).toBe(0);
     expect(model.runs[1]?.sourceCoverage).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ source: "streeteasy", status: "success", checkedCount: 4 }),
-        expect.objectContaining({
-          source: "fixture-secondary-source",
-          status: "failed",
-          failureCode: "fixture-source-unavailable",
-        }),
       ]),
     );
+    expect(model.runs[1]?.sourceCoverage).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: "fixture-secondary-source" })]),
+    );
     expect(model.runs[1]?.providerMetadata).toContain("google-direct / gemini-3.5-flash");
-    expect(model.runs[1]?.artifactLinks.some((link) => link.ownerLabel === "D1")).toBe(true);
+    expect(model.runs[1]?.artifactPointers.some((pointer) => pointer.ownerLabel === "D1")).toBe(
+      true,
+    );
   });
 
-  it("renders timestamps, statuses, source failures, provider/model metadata, counts, and artifact links", () => {
+  it("renders a clean run table with expandable pipeline details", () => {
     const history = createHistoryWithCadenceVariants();
     const markup = renderToStaticMarkup(React.createElement(RunHistoryPanel, { history }));
 
     expect(markup).toContain('aria-label="Agent run history"');
-    expect(markup).toContain("Cadences: manual, daily, hourly");
-    expect(markup).toContain("Manual import catch-up");
-    expect(markup).toContain("Daily scheduled search");
-    expect(markup).toContain("Hourly-ready smoke run");
-    expect(markup).toContain("Candidates found");
-    expect(markup).toContain("Candidates triaged");
-    expect(markup).toContain("Source coverage");
-    expect(markup).toContain("fixture-source-unavailable");
-    expect(markup).toContain("Provider/model metadata");
+    expect(markup).toContain('class="run-table"');
+    expect(markup).toContain("Run history");
+    expect(markup).toContain("Runs");
+    expect(markup).toContain("Candidates");
+    expect(markup).toContain("Source checks");
+    expect(markup).toContain("Candidate matches found");
+    expect(markup).toContain("Source records checked");
+    expect(markup).toContain("AI attempts recorded");
+    expect(markup).toContain("How to read the counts");
+    expect(markup).toContain("Meets criteria");
+    expect(markup).toContain("Does not meet criteria");
+    expect(markup).toContain("Output listings");
+    expect(markup).toContain("Source/API coverage");
+    expect(markup).not.toContain("fixture-source-unavailable");
+    expect(markup).not.toContain("fixture-secondary-source");
+    expect(markup).toContain("AI calls");
     expect(markup).toContain("google-direct / gemini-3.5-flash");
-    expect(markup).toContain("Evidence artifacts");
-    expect(markup).toContain("D1 artifact");
+    expect(markup).toContain("Stored pointers");
+    expect(markup).toContain("D1 storage keys for evidence metadata rows");
+    expect(markup).toContain("D1 pointer");
+    expect(markup).toContain('class="artifact-pointer-grid"');
+    expect(markup).toContain('class="artifact-pointer-row"');
+    expect(markup).not.toContain("D1 artifact");
+    expect(markup).not.toContain('href="#artifact-');
+    expect(markup).not.toContain("source-failure");
+    expect(markup).not.toContain("Supported cadence values");
+    expect(markup).not.toContain("Run ledger");
+    expect(markup).not.toContain("<h4>Failures</h4>");
+    expect(markup).not.toContain("<details open");
+    expect(markup).not.toContain("No failures.");
+    expect(markup).not.toContain("Timestamps");
   });
 });
 
@@ -74,13 +100,14 @@ describe("run history verification guardrails", () => {
     const markup = renderRunHistoryMarkup();
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
 
-    expect(markup).toContain('class="run-history-list"');
+    expect(markup).toContain('class="run-table"');
     expect(markup).not.toContain("<table");
     expect(markup).not.toContain('role="table"');
     expect(css).toMatch(
       /@media \(max-width: 860px\)[\s\S]*\.run-history-header,[\s\S]*grid-template-columns: 1fr;/,
     );
-    expect(css).toMatch(/@media \(max-width: 560px\)[\s\S]*\.run-history-facts/);
+    expect(css).toMatch(/@media \(max-width: 560px\)[\s\S]*\.run-table-head/);
+    expect(css).toMatch(/@media \(max-width: 560px\)[\s\S]*\.run-cell::before/);
     expect(css).not.toMatch(/display:\s*table|table-layout:/);
   });
 
@@ -100,12 +127,21 @@ describe("map review realism guardrails", () => {
     const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
 
+    expect(componentSource).toContain("NEXT_PUBLIC_STADIA_MAPS_API_KEY");
+    expect(componentSource).toContain("https://tiles.stadiamaps.com/tiles/alidade_smooth/");
     expect(componentSource).toContain("https://tile.openstreetmap.org/");
     expect(componentSource).toContain("Leaflet NYC apartment map");
     expect(componentSource).toContain("syncLeafletMap");
     expect(componentSource).toContain("MTA_SUBWAY_FEATURE_SERVICE");
     expect(componentSource).toContain("MTA_Subway_Routes_Stops/FeatureServer");
     expect(componentSource).toContain("fetchSubwayGeoJson");
+    expect(componentSource).toContain("groceryStoreLocations");
+    expect(componentSource).toContain("createGroceryLeafletIcon");
+    expect(componentSource).toContain("createGroceryPopup");
+    expect(componentSource).toContain("https://locations.traderjoes.com/ny/");
+    expect(componentSource).toContain("https://www.wholefoodsmarket.com/stores");
+    expect(componentSource).toContain("Trader Joe's Staten Island - South Shore");
+    expect(componentSource).toContain("Whole Foods Market Grand Street");
     expect(componentSource).toContain("leaflet.circleMarker");
     expect(componentSource).toContain("Routes: ");
     expect(componentSource).toContain('import("leaflet")');
@@ -120,6 +156,9 @@ describe("map review realism guardrails", () => {
     expect(css).toContain(".leaflet-map");
     expect(css).toContain(".leaflet-control-zoom");
     expect(css).toContain(".leaflet-listing-pin");
+    expect(css).toContain(".leaflet-grocery-pin");
+    expect(css).toContain(".leaflet-grocery-pin.whole-foods");
+    expect(css).toContain(".leaflet-grocery-pin.trader-joes");
     expect(css).toContain(".leaflet-subway-station");
     expect(css).not.toContain(".leaflet-poi-pin");
     expect(css.includes(".map-attribution")).toBe(false);
@@ -129,6 +168,8 @@ describe("map review realism guardrails", () => {
     expect(css.includes(".map-pin")).toBe(false);
     expect(componentSource.includes("Preferred Manhattan zone")).toBe(false);
     expect(componentSource.includes("Brooklyn/Queens fallback context")).toBe(false);
+    expect((componentSource.match(/brand: "trader-joes"/g) ?? []).length).toBe(18);
+    expect((componentSource.match(/brand: "whole-foods"/g) ?? []).length).toBe(21);
     const mapShellBlock = css.slice(css.indexOf(".map-shell {"), css.indexOf(".leaflet-map"));
     expect(mapShellBlock).not.toContain("repeating-linear-gradient");
     expect(mapShellBlock).not.toContain("#d8d3c2");
@@ -157,12 +198,48 @@ describe("listing detail attribution", () => {
     expect(css).toMatch(/\.listing-added-by \{[\s\S]*text-align: right;/);
   });
 
+  it("keeps compact listing rows in non-overlapping grid columns", () => {
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+
+    expect(css).toMatch(
+      /\.listing-row-button \{[\s\S]*grid-template-columns: minmax\(74px, max-content\) minmax\(0, 1fr\) minmax\(72px, max-content\);/,
+    );
+    expect(css).toMatch(/\.listing-row-main \{[\s\S]*min-width: 0;/);
+    expect(css).toMatch(/\.listing-row-button > strong:last-child \{[\s\S]*white-space: nowrap;/);
+  });
+
+  it("labels compact listing rows with average rent per bedroom", () => {
+    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+
+    expect(componentSource).toContain("<span>Avg Rent</span>");
+    expect(componentSource).toContain("<strong>{formatAverageRent(listing)}</strong>");
+    expect(formatAverageRent({ rent: 14500, bedrooms: 5 })).toBe("$2,900");
+    expect(formatAverageRent({ rent: 10150, bedrooms: 6 })).toBe("$1,692");
+    expect(formatAverageRent({ rent: 14500 })).toBe("?");
+    expect(formatAverageRent({ bedrooms: 5 })).toBe("?");
+  });
+
+  it("keeps map list cards from overflowing wrapped title and context text", () => {
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+
+    expect(css).toMatch(/\.map-list-item \{[\s\S]*grid-template-rows: auto auto auto auto;/);
+    expect(css).toMatch(/\.map-list-item \{[\s\S]*line-height: 1\.18;/);
+    expect(css.indexOf(".map-list-item {", css.indexOf("button,"))).toBeGreaterThan(
+      css.indexOf("button,"),
+    );
+    expect(css).toMatch(
+      /\.map-list-item span,[\s\S]*\.map-list-item small \{[\s\S]*white-space: nowrap;/,
+    );
+    expect(css).toMatch(/\.map-list-item strong \{[\s\S]*-webkit-line-clamp: 2;/);
+    expect(css).toMatch(/\.map-list-item strong \{[\s\S]*overflow-wrap: anywhere;/);
+  });
+
   it("renders status above the conditional listing photo carousel", () => {
     const listingWithPhotos = fixtureListings.find((listing) => listing.photos.length > 0)!;
     const markup = renderListingEditorMarkup(listingWithPhotos);
 
     expect(markup).toContain('class="listing-photo-carousel"');
-    expect(markup).toContain(`aria-label="Photos for ${listingWithPhotos.title}"`);
+    expect(markup).toContain(`aria-label="Media for ${listingWithPhotos.title}"`);
     expect(markup.indexOf('class="status-control detail-status-control"')).toBeGreaterThan(
       markup.indexOf(listingWithPhotos.address),
     );
@@ -178,11 +255,55 @@ describe("listing detail attribution", () => {
     const listingWithPhotos = fixtureListings.find((listing) => listing.photos.length > 0)!;
     const markup = renderListingEditorMarkup(listingWithPhotos);
     const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
 
     expect(markup).toContain('class="listing-photo-thumbnail listing-map-thumbnail"');
     expect(markup).toContain(`aria-label="Show map for ${listingWithPhotos.title}"`);
+    expect(markup).toContain('class="listing-photo-media-strip"');
+    expect(markup.indexOf('class="listing-photo-thumbnail listing-map-thumbnail"')).toBeLessThan(
+      markup.indexOf('class="listing-photo-thumbnails"'),
+    );
+    expect(markup.indexOf('class="listing-photo-thumbnail listing-map-thumbnail"')).toBeLessThan(
+      markup.indexOf(`aria-label="Show photo 1 of ${listingWithPhotos.photos.length}`),
+    );
     expect(componentSource).toContain("createMapReviewModel([listing], listing.id)");
     expect(componentSource).toContain('className="listing-inline-map"');
+    expect(componentSource).toContain(
+      'className="listing-photo-media-strip listing-photo-modal-media-strip"',
+    );
+    expect(css).toMatch(/\.listing-photo-media-strip \{[\s\S]*grid-template-columns:/);
+    expect(css).toMatch(/\.listing-photo-thumbnails \{[\s\S]*overflow-x: auto;/);
+    expect(css).not.toMatch(/\.listing-map-thumbnail \{[\s\S]*position: sticky;/);
+  });
+
+  it("lets side arrow keys navigate both inline and enlarged photo carousels", () => {
+    const listingWithPhotos = fixtureListings.find((listing) => listing.photos.length > 0)!;
+    const markup = renderListingEditorMarkup(listingWithPhotos);
+    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+
+    expect(markup).toContain('tabindex="0"');
+    expect(componentSource).toContain("const handlePhotoCarouselKeyDown");
+    expect(componentSource).toContain("onKeyDown={handlePhotoCarouselKeyDown}");
+    expect(componentSource).toContain('event.key === "ArrowLeft"');
+    expect(componentSource).toContain('event.key === "ArrowRight"');
+    expect(componentSource).toContain('window.addEventListener("keydown", handleModalKeyDown)');
+  });
+
+  it("shows the inline listing map even when a listing has no photos", () => {
+    const listingWithoutPhotos: ListingCandidate = {
+      ...fixtureListings[0]!,
+      id: "no-photo-map-listing",
+      title: "No photo map listing",
+      photos: [],
+      imageEvidence: [],
+    };
+
+    const markup = renderListingEditorMarkup(listingWithoutPhotos);
+
+    expect(markup).toContain(`aria-label="Media for ${listingWithoutPhotos.title}"`);
+    expect(markup).toContain('class="listing-inline-map"');
+    expect(markup).toContain(`Interactive map for ${listingWithoutPhotos.title}`);
+    expect(markup).not.toContain('class="listing-photo-thumbnails"');
   });
 
   it("shows listing descriptions above the group section", () => {
@@ -198,6 +319,20 @@ describe("listing detail attribution", () => {
     expect(markup.indexOf('aria-label="Listing description"')).toBeLessThan(
       markup.indexOf('aria-label="Group comments and reactions"'),
     );
+  });
+
+  it("shows approve/reject controls for review-needed listings", () => {
+    const reviewListing = fixtureListings.find(
+      (listing) => listing.triageBucket === "review-needed",
+    )!;
+    const markup = renderListingEditorMarkup({
+      ...reviewListing,
+      reviewStatus: "review",
+    });
+
+    expect(markup).toContain('aria-label="Review decision"');
+    expect(markup).toContain("Approve");
+    expect(markup).toContain("Reject and remove");
   });
 
   it("collapses long listing descriptions behind a view more control", () => {
@@ -225,11 +360,14 @@ describe("listing detail attribution", () => {
     expect(markup).toContain("4 days");
   });
 
-  it("does not render the photo carousel or note-count label when there are no photos", () => {
+  it("renders map-only media without photo thumbnails when there are no photos", () => {
     const listingWithoutPhotos = fixtureListings.find((listing) => listing.photos.length === 0)!;
     const markup = renderListingEditorMarkup(listingWithoutPhotos);
 
-    expect(markup).not.toContain('class="listing-photo-carousel"');
+    expect(markup).toContain('class="listing-photo-carousel"');
+    expect(markup).toContain(`aria-label="Media for ${listingWithoutPhotos.title}"`);
+    expect(markup).toContain('class="listing-inline-map"');
+    expect(markup).not.toContain('class="listing-photo-thumbnails"');
     expect(markup).not.toMatch(/\d+ notes/);
     expect(markup).not.toContain("No invite");
   });
@@ -508,14 +646,14 @@ describe("T-1.6 mobile-first and accessibility acceptance guardrails", () => {
       /\.map-heading,[\s\S]*\.map-review-grid \{[\s\S]*grid-template-columns: 1fr;/,
     );
     expect(css).toMatch(
-      /\.listing-table-head,[\s\S]*\.listing-row-button \{[\s\S]*grid-template-columns: 118px minmax\(0, 0\.82fr\) 84px;/,
+      /\.listing-table-head,[\s\S]*\.listing-row-button \{[\s\S]*grid-template-columns: minmax\(74px, max-content\) minmax\(0, 1fr\) minmax\(72px, max-content\);/,
     );
     expect(css).toContain("--line-dark: #514036;");
     expect(css).toContain("--line-light: #cdbfae;");
     expect(css).toMatch(/\.listing-card \{[\s\S]*gap: 0;/);
     expect(css).toMatch(/\.listing-group-label \{[\s\S]*border-top: 1px solid var\(--line\);/);
     expect(css).toMatch(
-      /@media \(max-width: 860px\)[\s\S]*\.listing-row-button \{[\s\S]*grid-template-columns: 112px minmax\(0, 0\.8fr\) 78px;/,
+      /@media \(max-width: 860px\)[\s\S]*\.listing-row-button \{[\s\S]*grid-template-columns: minmax\(74px, max-content\) minmax\(0, 1fr\) minmax\(72px, max-content\);/,
     );
     expect(css).toMatch(/padding-right: max\(10px, env\(safe-area-inset-right\)\)/);
     expect(css).toMatch(/padding-left: max\(10px, env\(safe-area-inset-left\)\)/);
@@ -576,6 +714,7 @@ function renderListingEditorMarkup(listing: ListingCandidate): string {
       onCommentTextChange: () => undefined,
       onFieldChange: () => undefined,
       onStatusChange: () => undefined,
+      onReviewDecision: () => undefined,
       onSourceOpen: () => undefined,
       onReaction: () => undefined,
       onComment: (event) => event.preventDefault(),
