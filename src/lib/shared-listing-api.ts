@@ -11,8 +11,10 @@ import {
   type ReviewStatus,
 } from "./listings";
 import { appendGroupAction, upsertRejectedMemory } from "./saved-list-storage";
+import { isAllowedInviteCode } from "./api-auth";
 import {
   appendSharedGroupAction,
+  deleteSavedListing,
   findListingByDuplicateKey,
   readSavedListing,
   readSharedListingSnapshot,
@@ -25,6 +27,7 @@ import { extractListingFromUrlLive, type SingleLinkExtractionEnv } from "./singl
 
 export type SharedApiEnv = SingleLinkExtractionEnv & { DB?: D1DatabaseLike };
 export const allowedInviteCode = defaultSearchGroup.inviteCode;
+export { isAllowedInviteCode };
 
 export async function createListingFromSharedApi({
   db,
@@ -107,6 +110,43 @@ export async function mutateSharedListingStatus({
   return readSharedListingSnapshot(db, identity.groupId);
 }
 
+export async function mutateSharedListingReviewDecision({
+  db,
+  identity,
+  listingId,
+  decision,
+}: {
+  db: D1DatabaseLike;
+  identity: InviteIdentity;
+  listingId: string;
+  decision: "approve" | "reject";
+}) {
+  const listing = await requireListing(db, identity.groupId, listingId);
+
+  if (decision === "approve") {
+    const approvedListing = updateReviewStatus(
+      { ...listing, triageBucket: "confirmed-match" },
+      "new",
+    );
+    await upsertSavedListing(db, approvedListing);
+    const action = appendGroupAction([], identity, listing, {
+      actionType: "status-change",
+      status: "new",
+    })[0];
+    if (action) await appendSharedGroupAction(db, action);
+    return readSharedListingSnapshot(db, identity.groupId);
+  }
+
+  const memory = upsertRejectedMemory(
+    [],
+    updateReviewStatus(listing, "rejected"),
+    [`Rejected from review by ${identity.displayName}`, ...listing.concerns][0]!,
+  )[0];
+  if (memory) await upsertSeenRejectedMemoryRecord(db, memory);
+  await deleteSavedListing(db, identity.groupId, listingId);
+  return readSharedListingSnapshot(db, identity.groupId);
+}
+
 export async function mutateSharedListingField({
   db,
   identity,
@@ -154,10 +194,6 @@ export function parseApiIdentity(body: Record<string, unknown>): InviteIdentity 
   }
 
   return createInviteIdentity(inviteCode, displayName);
-}
-
-export function isAllowedInviteCode(value: unknown): boolean {
-  return typeof value === "string" && value.trim() === allowedInviteCode;
 }
 
 async function requireListing(db: D1DatabaseLike, groupId: string, listingId: string) {

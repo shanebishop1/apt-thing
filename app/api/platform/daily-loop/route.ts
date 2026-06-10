@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireGroupCode } from "@/lib/api-auth";
 import {
   createDailyLoopCronPayload,
   runDailySourceAgentLoop,
@@ -6,7 +7,7 @@ import {
   type DailyLoopMode,
   type DailyLoopTrigger,
 } from "@/lib/daily-source-loop";
-import { createInviteIdentity, defaultSearchGroup, type Cadence } from "@/lib/listings";
+import { type Cadence } from "@/lib/listings";
 
 type DailyLoopRouteEnv = DailyLoopEnv & Partial<Record<"APP_ENV", string>>;
 
@@ -23,26 +24,20 @@ async function getDailyLoopEnv(): Promise<DailyLoopRouteEnv | undefined> {
 
 export async function GET(request: NextRequest) {
   const env = await getDailyLoopEnv();
-  const searchParams = request.nextUrl.searchParams;
+  const searchParams = new URL(request.url).searchParams;
   const cadence = normalizeCadence(searchParams.get("cadence")) ?? "manual";
   const trigger =
     normalizeTrigger(searchParams.get("trigger")) ?? (cadence === "daily" ? "cron" : "manual");
   const requestedMode = normalizeMode(searchParams.get("mode"));
   const mode: DailyLoopMode = requestedMode ?? "fixture";
-  const identity = createInviteIdentity(
-    searchParams.get("inviteCode") ?? defaultSearchGroup.inviteCode,
-    searchParams.get("displayName") ?? "Daily Loop API",
-  );
-
-  if (!identity) {
-    return NextResponse.json({ ok: false, error: "invalid-invite-identity" }, { status: 400 });
-  }
+  const auth = requireGroupCode(request, undefined, "Daily Loop API");
+  if (!auth.ok) return auth.response;
 
   const result = await runDailySourceAgentLoop({
     mode,
     cadence,
     trigger,
-    identity,
+    identity: auth.identity,
     env: {
       GEMINI_API_KEY: env?.GEMINI_API_KEY ?? process.env.GEMINI_API_KEY,
       REALTYAPI_KEY: env?.REALTYAPI_KEY ?? process.env.REALTYAPI_KEY,
@@ -70,24 +65,21 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const env = await getDailyLoopEnv();
+  const searchParams = new URL(request.url).searchParams;
   const body = await readJson(request);
-  const cadence = normalizeCadence(body.cadence) ?? "manual";
-  const trigger = normalizeTrigger(body.trigger) ?? "manual";
-  const mode = normalizeMode(body.mode) ?? "fixture";
-  const identity = createInviteIdentity(
-    typeof body.inviteCode === "string" ? body.inviteCode : defaultSearchGroup.inviteCode,
-    typeof body.displayName === "string" ? body.displayName : "Daily Loop API",
-  );
-
-  if (!identity) {
-    return NextResponse.json({ ok: false, error: "invalid-invite-identity" }, { status: 400 });
-  }
+  const cadence =
+    normalizeCadence(searchParams.get("cadence")) ?? normalizeCadence(body.cadence) ?? "manual";
+  const trigger =
+    normalizeTrigger(searchParams.get("trigger")) ?? normalizeTrigger(body.trigger) ?? "manual";
+  const mode = normalizeMode(searchParams.get("mode")) ?? normalizeMode(body.mode) ?? "fixture";
+  const auth = requireGroupCode(request, body, "Daily Loop API");
+  if (!auth.ok) return auth.response;
 
   const result = await runDailySourceAgentLoop({
     mode,
     cadence,
     trigger,
-    identity,
+    identity: auth.identity,
     failStreetEasy: body.failStreetEasy === true,
     failSecondary: body.failSecondary === true,
     env: {

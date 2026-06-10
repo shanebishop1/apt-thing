@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireGroupCode } from "@/lib/api-auth";
 import { REVIEW_STATUSES, type FieldProvenance } from "@/lib/listings";
 import {
   appendSharedAction,
+  mutateSharedListingReviewDecision,
   mutateSharedListingField,
   mutateSharedListingStatus,
   parseApiIdentity,
@@ -18,7 +20,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   const body = await readJson(request);
-  const identity = parseApiIdentity(body);
+  const auth = requireGroupCode(request, body, "Group Listing API");
+  if (!auth.ok) return auth.response;
+  const identity = parseApiIdentity({ ...body, inviteCode: auth.inviteCode });
   if (!identity) {
     return NextResponse.json({ ok: false, error: "invalid-invite-code" }, { status: 403 });
   }
@@ -32,6 +36,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         identity,
         listingId,
         status: body.status as never,
+      });
+      return NextResponse.json({ ok: true, snapshot });
+    }
+
+    if (
+      body.mutation === "review-decision" &&
+      (body.decision === "approve" || body.decision === "reject")
+    ) {
+      const snapshot = await mutateSharedListingReviewDecision({
+        db: env.DB,
+        identity,
+        listingId,
+        decision: body.decision,
       });
       return NextResponse.json({ ok: true, snapshot });
     }
@@ -63,7 +80,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const body = await readJson(request);
-  const identity = parseApiIdentity(body);
+  const auth = requireGroupCode(request, body, "Group Listing API");
+  if (!auth.ok) return auth.response;
+  const identity = parseApiIdentity({ ...body, inviteCode: auth.inviteCode });
   if (!identity) {
     return NextResponse.json({ ok: false, error: "invalid-invite-code" }, { status: 403 });
   }

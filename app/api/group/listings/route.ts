@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { defaultSearchGroup } from "@/lib/listings";
-import {
-  createListingFromSharedApi,
-  isAllowedInviteCode,
-  parseApiIdentity,
-} from "@/lib/shared-listing-api";
+import { requireGroupCode } from "@/lib/api-auth";
+import { createListingFromSharedApi, parseApiIdentity } from "@/lib/shared-listing-api";
 import { readSharedListingSnapshot, type D1DatabaseLike } from "@/lib/shared-listing-store";
 
 type AppRouteEnv = Partial<
@@ -18,9 +15,8 @@ export async function GET(request: NextRequest) {
   }
 
   const groupId = request.nextUrl.searchParams.get("groupId") ?? defaultSearchGroup.id;
-  if (!isAllowedInviteCode(request.headers.get("X-Invite-Code"))) {
-    return NextResponse.json({ ok: false, error: "invalid-invite-code" }, { status: 403 });
-  }
+  const auth = requireGroupCode(request, undefined, "Group Listings API");
+  if (!auth.ok) return auth.response;
 
   const snapshot = await readSharedListingSnapshot(env.DB, groupId);
   return NextResponse.json({ ok: true, snapshot });
@@ -33,7 +29,9 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await readJson(request);
-  const identity = parseApiIdentity(body);
+  const auth = requireGroupCode(request, body, "Group Listings API");
+  if (!auth.ok) return auth.response;
+  const identity = parseApiIdentity({ ...body, inviteCode: auth.inviteCode });
   const rawUrl = typeof body.url === "string" ? body.url : "";
   if (!identity) {
     return NextResponse.json({ ok: false, error: "invalid-invite-code" }, { status: 403 });

@@ -25,13 +25,25 @@ describe("GET /api/group/listings authorization", () => {
     expect(payload).toMatchObject({ ok: true, snapshot: { groupId: defaultSearchGroup.id } });
   });
 
-  it("rejects query-string invite codes when the header is missing", async () => {
+  it("accepts explicit query-string invite codes for operator/API callers", async () => {
     mockState.env = { DB: createEmptyD1() };
 
     const response = await GET(
       new NextRequest(
         `http://localhost/api/group/listings?groupId=${defaultSearchGroup.id}&inviteCode=${defaultSearchGroup.inviteCode}`,
       ),
+    );
+    const payload = (await response.json()) as { ok: boolean; error?: string };
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({ ok: true, snapshot: { groupId: defaultSearchGroup.id } });
+  });
+
+  it("rejects requests when no invite code is supplied", async () => {
+    mockState.env = { DB: createEmptyD1() };
+
+    const response = await GET(
+      new NextRequest(`http://localhost/api/group/listings?groupId=${defaultSearchGroup.id}`),
     );
     const payload = (await response.json()) as { ok: boolean; error?: string };
 
