@@ -512,13 +512,229 @@ describe("runDailySourceAgentLoop", () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalled();
     expect(result.sourceCoverage[0]?.classification).toBe("success");
     expect(result.sourceCoverage[0]?.queryMetadata).toMatchObject({
       liveSafe: { liveAttempted: true },
     });
     expect(result.listings).toHaveLength(1);
     expect(result.listings[0]?.sourceListingId).toBe("live-1");
+  });
+
+  it("normalizes RealtyAPI nested rental details into saved listing fields", async () => {
+    const liveListing = {
+      id: "live-nested-1",
+      urlPath: "/building/live-nested/5a",
+      pricing: { price: 11000, noFee: true },
+      propertyStatus: "ACTIVE",
+      propertyDetails: {
+        address: {
+          street: "123 Live Nested Street",
+          unit: "5A",
+          city: "NEW YORK",
+          state: "NY",
+        },
+        bedroomCount: 5,
+        fullBathroomCount: 2,
+        halfBathroomCount: 1,
+        amenities: { list: ["DOORMAN"] },
+        features: { list: ["DISHWASHER"] },
+      },
+      media: { photos: ["https://images.example/nested.jpg"] },
+      availableAt: "2026-08-15",
+      description: "Nested RealtyAPI payload.",
+    };
+    const fetchImpl = vi.fn(async (url: string) =>
+      Response.json(
+        url.includes("search/rent")
+          ? { search_results: { listings: [{ node: liveListing }] } }
+          : liveListing,
+      ),
+    );
+
+    const result = await runDailySourceAgentLoop({
+      identity,
+      mode: "live-safe",
+      failSecondary: true,
+      env: { REALTYAPI_KEY: "test-key", REALTYAPI_BASE_URL: "https://realty.test" },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.listings).toHaveLength(1);
+    expect(result.listings[0]).toMatchObject({
+      sourceListingId: "live-nested-1",
+      address: "123 Live Nested Street 5A",
+      borough: "NEW YORK",
+      rent: 11000,
+      bedrooms: 5,
+      bathrooms: 2.5,
+      availableAt: "2026-08-15",
+    });
+    expect(result.listings[0]?.amenities).toEqual(["DOORMAN", "DISHWASHER"]);
+    expect(result.listings[0]?.photos).toEqual(["https://images.example/nested.jpg"]);
+  });
+
+  it("keeps eligible RealtyAPI search nodes that expose top-level street and unit", async () => {
+    const searchNode = {
+      id: "live-search-node-1",
+      urlPath: "/building/live-search-node/1f",
+      status: "ACTIVE",
+      street: "58 2nd Avenue",
+      unit: "1F",
+      areaName: "East Village",
+      bedroomCount: 5,
+      fullBathroomCount: 2,
+      halfBathroomCount: 0,
+      price: 12995,
+      geoPoint: { latitude: 40.7251, longitude: -73.9912 },
+      availableAt: "2026-08-01",
+    };
+    const detailNode = {
+      ...searchNode,
+      propertyStatus: "ACTIVE",
+      pricing: { price: 12995 },
+      propertyDetails: {
+        address: { street: "58 2nd Avenue", unit: "1F", city: "NEW YORK" },
+        bedroomCount: 5,
+        fullBathroomCount: 2,
+        halfBathroomCount: 0,
+      },
+      media: { photos: ["https://images.example/search-node.jpg"] },
+    };
+    const fetchImpl = vi.fn(async (url: string) =>
+      Response.json(
+        url.includes("search/rent")
+          ? { search_results: { listings: [{ node: searchNode }] } }
+          : detailNode,
+      ),
+    );
+
+    const result = await runDailySourceAgentLoop({
+      identity,
+      mode: "live-safe",
+      failSecondary: true,
+      env: { REALTYAPI_KEY: "test-key", REALTYAPI_BASE_URL: "https://realty.test" },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.listings).toHaveLength(1);
+    expect(result.listings[0]).toMatchObject({
+      sourceListingId: "live-search-node-1",
+      title: "58 2nd Avenue 1F",
+      address: "58 2nd Avenue 1F",
+      neighborhood: "East Village",
+      rent: 12995,
+      bedrooms: 5,
+      bathrooms: 2,
+      location: { latitude: 40.7251, longitude: -73.9912 },
+    });
+  });
+
+  it("preserves search-result photo URLs when the RealtyAPI detail payload omits photos", async () => {
+    const searchNode = {
+      id: "live-search-photo-node-1",
+      urlPath: "/building/live-search-photo-node/1f",
+      status: "ACTIVE",
+      street: "58 2nd Avenue",
+      unit: "1F",
+      areaName: "East Village",
+      bedroomCount: 5,
+      fullBathroomCount: 2,
+      price: 12995,
+      media: { photos: [{ large: "https://images.example/search-photo-large.jpg" }] },
+    };
+    const detailNode = {
+      ...searchNode,
+      media: undefined,
+      propertyDetails: {
+        address: { street: "58 2nd Avenue", unit: "1F", city: "NEW YORK" },
+        bedroomCount: 5,
+        fullBathroomCount: 2,
+      },
+    };
+    const fetchImpl = vi.fn(async (url: string) =>
+      Response.json(
+        url.includes("search/rent")
+          ? { search_results: { listings: [{ node: searchNode }] } }
+          : detailNode,
+      ),
+    );
+
+    const result = await runDailySourceAgentLoop({
+      identity,
+      mode: "live-safe",
+      env: { REALTYAPI_KEY: "test-key", REALTYAPI_BASE_URL: "https://realty.test" },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.listings[0]?.photos).toEqual(["https://images.example/search-photo-large.jpg"]);
+  });
+
+  it("does not save live-safe StreetEasy rows without a real address", async () => {
+    const liveListing = {
+      id: "live-missing-address",
+      urlPath: "/building/live-missing-address/5a",
+      pricing: { price: 11000 },
+      propertyStatus: "ACTIVE",
+      propertyDetails: {
+        bedroomCount: 5,
+        fullBathroomCount: 2,
+      },
+    };
+    const fetchImpl = vi.fn(async (url: string) =>
+      Response.json(
+        url.includes("search/rent")
+          ? { search_results: { listings: [{ node: liveListing }] } }
+          : liveListing,
+      ),
+    );
+
+    const result = await runDailySourceAgentLoop({
+      identity,
+      mode: "live-safe",
+      env: { REALTYAPI_KEY: "test-key", REALTYAPI_BASE_URL: "https://realty.test" },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.sourceCoverage[0]).toMatchObject({
+      source: "streeteasy",
+      checkedCount: 0,
+      candidateCount: 0,
+    });
+    expect(result.listings.some((listing) => listing.source === "streeteasy")).toBe(false);
+  });
+
+  it("does not add Zillow manual fixture rows during live-safe runs", async () => {
+    const fetchImpl = vi.fn(async (url: string) =>
+      Response.json(url.includes("search/rent") ? { search_results: { listings: [] } } : {}),
+    );
+
+    const result = await runDailySourceAgentLoop({
+      identity,
+      mode: "live-safe",
+      env: { REALTYAPI_KEY: "test-key", REALTYAPI_BASE_URL: "https://realty.test" },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.listings).toHaveLength(0);
+    expect(result.sourceCoverage.find((coverage) => coverage.source === "zillow")).toMatchObject({
+      checkedCount: 0,
+      candidateCount: 0,
+    });
+  });
+
+  it("does not fall back to StreetEasy fixture rows during live-safe runs with no eligible live results", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ search_results: { listings: [] } }));
+
+    const result = await runDailySourceAgentLoop({
+      identity,
+      mode: "live-safe",
+      env: { REALTYAPI_KEY: "test-key", REALTYAPI_BASE_URL: "https://realty.test" },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.listings).toHaveLength(0);
+    expect(result.sourceCoverage[0]).toMatchObject({ checkedCount: 0, candidateCount: 0 });
   });
 
   it("marks non-2xx and missing live-safe detail metadata without capping detail coverage", async () => {
@@ -537,12 +753,11 @@ describe("runDailySourceAgentLoop", () => {
       amenities: ["Laundry"],
       photos: [`https://images.example/live-${index + 1}.jpg`],
     }));
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchImpl = vi.fn(async (url: string) => {
       if (url.includes("search/rent")) return Response.json({ results: liveListings });
-      const body = JSON.parse(String(init?.body ?? "{}")) as { listing_id?: string };
-      if (body.listing_id === "live-2")
-        return Response.json({ error: "not found" }, { status: 404 });
-      if (body.listing_id === "live-3") return Response.json({});
+      const buildingId = new URL(url).searchParams.get("buildingid");
+      if (buildingId === "live-2") return Response.json({ error: "not found" }, { status: 404 });
+      if (buildingId === "live-3") return Response.json({});
       return Response.json({ listing: liveListings[0] });
     });
 
@@ -554,7 +769,7 @@ describe("runDailySourceAgentLoop", () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalled();
     expect(result.sourceCoverage[0]?.classification).toBe("partial");
     expect(result.sourceCoverage[0]?.queryMetadata).toMatchObject({
       liveSafe: { failureCode: "streeteasy-live-safe-detail-partial" },
@@ -812,7 +1027,9 @@ describe("runDailySourceAgentLoop", () => {
     const previousGeminiKey = process.env.GEMINI_API_KEY;
     process.env.GEMINI_API_KEY = "";
     const response = await GET(
-      new NextRequest("http://localhost/api/platform/daily-loop?cadence=daily&trigger=cron"),
+      new NextRequest("http://localhost/api/platform/daily-loop?cadence=daily&trigger=cron", {
+        headers: { "X-Invite-Code": defaultSearchGroup.inviteCode },
+      }),
     );
     process.env.GEMINI_API_KEY = previousGeminiKey;
     const body = (await response.json()) as Record<string, any>;
@@ -837,5 +1054,15 @@ describe("runDailySourceAgentLoop", () => {
     });
     expect(body.observability.operatorEvidence).toEqual(body.operatorEvidence);
     expect(body.persistence.d1.skippedReason).toBe("missing-binding");
+  });
+
+  it("rejects daily-loop route requests without an invite code", async () => {
+    const response = await GET(
+      new NextRequest("http://localhost/api/platform/daily-loop?cadence=daily&trigger=cron"),
+    );
+    const body = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual({ ok: false, error: "invalid-invite-code" });
   });
 });

@@ -466,14 +466,18 @@ function extractStreetEasyFixture({
   }
 
   const details = match.details;
-  const bathrooms =
-    details.bathrooms ?? (details.fullBathrooms ?? 0) + (details.halfBathrooms ?? 0) * 0.5;
+  const fallbackBathrooms =
+    details.fullBathrooms === undefined && details.halfBathrooms === undefined
+      ? undefined
+      : (details.fullBathrooms ?? 0) + (details.halfBathrooms ?? 0) * 0.5;
+  const bathrooms = details.bathrooms ?? fallbackBathrooms;
   const draft: ListingDraft = {
     sourceListingId: details.listingId,
     title: details.title,
     address: details.address,
     neighborhood: details.neighborhood,
     borough: details.borough,
+    location: details.location,
     rent: details.rent,
     bedrooms: details.bedrooms,
     bathrooms,
@@ -566,6 +570,7 @@ function extractManualProviderFixture({
     address: fixture.address,
     neighborhood: fixture.neighborhood,
     borough: fixture.borough,
+    location: fixture.location,
     rent: fixture.rent,
     bedrooms: fixture.bedrooms,
     bathrooms: fixture.bathrooms,
@@ -656,6 +661,7 @@ function buildNormalizedListing({
     address: draft.address ?? "Unknown address",
     neighborhood: draft.neighborhood,
     borough: draft.borough,
+    location: draft.location,
     rent: draft.rent,
     bedrooms: draft.bedrooms,
     bathrooms: draft.bathrooms,
@@ -688,6 +694,7 @@ function buildListingFromOutput({
     address: normalized.address,
     neighborhood: normalized.neighborhood,
     borough: normalized.borough,
+    location: normalized.location,
     rent: normalized.rent,
     bedrooms: normalized.bedrooms,
     bathrooms: normalized.bathrooms,
@@ -709,6 +716,7 @@ function buildListingFromOutput({
     },
     userQualified: intakeKind === "pasted-url",
     sourceListingId: normalized.sourceListingId,
+    location: normalized.location,
     extractionStatus,
     triageStatus,
     triageBucket,

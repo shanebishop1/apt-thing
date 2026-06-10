@@ -154,6 +154,17 @@ export async function readSavedListing(
   return row ? parseJson<ListingCandidate>(row.listing_json) : undefined;
 }
 
+export async function deleteSavedListing(
+  db: D1DatabaseLike,
+  groupId: string,
+  listingId: string,
+): Promise<void> {
+  await db
+    .prepare("DELETE FROM app_saved_listings WHERE group_id = ? AND id = ?")
+    .bind(groupId, listingId)
+    .run();
+}
+
 export async function appendSharedGroupAction(
   db: D1DatabaseLike,
   action: GroupActionRecord,

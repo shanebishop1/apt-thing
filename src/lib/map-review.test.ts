@@ -83,6 +83,29 @@ describe("G3A map-enhanced review model", () => {
     });
   });
 
+  it("uses provider coordinates from saved listings before fixture lookup", () => {
+    const listing = {
+      ...fixtureListings[0]!,
+      id: "streeteasy-live-geopoint",
+      title: "58 2nd Avenue 1F",
+      address: "58 2nd Avenue 1F",
+      neighborhood: "East Village",
+      borough: "Manhattan",
+      location: { latitude: 40.7251, longitude: -73.9912 },
+    };
+
+    const model = createMapReviewModel([listing], listing.id);
+
+    expect(model.locatedCandidates).toHaveLength(1);
+    expect(model.missingLocationCandidates).toHaveLength(0);
+    expect(model.selected).toMatchObject({
+      pinState: "confirmed",
+      coordinates: { latitude: 40.7251, longitude: -73.9912 },
+      zoneLabel: "East Village",
+      zoneKind: "preferred-manhattan",
+    });
+  });
+
   it("geocodes StreetEasy addresses when the saved address includes unit text", () => {
     const listing = {
       ...fixtureListings[0]!,
@@ -125,5 +148,31 @@ describe("G3A map-enhanced review model", () => {
       zoneLabel: "East Village",
       zoneKind: "preferred-manhattan",
     });
+  });
+
+  it("geocodes current live StreetEasy saved-list addresses with unit text", () => {
+    const listings = [
+      ["58 2nd Avenue 1F", "East Village"],
+      ["54 2nd Avenue 3", "East Village"],
+      ["176 Stanton Street 1A", "Lower East Side"],
+      ["171 Attorney Street 4A", "Lower East Side"],
+      ["247 Mulberry Street SW", "Nolita"],
+      ["171 6th Avenue 3B", "Hudson Square"],
+    ].map(([address, neighborhood]) => ({
+      ...fixtureListings[0]!,
+      id: `streeteasy-${address}`,
+      title: "StreetEasy listing",
+      address,
+      neighborhood,
+      borough: "Manhattan",
+    }));
+
+    const model = createMapReviewModel(listings, listings[0]?.id);
+
+    expect(model.locatedCandidates).toHaveLength(listings.length);
+    expect(model.missingLocationCandidates).toHaveLength(0);
+    expect(model.candidates.map((candidate) => candidate.zoneKind)).toEqual(
+      listings.map(() => "preferred-manhattan"),
+    );
   });
 });

@@ -6,6 +6,7 @@ import {
 } from "./extraction";
 import type { ListingCandidate } from "./listings";
 import {
+  PREFERRED_NEIGHBORHOODS,
   createGroupScopedListingState,
   createInviteIdentity,
   createListingFromUrl,
@@ -117,7 +118,7 @@ export const streetEasyBatchFixture: StreetEasyBatchFixture = {
   kind: "streeteasy-batch-fixture",
   query: {
     endpoint: "search/rent",
-    areas: ["chelsea", "flatiron"],
+    areas: [...PREFERRED_NEIGHBORHOODS],
     minBeds: 5,
     maxRent: 15000,
     rentalStatus: "active",

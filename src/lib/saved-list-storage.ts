@@ -712,7 +712,10 @@ export function createReviewDashboardModel(
     userQualifiedPasted: userQualifiedPasted.length,
     history: history.length,
     active: listings.filter(
-      (listing) => listing.reviewStatus !== "rejected" && listing.reviewStatus !== "unavailable",
+      (listing) =>
+        listing.reviewStatus !== "rejected" &&
+        listing.reviewStatus !== "unavailable" &&
+        listing.reviewStatus !== "gone",
     ).length,
     touring: listings.filter((listing) => listing.reviewStatus === "touring").length,
     manualNeeded: listings.filter((listing) => listing.extractionStatus === "manual-needed").length,
@@ -748,6 +751,7 @@ function isCurrentMatch(listing: ListingCandidate): boolean {
   return (
     listing.reviewStatus !== "rejected" &&
     listing.reviewStatus !== "unavailable" &&
+    listing.reviewStatus !== "gone" &&
     listing.triageBucket === "confirmed-match"
   );
 }
@@ -767,11 +771,13 @@ function sortDashboardSection(listings: ListingCandidate[]): ListingCandidate[] 
 
 function compareActionableListings(a: ListingCandidate, b: ListingCandidate): number {
   const statusRank: Record<ReviewStatus, number> = {
-    touring: 0,
-    interested: 1,
-    new: 2,
-    unavailable: 3,
-    rejected: 4,
+    review: 0,
+    touring: 1,
+    interested: 2,
+    new: 3,
+    unavailable: 4,
+    gone: 5,
+    rejected: 6,
   };
   const statusDelta = statusRank[a.reviewStatus] - statusRank[b.reviewStatus];
 

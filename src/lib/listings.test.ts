@@ -388,7 +388,15 @@ describe("listing contracts", () => {
       "failed",
       "cancelled",
     ]);
-    expect(REVIEW_STATUSES).toEqual(["new", "interested", "touring", "unavailable", "rejected"]);
+    expect(REVIEW_STATUSES).toEqual([
+      "review",
+      "new",
+      "interested",
+      "touring",
+      "unavailable",
+      "gone",
+      "rejected",
+    ]);
 
     const state = createGroupScopedListingState(
       "group-a",

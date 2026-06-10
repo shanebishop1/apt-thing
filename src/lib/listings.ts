@@ -53,7 +53,14 @@ export type RunStatus = BatchJobStatus;
 
 export type Cadence = "manual" | "daily" | "hourly";
 
-export type ReviewStatus = "new" | "interested" | "touring" | "unavailable" | "rejected";
+export type ReviewStatus =
+  | "review"
+  | "new"
+  | "interested"
+  | "touring"
+  | "unavailable"
+  | "gone"
+  | "rejected";
 
 export type FitFlag =
   | "price_fit"
@@ -265,6 +272,7 @@ export type NormalizedListingJson = {
   address: string;
   neighborhood?: string;
   borough?: string;
+  location?: ListingLocation;
   rent?: number;
   bedrooms?: number;
   bathrooms?: number;
@@ -290,6 +298,13 @@ export type ImageEvidence = {
   url: string;
   role: "primary" | "supporting";
   sentToAi: boolean;
+};
+
+export type ListingLocation = {
+  latitude?: number;
+  longitude?: number;
+  subwayContext?: string;
+  amenityContext?: string[];
 };
 
 export type AgentTriage = {
@@ -344,6 +359,7 @@ export type ListingCandidate = {
   address: string;
   neighborhood?: string;
   borough?: string;
+  location?: ListingLocation;
   rent?: number;
   bedrooms?: number;
   bathrooms?: number;
@@ -383,6 +399,7 @@ export type ListingDraft = Partial<
     | "address"
     | "neighborhood"
     | "borough"
+    | "location"
     | "rent"
     | "bedrooms"
     | "bathrooms"
@@ -426,7 +443,7 @@ export type PastedListingIntakeResult =
       errorCode: UrlValidationErrorCode;
     };
 
-const preferredNeighborhoods = new Set([
+export const PREFERRED_NEIGHBORHOODS = [
   "chelsea",
   "flatiron",
   "nomad",
@@ -435,7 +452,9 @@ const preferredNeighborhoods = new Set([
   "greenwich village",
   "nolita",
   "soho",
-]);
+] as const;
+
+const preferredNeighborhoods = new Set<string>(PREFERRED_NEIGHBORHOODS);
 
 export const MAX_IMAGES_PER_LISTING = 5;
 
@@ -518,10 +537,12 @@ export const BATCH_RUN_STATUSES: RunStatus[] = [
   "cancelled",
 ];
 export const REVIEW_STATUSES: ReviewStatus[] = [
+  "review",
   "new",
   "interested",
   "touring",
   "unavailable",
+  "gone",
   "rejected",
 ];
 
@@ -825,6 +846,7 @@ export function createListingFromUrl(
     address: mergedDraft.address ?? "Unknown address",
     neighborhood: mergedDraft.neighborhood,
     borough: mergedDraft.borough,
+    location: mergedDraft.location,
     rent: mergedDraft.rent,
     bedrooms: mergedDraft.bedrooms,
     bathrooms: mergedDraft.bathrooms,

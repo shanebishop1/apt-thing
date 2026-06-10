@@ -146,6 +146,34 @@ const mapContextFixtures: MapContextFixture[] = [
     ["1 Av", ["L"], 320],
     ["3 Av", ["L"], 640],
   ]),
+  createContext("58 2nd Avenue", 40.7254, -73.9901, "East Village", "preferred-manhattan", [
+    ["2 Av", ["F"], 360],
+    ["Bleecker St", ["6"], 610],
+  ]),
+  createContext("54 2nd Avenue", 40.7252, -73.9902, "East Village", "preferred-manhattan", [
+    ["2 Av", ["F"], 340],
+    ["Bleecker St", ["6"], 630],
+  ]),
+  createContext("176 Stanton Street", 40.7209, -73.9845, "Lower East Side", "preferred-manhattan", [
+    ["Delancey St-Essex St", ["F", "M", "J", "Z"], 410],
+    ["2 Av", ["F"], 730],
+  ]),
+  createContext(
+    "171 Attorney Street",
+    40.7193,
+    -73.9843,
+    "Lower East Side",
+    "preferred-manhattan",
+    [["Delancey St-Essex St", ["F", "M", "J", "Z"], 450]],
+  ),
+  createContext("247 Mulberry Street", 40.7234, -73.9954, "Nolita", "preferred-manhattan", [
+    ["Bleecker St", ["6"], 340],
+    ["Broadway-Lafayette St", ["B", "D", "F", "M"], 410],
+  ]),
+  createContext("171 6th Avenue", 40.7258, -74.0046, "Hudson Square", "preferred-manhattan", [
+    ["Spring St", ["C", "E"], 160],
+    ["Houston St", ["1"], 420],
+  ]),
   createContext("71 Broadway", 40.7075, -74.0126, "Financial District", "preferred-manhattan", [
     ["Wall St", ["4", "5"], 80],
     ["Rector St", ["R", "W"], 220],
@@ -163,6 +191,12 @@ const contextByKnownAddress = new Map(
     ["325 East 14 Street", "325 East 14 Street"],
     ["325 East 14th Street", "325 East 14 Street"],
     ["205 Avenue A", "205 Avenue A"],
+    ["58 2nd Avenue", "58 2nd Avenue"],
+    ["54 2nd Avenue", "54 2nd Avenue"],
+    ["176 Stanton Street", "176 Stanton Street"],
+    ["171 Attorney Street", "171 Attorney Street"],
+    ["247 Mulberry Street", "247 Mulberry Street"],
+    ["171 6th Avenue", "171 6th Avenue"],
     ["71 Broadway", "71 Broadway"],
   ]
     .map(([address, listingId]) => {
@@ -199,6 +233,7 @@ export function createMapReviewModel(
 
 function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
   const fixture = resolveMapContext(listing);
+  const coordinates = resolveListingCoordinates(listing) ?? fixture.coordinates;
   const evidence = listing.evidence[0];
   const sourceLinks = Array.from(
     new Set([listing.url, ...listing.evidence.map((item) => item.sourceUrl)].filter(Boolean)),
@@ -206,9 +241,9 @@ function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
 
   return {
     listing,
-    coordinates: fixture.coordinates,
-    mapPosition: fixture.coordinates ? projectToMapPosition(fixture.coordinates) : undefined,
-    pinState: fixture.coordinates ? toPinState(listing.triageBucket) : "missing-location",
+    coordinates,
+    mapPosition: coordinates ? projectToMapPosition(coordinates) : undefined,
+    pinState: coordinates ? toPinState(listing.triageBucket) : "missing-location",
     zoneLabel: fixture.zone.label,
     zoneKind: fixture.zone.kind,
     boroughFallback: fixture.zone.boroughFallback,
@@ -224,6 +259,21 @@ function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
     confidenceLabel: toConfidenceLabel(listing.triageBucket),
     sourceLinks,
   };
+}
+
+function resolveListingCoordinates(listing: ListingCandidate): MapCoordinates | undefined {
+  const latitude = listing.location?.latitude;
+  const longitude = listing.location?.longitude;
+  if (
+    typeof latitude !== "number" ||
+    typeof longitude !== "number" ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return undefined;
+  }
+
+  return { latitude, longitude };
 }
 
 function resolveMapContext(listing: ListingCandidate): MapContextFixture {
