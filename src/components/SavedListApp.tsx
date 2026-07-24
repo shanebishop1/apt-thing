@@ -66,20 +66,17 @@ const editableFields: FieldProvenance["field"][] = [
   "bathrooms",
   "availableAt",
 ];
+const SELECTABLE_REVIEW_STATUSES: Exclude<ReviewStatus, "review">[] = REVIEW_STATUSES.filter(
+  (status): status is Exclude<ReviewStatus, "review"> => status !== "review",
+);
 const numericFields = new Set<FieldProvenance["field"]>(["rent", "bedrooms", "bathrooms"]);
 const sharedSnapshotPollMs = 15000;
-const stadiaMapsApiKey = process.env.NEXT_PUBLIC_STADIA_MAPS_API_KEY?.trim();
-const leafletTileLayer = stadiaMapsApiKey
-  ? {
-      attribution: "",
-      maxZoom: 20,
-      url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${encodeURIComponent(stadiaMapsApiKey)}`,
-    }
-  : {
-      attribution: "",
-      maxZoom: 19,
-      url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    };
+
+function createLeafletTileUrl(identity?: InviteIdentity) {
+  if (!identity) return "";
+
+  return `/api/map/tiles/{z}/{x}/{y}.png?inviteCode=${encodeURIComponent(identity.inviteCode)}`;
+}
 
 type SharedListingSnapshot = {
   groupId: string;
@@ -196,11 +193,13 @@ export function SavedListApp() {
   const [commentText, setCommentText] = useState("");
   const [activeTab, setActiveTab] = useState<AppTab>("dashboard");
   const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
+  const [isDetailOverlayOpen, setIsDetailOverlayOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [apiBusy, setApiBusy] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const addListingInputRef = useRef<HTMLInputElement | null>(null);
   const [isPending, startTransition] = useTransition();
+  const selectedListing = identity ? findSelectedListing(listings, selectedId) : undefined;
 
   useEffect(() => {
     try {
@@ -284,6 +283,27 @@ export function SavedListApp() {
   }, [hasHydrated, identity, selectedId]);
 
   useEffect(() => {
+    if (!selectedListing) {
+      setIsDetailOverlayOpen(false);
+    }
+  }, [selectedListing]);
+
+  useEffect(() => {
+    if (!isDetailOverlayOpen) {
+      return;
+    }
+
+    function handleDetailOverlayKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsDetailOverlayOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleDetailOverlayKeyDown);
+    return () => window.removeEventListener("keydown", handleDetailOverlayKeyDown);
+  }, [isDetailOverlayOpen]);
+
+  useEffect(() => {
     if (!hasHydrated || !identity) {
       return;
     }
@@ -325,7 +345,6 @@ export function SavedListApp() {
     () => createMapReviewModel(listings, selectedId),
     [listings, selectedId],
   );
-  const selectedListing = identity ? findSelectedListing(listings, selectedId) : undefined;
   const listingGroups: ListingListGroup[] = useMemo(
     () => [
       {
@@ -346,6 +365,11 @@ export function SavedListApp() {
 
   function handleIdentityChange(field: keyof IdentityFormState, value: string) {
     setIdentityForm((currentForm) => ({ ...currentForm, [field]: value }));
+  }
+
+  function handleListingSelect(listingId: string) {
+    setSelectedId(listingId);
+    setIsDetailOverlayOpen(true);
   }
 
   function handleIdentitySubmit(event: FormEvent<HTMLFormElement>) {
@@ -751,38 +775,62 @@ export function SavedListApp() {
               <ListingSection
                 groups={listingGroups}
                 selectedId={selectedListing?.id}
-                onSelect={setSelectedId}
+                onSelect={handleListingSelect}
                 onSourceOpen={handleSourceOpen}
               />
             </section>
 
-            <ListingEditor
-              identity={identity}
-              listing={selectedListing}
-              actions={
-                identity && selectedListing
-                  ? createListingGroupActions(groupActions, identity.groupId, selectedListing.id)
-                  : undefined
+            <div
+              className={
+                isDetailOverlayOpen
+                  ? "listing-detail-shell mobile-detail-open"
+                  : "listing-detail-shell"
               }
-              commentText={commentText}
-              onCommentTextChange={setCommentText}
-              onFieldChange={handleFieldChange}
-              onStatusChange={handleStatusChange}
-              onReviewDecision={handleReviewDecision}
-              onSourceOpen={handleSourceOpen}
-              onReaction={handleReaction}
-              onComment={handleComment}
-            />
+            >
+              <ListingEditor
+                identity={identity}
+                listing={selectedListing}
+                actions={
+                  identity && selectedListing
+                    ? createListingGroupActions(groupActions, identity.groupId, selectedListing.id)
+                    : undefined
+                }
+                commentText={commentText}
+                onCommentTextChange={setCommentText}
+                onFieldChange={handleFieldChange}
+                onStatusChange={handleStatusChange}
+                onReviewDecision={handleReviewDecision}
+                onSourceOpen={handleSourceOpen}
+                onReaction={handleReaction}
+                onComment={handleComment}
+                onClose={() => setIsDetailOverlayOpen(false)}
+              />
+            </div>
           </div>
         </>
       ) : null}
 
       {activeTab === "map" ? (
         <MapReviewPanel
+          identity={identity}
           model={mapReview}
           selectedId={selectedListing?.id}
-          onSelect={setSelectedId}
+          actions={
+            identity && selectedListing
+              ? createListingGroupActions(groupActions, identity.groupId, selectedListing.id)
+              : undefined
+          }
+          commentText={commentText}
+          isDetailOverlayOpen={isDetailOverlayOpen}
+          onSelect={handleListingSelect}
+          onCommentTextChange={setCommentText}
+          onFieldChange={handleFieldChange}
+          onStatusChange={handleStatusChange}
+          onReviewDecision={handleReviewDecision}
           onSourceOpen={handleSourceOpen}
+          onReaction={handleReaction}
+          onComment={handleComment}
+          onCloseDetail={() => setIsDetailOverlayOpen(false)}
         />
       ) : null}
 
@@ -1166,41 +1214,50 @@ function normalizeReviewNeededListing(listing: ListingCandidate): ListingCandida
 }
 
 function MapReviewPanel({
+  identity,
   model,
   selectedId,
+  actions,
+  commentText,
+  isDetailOverlayOpen,
   onSelect,
+  onCommentTextChange,
+  onFieldChange,
+  onStatusChange,
+  onReviewDecision,
   onSourceOpen,
+  onReaction,
+  onComment,
+  onCloseDetail,
 }: {
+  identity?: InviteIdentity;
   model: ReturnType<typeof createMapReviewModel>;
   selectedId?: string;
+  actions?: ListingGroupActions;
+  commentText: string;
+  isDetailOverlayOpen: boolean;
   onSelect: (listingId: string) => void;
+  onCommentTextChange: (value: string) => void;
+  onFieldChange: (listingId: string, field: FieldProvenance["field"], rawValue: string) => void;
+  onStatusChange: (listingId: string, status: ReviewStatus) => void;
+  onReviewDecision: (listingId: string, decision: "approve" | "reject") => void;
   onSourceOpen: (listing: ListingCandidate) => void;
+  onReaction: (listing: ListingCandidate, reaction: GroupActionRecord["reaction"]) => void;
+  onComment: (event: FormEvent<HTMLFormElement>) => void;
+  onCloseDetail: () => void;
 }) {
   const selected = model.selected;
 
   return (
     <section className="map-review-card" aria-label="Map enhanced review">
-      <div className="panel-heading map-heading">
-        <div>
-          <p className="eyebrow">Map-enhanced review</p>
-          <h2>Map</h2>
-          <p>
-            Apartment pins with interactive MTA subway lines, stations, confidence, concerns, and
-            source links.
-          </p>
-        </div>
-        <div className="map-mode-tabs" aria-label="Mobile map review modes">
-          {model.mobileModes.map((mode) => (
-            <a key={mode} href={`#map-${mode}`}>
-              {mode}
-            </a>
-          ))}
-        </div>
-      </div>
-
       <div className="map-review-grid">
         <div id="map-map" className="map-shell" aria-label="Leaflet NYC apartment map">
-          <LeafletListingMap model={model} selectedId={selectedId} onSelect={onSelect} />
+          <LeafletListingMap
+            identity={identity}
+            model={model}
+            selectedId={selectedId}
+            onSelect={onSelect}
+          />
         </div>
 
         <div id="map-list" className="map-list" aria-label="Map synchronized listing list">
@@ -1216,16 +1273,40 @@ function MapReviewPanel({
 
         <MapDetail id="map-detail" candidate={selected} onSourceOpen={onSourceOpen} />
       </div>
+      <div
+        className={
+          isDetailOverlayOpen
+            ? "listing-detail-shell map-listing-detail-shell mobile-detail-open"
+            : "listing-detail-shell map-listing-detail-shell"
+        }
+      >
+        <ListingEditor
+          identity={identity}
+          listing={selected?.listing}
+          actions={actions}
+          commentText={commentText}
+          onCommentTextChange={onCommentTextChange}
+          onFieldChange={onFieldChange}
+          onStatusChange={onStatusChange}
+          onReviewDecision={onReviewDecision}
+          onSourceOpen={onSourceOpen}
+          onReaction={onReaction}
+          onComment={onComment}
+          onClose={onCloseDetail}
+        />
+      </div>
     </section>
   );
 }
 
 function LeafletListingMap({
+  identity,
   model,
   selectedId,
   onSelect,
   className = "leaflet-map",
 }: {
+  identity?: InviteIdentity;
   model: ReturnType<typeof createMapReviewModel>;
   selectedId?: string;
   onSelect: (listingId: string) => void;
@@ -1237,10 +1318,12 @@ function LeafletListingMap({
   const listingMarkersRef = useRef<Marker[]>([]);
   const subwayOverlayRef = useRef<LayerGroup | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
+  const stopResizeTrackingRef = useRef<(() => void) | null>(null);
+  const tileUrl = createLeafletTileUrl(identity);
 
   useEffect(() => {
     const mapContainer = mapContainerRef.current;
-    if (!mapContainer || leafletMapRef.current) {
+    if (!mapContainer || leafletMapRef.current || !tileUrl) {
       return;
     }
 
@@ -1260,7 +1343,13 @@ function LeafletListingMap({
         zoomControl: true,
       });
 
-      leaflet.tileLayer(leafletTileLayer.url, leafletTileLayer).addTo(map);
+      leaflet
+        .tileLayer(tileUrl, {
+          attribution: "",
+          detectRetina: false,
+          maxZoom: 20,
+        })
+        .addTo(map);
       leafletMapRef.current = map;
       const nextMarkers = syncLeafletMap({
         fitToListings: true,
@@ -1284,11 +1373,13 @@ function LeafletListingMap({
         .catch((error: unknown) => {
           console.error("MTA subway overlay failed to load", error);
         });
-      setTimeout(() => map.invalidateSize(), 0);
+      stopResizeTrackingRef.current = trackLeafletContainerSize(mapContainerRef.current, map);
     });
 
     return () => {
       disposed = true;
+      stopResizeTrackingRef.current?.();
+      stopResizeTrackingRef.current = null;
       groceryMarkersRef.current.forEach((marker) => marker.remove());
       listingMarkersRef.current.forEach((marker) => marker.remove());
       subwayOverlayRef.current?.remove();
@@ -1298,7 +1389,7 @@ function LeafletListingMap({
       leafletMapRef.current?.remove();
       leafletMapRef.current = null;
     };
-  }, []);
+  }, [tileUrl]);
 
   useEffect(() => {
     const leaflet = leafletRef.current;
@@ -1322,6 +1413,46 @@ function LeafletListingMap({
   }, [model, onSelect, selectedId]);
 
   return <div ref={mapContainerRef} className={className} />;
+}
+
+function trackLeafletContainerSize(container: HTMLDivElement, map: LeafletMap) {
+  let animationFrameId: number | undefined;
+  const timeoutIds: number[] = [];
+
+  const invalidateSize = () => {
+    if (!container.isConnected || container.clientWidth === 0 || container.clientHeight === 0) {
+      return;
+    }
+
+    map.invalidateSize({ pan: false });
+  };
+
+  const scheduleInvalidateSize = () => {
+    if (animationFrameId !== undefined) {
+      window.cancelAnimationFrame(animationFrameId);
+    }
+
+    animationFrameId = window.requestAnimationFrame(() => {
+      animationFrameId = undefined;
+      invalidateSize();
+    });
+  };
+
+  const resizeObserver =
+    typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(scheduleInvalidateSize);
+  resizeObserver?.observe(container);
+
+  scheduleInvalidateSize();
+  timeoutIds.push(window.setTimeout(scheduleInvalidateSize, 120));
+  timeoutIds.push(window.setTimeout(scheduleInvalidateSize, 420));
+
+  return () => {
+    resizeObserver?.disconnect();
+    timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    if (animationFrameId !== undefined) {
+      window.cancelAnimationFrame(animationFrameId);
+    }
+  };
 }
 
 function MapCandidateButton({
@@ -1473,8 +1604,8 @@ const groceryStoreLocations: GroceryStoreLocation[] = [
     name: "Trader Joe's East Village",
     address: "436 East 14th St, New York, NY 10009",
     borough: "Manhattan",
-    latitude: 40.73164,
-    longitude: -73.98194,
+    latitude: 40.73067,
+    longitude: -73.98077,
     sourceUrl: "https://locations.traderjoes.com/ny/new-york/546/",
   },
   {
@@ -2158,9 +2289,11 @@ function ListingCard({
 
 function ReviewStatusDropdown({
   listing,
+  disabled = false,
   onStatusChange,
 }: {
   listing: ListingCandidate;
+  disabled?: boolean;
   onStatusChange: (listingId: string, status: ReviewStatus) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -2190,6 +2323,10 @@ function ReviewStatusDropdown({
   }, [isOpen]);
 
   function selectStatus(status: ReviewStatus) {
+    if (disabled || status === "review") {
+      return;
+    }
+
     setActiveStatus(status);
     setIsOpen(false);
     if (status !== listing.reviewStatus) {
@@ -2198,12 +2335,23 @@ function ReviewStatusDropdown({
   }
 
   function moveActiveStatus(direction: 1 | -1) {
-    const currentIndex = REVIEW_STATUSES.indexOf(activeStatus);
-    const nextIndex = (currentIndex + direction + REVIEW_STATUSES.length) % REVIEW_STATUSES.length;
-    setActiveStatus(REVIEW_STATUSES[nextIndex]);
+    if (disabled) {
+      return;
+    }
+
+    const currentIndex = SELECTABLE_REVIEW_STATUSES.findIndex((status) => status === activeStatus);
+    const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex =
+      (safeCurrentIndex + direction + SELECTABLE_REVIEW_STATUSES.length) %
+      SELECTABLE_REVIEW_STATUSES.length;
+    setActiveStatus(SELECTABLE_REVIEW_STATUSES[nextIndex]!);
   }
 
   function handleTriggerKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (disabled) {
+      return;
+    }
+
     if (event.key === "Escape") {
       setIsOpen(false);
       return;
@@ -2240,7 +2388,10 @@ function ReviewStatusDropdown({
         aria-expanded={isOpen}
         aria-controls={listboxId}
         aria-activedescendant={isOpen ? activeOptionId : undefined}
-        onClick={() => setIsOpen((current) => !current)}
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) setIsOpen((current) => !current);
+        }}
         onKeyDown={handleTriggerKeyDown}
       >
         <span className="status-option-dot" aria-hidden="true" />
@@ -2254,7 +2405,7 @@ function ReviewStatusDropdown({
         aria-label={`Review status for ${listing.title}`}
         hidden={!isOpen}
       >
-        {REVIEW_STATUSES.map((status) => {
+        {SELECTABLE_REVIEW_STATUSES.map((status) => {
           const isSelected = status === listing.reviewStatus;
           const isActive = status === activeStatus;
           return (
@@ -2291,6 +2442,7 @@ export function ListingEditor({
   onSourceOpen,
   onReaction,
   onComment,
+  onClose,
 }: {
   identity?: InviteIdentity;
   listing?: ListingCandidate;
@@ -2303,6 +2455,7 @@ export function ListingEditor({
   onSourceOpen: (listing: ListingCandidate) => void;
   onReaction: (listing: ListingCandidate, reaction: GroupActionRecord["reaction"]) => void;
   onComment: (event: FormEvent<HTMLFormElement>) => void;
+  onClose?: () => void;
 }) {
   const [isEditingFields, setIsEditingFields] = useState(false);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
@@ -2374,6 +2527,14 @@ export function ListingEditor({
   if (!listing) {
     return (
       <section className="editor-panel" aria-label="Listing detail panel">
+        <button
+          type="button"
+          className="listing-detail-close"
+          aria-label="Close listing detail"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" />
+        </button>
         <p>No listing selected yet.</p>
       </section>
     );
@@ -2397,8 +2558,12 @@ export function ListingEditor({
   const aboutPreview = getListingAboutPreview(listing.description);
   const aboutText = isAboutExpanded ? listing.description : aboutPreview;
   const canExpandAbout = Boolean(listing.description && aboutPreview !== listing.description);
+  const isRejectedListing =
+    listing.triageBucket === "rejected" || listing.reviewStatus === "rejected";
   const isReviewNeeded =
-    listing.triageBucket === "review-needed" || listing.reviewStatus === "review";
+    !isRejectedListing &&
+    (listing.triageBucket === "review-needed" || listing.reviewStatus === "review");
+  const lockStatusUntilReviewDecision = isReviewNeeded;
   const selectPhoto = (index: number) => setSelectedMediaIndex(index);
   const handlePreviousPhoto = () => {
     setSelectedMediaIndex((currentIndex) =>
@@ -2443,6 +2608,14 @@ export function ListingEditor({
 
   return (
     <article className="editor-panel" aria-label="Listing detail panel">
+      <button
+        type="button"
+        className="listing-detail-close"
+        aria-label="Close listing detail"
+        onClick={onClose}
+      >
+        <X aria-hidden="true" />
+      </button>
       <header className="editor-header">
         <div className="listing-title-stack">
           <h2>{listing.title}</h2>
@@ -2477,7 +2650,11 @@ export function ListingEditor({
         </div>
       </header>
 
-      <ReviewStatusDropdown listing={listing} onStatusChange={onStatusChange} />
+      <ReviewStatusDropdown
+        listing={listing}
+        disabled={lockStatusUntilReviewDecision}
+        onStatusChange={onStatusChange}
+      />
 
       {isReviewNeeded ? (
         <section className="review-decision-panel" aria-label="Review decision">
@@ -2490,7 +2667,11 @@ export function ListingEditor({
             </p>
           </div>
           <div className="review-decision-actions">
-            <button type="button" onClick={() => onReviewDecision(listing.id, "approve")}>
+            <button
+              type="button"
+              className="review-approve-button"
+              onClick={() => onReviewDecision(listing.id, "approve")}
+            >
               Approve
             </button>
             <button
@@ -2512,7 +2693,7 @@ export function ListingEditor({
       >
         <figure className="listing-photo-frame">
           {isMapSelected ? (
-            <ListingInlineMap listing={listing} />
+            <ListingInlineMap identity={identity} listing={listing} />
           ) : selectedPhotoUrl ? (
             <button
               type="button"
@@ -2609,7 +2790,7 @@ export function ListingEditor({
             </div>
             <figure className="listing-photo-frame listing-photo-modal-frame">
               {isMapSelected ? (
-                <ListingInlineMap listing={listing} />
+                <ListingInlineMap identity={identity} listing={listing} />
               ) : selectedPhotoUrl ? (
                 <img src={selectedPhotoUrl} alt={`${listing.title} photo ${selectedMediaIndex}`} />
               ) : null}
@@ -2838,12 +3019,19 @@ export function ListingEditor({
   );
 }
 
-function ListingInlineMap({ listing }: { listing: ListingCandidate }) {
+function ListingInlineMap({
+  identity,
+  listing,
+}: {
+  identity?: InviteIdentity;
+  listing: ListingCandidate;
+}) {
   const model = createMapReviewModel([listing], listing.id);
 
   return (
     <div className="listing-inline-map-shell" aria-label={`Interactive map for ${listing.title}`}>
       <LeafletListingMap
+        identity={identity}
         model={model}
         selectedId={listing.id}
         onSelect={noopSelectListing}

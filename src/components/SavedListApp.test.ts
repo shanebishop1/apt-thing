@@ -127,15 +127,19 @@ describe("map review realism guardrails", () => {
     const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
 
-    expect(componentSource).toContain("NEXT_PUBLIC_STADIA_MAPS_API_KEY");
-    expect(componentSource).toContain("https://tiles.stadiamaps.com/tiles/alidade_smooth/");
-    expect(componentSource).toContain("https://tile.openstreetmap.org/");
+    expect(componentSource).toContain("/api/map/tiles/{z}/{x}/{y}.png?inviteCode=");
+    expect(componentSource).toContain("detectRetina: false");
+    expect(componentSource).toContain("createLeafletTileUrl(identity)");
+    expect(componentSource).not.toContain("NEXT_PUBLIC_STADIA_MAPS_API_KEY");
+    expect(componentSource).not.toContain("api_key=");
     expect(componentSource).toContain("Leaflet NYC apartment map");
     expect(componentSource).toContain("syncLeafletMap");
     expect(componentSource).toContain("MTA_SUBWAY_FEATURE_SERVICE");
     expect(componentSource).toContain("MTA_Subway_Routes_Stops/FeatureServer");
     expect(componentSource).toContain("fetchSubwayGeoJson");
     expect(componentSource).toContain("groceryStoreLocations");
+    expect(componentSource).toContain("latitude: 40.73067");
+    expect(componentSource).toContain("longitude: -73.98077");
     expect(componentSource).toContain("createGroceryLeafletIcon");
     expect(componentSource).toContain("createGroceryPopup");
     expect(componentSource).toContain("https://locations.traderjoes.com/ny/");
@@ -173,6 +177,21 @@ describe("map review realism guardrails", () => {
     const mapShellBlock = css.slice(css.indexOf(".map-shell {"), css.indexOf(".leaflet-map"));
     expect(mapShellBlock).not.toContain("repeating-linear-gradient");
     expect(mapShellBlock).not.toContain("#d8d3c2");
+  });
+
+  it("keeps the map page focused and opens mobile map selections in the detail modal", () => {
+    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+
+    expect(componentSource).not.toContain("Map-enhanced review");
+    expect(componentSource).not.toContain("Apartment pins with interactive MTA subway lines");
+    expect(componentSource).not.toContain('className="map-mode-tabs"');
+    expect(componentSource).toContain("isDetailOverlayOpen={isDetailOverlayOpen}");
+    expect(componentSource).toContain("onSelect={handleListingSelect}");
+    expect(componentSource).toContain("map-listing-detail-shell mobile-detail-open");
+    expect(componentSource).toContain("listing={selected?.listing}");
+    expect(css).toMatch(/\.map-listing-detail-shell \{[\s\S]*display: none;/);
+    expect(css).toMatch(/@media \(max-width: 860px\)[\s\S]*\.map-detail \{[\s\S]*display: none;/);
   });
 });
 
@@ -217,6 +236,30 @@ describe("listing detail attribution", () => {
     expect(formatAverageRent({ rent: 10150, bedrooms: 6 })).toBe("$1,692");
     expect(formatAverageRent({ rent: 14500 })).toBe("?");
     expect(formatAverageRent({ bedrooms: 5 })).toBe("?");
+  });
+
+  it("opens listing detail as a dismissible full-screen overlay on mobile widths", () => {
+    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+    const markup = renderListingEditorMarkup(fixtureListings[0]!);
+
+    expect(componentSource).toContain("const [isDetailOverlayOpen, setIsDetailOverlayOpen]");
+    expect(componentSource).toContain("function handleListingSelect");
+    expect(componentSource).toContain("setIsDetailOverlayOpen(true)");
+    expect(componentSource).toContain("mobile-detail-open");
+    expect(componentSource).toContain("onClose={() => setIsDetailOverlayOpen(false)}");
+    expect(markup).toContain('class="listing-detail-close"');
+    expect(markup).toContain('aria-label="Close listing detail"');
+    expect(css).toMatch(
+      /@media \(max-width: 860px\)[\s\S]*\.listing-detail-shell \{[\s\S]*display: none;/,
+    );
+    expect(css).toMatch(
+      /\.listing-detail-shell\.mobile-detail-open \{[\s\S]*position: fixed;[\s\S]*inset: 0;[\s\S]*z-index: 1000;/,
+    );
+    expect(css).toMatch(
+      /\.listing-detail-shell\.mobile-detail-open \.editor-panel \{[\s\S]*height: 100dvh;[\s\S]*overflow: auto;/,
+    );
+    expect(css).toMatch(/\.listing-detail-close \{[\s\S]*display: inline-grid;/);
   });
 
   it("keeps map list cards from overflowing wrapped title and context text", () => {
@@ -267,13 +310,16 @@ describe("listing detail attribution", () => {
       markup.indexOf(`aria-label="Show photo 1 of ${listingWithPhotos.photos.length}`),
     );
     expect(componentSource).toContain("createMapReviewModel([listing], listing.id)");
+    expect(componentSource).toContain("<ListingInlineMap identity={identity} listing={listing} />");
+    expect(componentSource).toContain("identity?: InviteIdentity;");
     expect(componentSource).toContain('className="listing-inline-map"');
     expect(componentSource).toContain(
       'className="listing-photo-media-strip listing-photo-modal-media-strip"',
     );
     expect(css).toMatch(/\.listing-photo-media-strip \{[\s\S]*grid-template-columns:/);
     expect(css).toMatch(/\.listing-photo-thumbnails \{[\s\S]*overflow-x: auto;/);
-    expect(css).not.toMatch(/\.listing-map-thumbnail \{[\s\S]*position: sticky;/);
+    const mapThumbnailBlock = css.match(/\.listing-map-thumbnail \{[\s\S]*?\n\}/)?.[0] ?? "";
+    expect(mapThumbnailBlock).not.toContain("position: sticky");
   });
 
   it("lets side arrow keys navigate both inline and enlarged photo carousels", () => {
@@ -333,6 +379,60 @@ describe("listing detail attribution", () => {
     expect(markup).toContain('aria-label="Review decision"');
     expect(markup).toContain("Approve");
     expect(markup).toContain("Reject and remove");
+  });
+
+  it("locks the status dropdown until a review-needed listing is approved or rejected", () => {
+    const reviewListing = fixtureListings.find(
+      (listing) => listing.triageBucket === "review-needed",
+    )!;
+    const approvedListing: ListingCandidate = {
+      ...reviewListing,
+      triageBucket: "confirmed-match",
+      reviewStatus: "new",
+    };
+
+    const reviewMarkup = renderListingEditorMarkup({
+      ...reviewListing,
+      reviewStatus: "review",
+    });
+    const approvedMarkup = renderListingEditorMarkup(approvedListing);
+
+    expect(reviewMarkup).toMatch(
+      /<button type="button" class="status-dropdown-trigger status-review"[^>]*disabled=""/,
+    );
+    expect(reviewMarkup).not.toContain('class="status-dropdown-option status-review');
+    expect(approvedMarkup).toMatch(
+      /<button type="button" class="status-dropdown-trigger status-new"/,
+    );
+    expect(approvedMarkup).not.toMatch(
+      /<button type="button" class="status-dropdown-trigger status-new"[^>]*disabled=""/,
+    );
+    expect(approvedMarkup).not.toContain('class="status-dropdown-option status-review');
+  });
+
+  it("styles pending review controls with disabled status and hover states", () => {
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+
+    expect(css).toMatch(/\.status-dropdown-trigger:disabled,[\s\S]*cursor: not-allowed;/);
+    expect(css).toMatch(/\.status-dropdown-trigger:disabled,[\s\S]*background: color-mix/);
+    expect(css).toMatch(/\.review-decision-actions \.review-approve-button:hover/);
+    expect(css).toMatch(/\.review-decision-actions \.secondary-danger:hover/);
+    expect(css).toMatch(
+      /@media \(max-width: 860px\)[\s\S]*\.review-decision-panel \{[\s\S]*grid-template-columns: 1fr;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 860px\)[\s\S]*\.review-decision-panel \.eyebrow,[\s\S]*display: none;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 860px\)[\s\S]*\.review-decision-actions \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/,
+    );
+  });
+
+  it("keeps the field edit modal above status dropdown and map layers", () => {
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+
+    expect(css).toMatch(/\.detail-status-control \{[\s\S]*z-index: 1100;/);
+    expect(css).toMatch(/\.field-modal-backdrop \{[\s\S]*z-index: 1200;/);
   });
 
   it("collapses long listing descriptions behind a view more control", () => {

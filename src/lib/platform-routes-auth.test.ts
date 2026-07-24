@@ -1,10 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET as smokeGET } from "../../app/api/platform/smoke/route";
 import { GET as proofGET } from "../../app/api/platform/proof/route";
+import { GET as tileGET } from "../../app/api/map/tiles/[z]/[x]/[y]/route";
 import { defaultSearchGroup } from "./listings";
 
 describe("platform API route authorization", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
   it("rejects platform smoke without the group code", async () => {
     const response = await smokeGET(new NextRequest("http://localhost/api/platform/smoke"));
     const body = (await response.json()) as Record<string, unknown>;
@@ -31,5 +37,95 @@ describe("platform API route authorization", () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ ok: true, runtime: "cloudflare-workers" });
+  });
+
+  it("rejects map tile proxy requests without the group code", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await tileGET(
+      new NextRequest("http://localhost/api/map/tiles/13/2412/3077.png"),
+      {
+        params: Promise.resolve({ z: "13", x: "2412", y: "3077.png" }),
+      },
+    );
+    const body = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual({ ok: false, error: "invalid-invite-code" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fetches Stadia tiles through the server-side key after group-code authorization", async () => {
+    vi.stubEnv("STADIA_MAPS_API_KEY", "server-only-test-key");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("tile", {
+        headers: { "content-type": "image/png" },
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await tileGET(
+      new NextRequest(
+        `http://localhost/api/map/tiles/13/2412/3077.png?inviteCode=${defaultSearchGroup.inviteCode}`,
+      ),
+      { params: Promise.resolve({ z: "13", x: "2412", y: "3077.png" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const upstreamUrl = fetchMock.mock.calls[0]?.[0] as URL;
+    expect(upstreamUrl.toString()).toBe(
+      "https://tiles.stadiamaps.com/tiles/alidade_smooth/13/2412/3077.png?api_key=server-only-test-key",
+    );
+  });
+
+  it("falls back to CARTO tiles when Stadia rejects the server-side request", async () => {
+    vi.stubEnv("STADIA_MAPS_API_KEY", "server-only-test-key");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("forbidden", { status: 403 }))
+      .mockResolvedValueOnce(
+        new Response("fallback-tile", {
+          headers: { "content-type": "image/png" },
+          status: 200,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await tileGET(
+      new NextRequest(
+        `http://localhost/api/map/tiles/13/2412/3077.png?inviteCode=${defaultSearchGroup.inviteCode}`,
+      ),
+      { params: Promise.resolve({ z: "13", x: "2412", y: "3077.png" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      "https://basemaps.cartocdn.com/rastertiles/voyager/13/2412/3077.png",
+    );
+  });
+
+  it("uses non-retina CARTO fallback tiles for retina requests", async () => {
+    vi.stubEnv("STADIA_MAPS_API_KEY", "server-only-test-key");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("forbidden", { status: 403 }))
+      .mockResolvedValueOnce(new Response("fallback-tile", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await tileGET(
+      new NextRequest(
+        `http://localhost/api/map/tiles/13/2412/3077@2x.png?inviteCode=${defaultSearchGroup.inviteCode}`,
+      ),
+      { params: Promise.resolve({ z: "13", x: "2412", y: "3077@2x.png" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      "https://basemaps.cartocdn.com/rastertiles/voyager/13/2412/3077.png",
+    );
   });
 });
