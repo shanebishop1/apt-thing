@@ -303,9 +303,10 @@ describe("G1 saved-list exit verification", () => {
     expect(packageJson.scripts["cf:deploy:dry"]).toBe("pnpm cf:build && wrangler deploy --dry-run");
     expect(packageJson.scripts["cf:preview"]).toBe("pnpm cf:build && wrangler dev");
     expect(wrangler).toContain('"main": "src/worker.ts"');
-    expect(wrangler).toContain('"binding": "DB"');
+    expect(wrangler).not.toContain('"binding": "DB"');
     expect(wrangler).not.toContain('"binding": "RAW_ARTIFACTS"');
-    expect(wrangler).toContain('"binding": "APP_CACHE"');
+    expect(wrangler).not.toContain('"binding": "APP_CACHE"');
+    expect(wrangler).toContain('"workers_dev": false');
     expect(smokeRoute).toContain('runtime: "cloudflare-workers"');
     expect(smokeRoute).toContain("contextStatus");
 

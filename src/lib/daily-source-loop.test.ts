@@ -933,15 +933,14 @@ describe("runDailySourceAgentLoop", () => {
     await expect(waited[0]).resolves.toMatchObject({ ok: true, fallback: true });
   });
 
-  it("keeps the Workflow binding available while unattended runs are disabled", () => {
+  it("removes the Workflow binding while unattended runs are hibernated", () => {
     const wranglerConfig = readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8");
 
-    expect(wranglerConfig).toContain('"workflows"');
-    expect(wranglerConfig).toContain('"binding": "DAILY_SOURCE_AGENT_LOOP_WORKFLOW"');
-    expect(wranglerConfig).toContain('"name": "daily-source-agent-loop"');
-    expect(wranglerConfig).toContain('"class_name": "DailySourceAgentLoopWorkflow"');
+    expect(wranglerConfig).not.toContain('"workflows"');
     expect(wranglerConfig).toContain('"crons": []');
     expect(wranglerConfig).toContain('"DAILY_LOOP_ENABLED": "false"');
+    expect(wranglerConfig).toContain('"workers_dev": false');
+    expect(wranglerConfig).toContain('"preview_urls": false');
   });
 
   it("falls back to fixture analyzer without a Gemini key and uses direct analyzer with a mocked key", async () => {
