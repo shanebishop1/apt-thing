@@ -32,10 +32,10 @@
   "vars": {
     "NEXTJS_ENV": "production",
     "APP_ENV": "local",
-    "DAILY_LOOP_ENABLED": "true",
+    "DAILY_LOOP_ENABLED": "false",
   },
   "triggers": {
-    "crons": ["0 10 * * *"],
+    "crons": [],
   },
   "workflows": [
     {
