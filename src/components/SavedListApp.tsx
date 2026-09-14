@@ -42,12 +42,6 @@ import {
 } from "../lib/saved-list-storage";
 import type { GroupActionRecord, SeenRejectedMemoryRecord } from "../lib/agent-contracts";
 import { g3cBriefingRunHistoryFixture } from "../lib/agent-contract-fixtures";
-import type {
-  BriefingRunHistoryContract,
-  BriefingRunHistoryRun,
-  EvidenceStoragePointer,
-  SourceCoverageSummary,
-} from "../lib/agent-contracts";
 import { createMapReviewModel, type MapReviewCandidate } from "../lib/map-review";
 import {
   REVIEW_STATUSES,
@@ -56,6 +50,18 @@ import {
   type ListingCandidate,
   type ReviewStatus,
 } from "../lib/listings";
+import { ListingSection, type ListingListGroup } from "./saved-list/ListingSection";
+import { RunHistoryPanel } from "./saved-list/RunHistoryPanel";
+import {
+  Fact,
+  formatListingAddedAge,
+  formatLabel,
+  formatMoney,
+} from "./saved-list/listing-presentation";
+
+export { RunHistoryPanel } from "./saved-list/RunHistoryPanel";
+export { createRunHistoryPanelModel } from "./saved-list/run-history-model";
+export { formatAverageRent } from "./saved-list/listing-presentation";
 
 const editableFields: FieldProvenance["field"][] = [
   "title",
@@ -131,56 +137,6 @@ const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "map", label: "Map" },
   { id: "history", label: "Runs" },
 ];
-
-type ListingSectionProps = {
-  groups?: ListingListGroup[];
-  selectedId?: string;
-  onSelect: (listingId: string) => void;
-  onSourceOpen: (listing: ListingCandidate) => void;
-};
-
-type ListingListGroup = {
-  id: string;
-  label: string;
-  listings: ListingCandidate[];
-};
-
-export type RunHistoryArtifactPointer = {
-  id: string;
-  label: string;
-  ownerLabel: string;
-  storageKey: string;
-  contentType?: string;
-};
-
-export type RunHistoryPanelRunModel = {
-  runId: string;
-  heading: string;
-  cadence: BriefingRunHistoryRun["cadence"];
-  trigger: BriefingRunHistoryRun["trigger"];
-  status: BriefingRunHistoryRun["status"];
-  statusLabel: string;
-  startedLabel: string;
-  completedLabel: string;
-  isLatest: boolean;
-  counts: BriefingRunHistoryRun["counts"];
-  apiMatchedCount: number;
-  checkedOrScrapedCount: number;
-  checkedOrScrapedLabel: string;
-  skippedCount: number;
-  aiCallCount: number;
-  aiOutputLabel: string;
-  sourceCoverage: SourceCoverageSummary[];
-  failures: SourceCoverageSummary[];
-  providerMetadata: string[];
-  providerDetails: string[];
-  artifactPointers: RunHistoryArtifactPointer[];
-  candidateSummaries: BriefingRunHistoryRun["candidateSummaries"];
-};
-
-export type RunHistoryPanelModel = {
-  runs: RunHistoryPanelRunModel[];
-};
 
 export function SavedListApp() {
   const [identityForm, setIdentityForm] = useState<IdentityFormState>(defaultIdentityForm);
@@ -875,323 +831,6 @@ export function SavedListApp() {
       ) : null}
     </main>
   );
-}
-
-export function createRunHistoryPanelModel(
-  history: BriefingRunHistoryContract,
-): RunHistoryPanelModel {
-  const latestRunId = history.latestRun.runId;
-  const runs = [...history.runs]
-    .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
-    .map((run) => {
-      const sourceCoverage = run.sourceCoverage.filter(
-        (coverage) => !isSyntheticFixtureCoverage(coverage),
-      );
-      const artifactPointers = createRunArtifactPointers(run, sourceCoverage);
-      const failures = sourceCoverage.filter((coverage) => coverage.status === "failed");
-      const counts = { ...run.counts, sourceFailures: failures.length };
-      const checkedCount = sourceCoverage.reduce(
-        (total, coverage) => total + coverage.checkedCount,
-        0,
-      );
-      const aiCallCount = run.providerMetadata.length;
-      const skippedCount = run.counts.candidatesSkippedSeen + run.counts.candidatesSkippedTriaged;
-      const checkedOrScrapedLabel =
-        checkedCount > 0 ? String(checkedCount) : "Not separately recorded";
-
-      return {
-        runId: run.runId,
-        heading: createRunHistoryHeading(run),
-        cadence: run.cadence,
-        trigger: run.trigger,
-        status: run.status,
-        statusLabel: formatLabel(run.status),
-        startedLabel: formatDateTimeLabel(run.startedAt),
-        completedLabel: run.completedAt ? formatDateTimeLabel(run.completedAt) : "Still running",
-        isLatest: run.runId === latestRunId,
-        counts,
-        apiMatchedCount: counts.candidatesFound,
-        checkedOrScrapedCount: checkedCount,
-        checkedOrScrapedLabel,
-        skippedCount,
-        aiCallCount,
-        aiOutputLabel: `${counts.confirmedMatches} yes / ${counts.reviewNeeded} review / ${counts.rejected} no`,
-        sourceCoverage,
-        failures,
-        providerMetadata: uniqueNonEmpty(
-          run.providerMetadata.map((metadata) => `${metadata.provider} / ${metadata.model}`),
-        ),
-        providerDetails: run.providerMetadata.map((metadata) =>
-          uniqueNonEmpty([
-            metadata.status,
-            metadata.purpose,
-            metadata.promptVersion ?? "",
-            metadata.schemaValidation ? `schema ${metadata.schemaValidation}` : "",
-          ]).join(" / "),
-        ),
-        artifactPointers,
-        candidateSummaries: run.candidateSummaries,
-      } satisfies RunHistoryPanelRunModel;
-    });
-
-  return {
-    runs,
-  };
-}
-
-export function RunHistoryPanel({ history }: { history: BriefingRunHistoryContract }) {
-  const model = createRunHistoryPanelModel(history);
-  const [expandedRunId, setExpandedRunId] = useState<string | undefined>();
-  const handleRunToggle = (runId: string, event: ToggleEvent<HTMLDetailsElement>) => {
-    if (event.currentTarget.open) {
-      setExpandedRunId(runId);
-      return;
-    }
-
-    setExpandedRunId((currentRunId) => (currentRunId === runId ? undefined : currentRunId));
-  };
-
-  return (
-    <section className="run-history-card" aria-label="Agent run history">
-      <header className="run-history-header">
-        <div>
-          <p className="eyebrow">Run history</p>
-          <h2>Runs</h2>
-        </div>
-      </header>
-
-      <div className="run-table" aria-label="Agent runs table">
-        <div className="run-table-head" aria-hidden="true">
-          <span>Started</span>
-          <span>Status</span>
-          <span>Trigger</span>
-          <span>Candidates</span>
-          <span>Source checks</span>
-          <span>Outcome</span>
-        </div>
-        {model.runs.map((run) => (
-          <details
-            key={run.runId}
-            className="run-history-item"
-            open={expandedRunId === run.runId}
-            onToggle={(event) => handleRunToggle(run.runId, event)}
-          >
-            <summary>
-              <span className="run-cell run-start-cell">
-                <span className={`run-status-dot ${run.status}`} aria-label={run.statusLabel} />
-                <span>
-                  <strong>{run.startedLabel}</strong>
-                  <small>{run.isLatest ? "Latest run" : run.heading}</small>
-                </span>
-              </span>
-              <span className="run-cell">
-                <span className={`run-status-badge ${run.status}`}>{run.statusLabel}</span>
-              </span>
-              <span className="run-cell">
-                <strong>{formatLabel(run.cadence)}</strong>
-                <small>{formatLabel(run.trigger)}</small>
-              </span>
-              <span className="run-cell">
-                <strong>{run.apiMatchedCount}</strong>
-                <small>candidate matches found</small>
-              </span>
-              <span className="run-cell">
-                <strong>{run.checkedOrScrapedLabel}</strong>
-                <small>source records checked</small>
-              </span>
-              <span className="run-cell run-output-cell">
-                <strong>{run.aiOutputLabel}</strong>
-                <small>{run.aiCallCount} AI attempt(s) recorded</small>
-              </span>
-            </summary>
-
-            <div className="run-history-detail">
-              <section className="run-history-section" aria-label={`${run.heading} count notes`}>
-                <h4>How to read the counts</h4>
-                <p>
-                  Source checks are records inspected by source adapters. Candidate matches are the
-                  smaller set that became run candidates, so source checks can be higher than
-                  matches. AI attempts are recorded provider attempts, not necessarily one call per
-                  listing.
-                </p>
-              </section>
-
-              <section className="run-detail-grid" aria-label={`${run.heading} pipeline counts`}>
-                <RunMetric label="Candidate matches found" value={String(run.apiMatchedCount)} />
-                <RunMetric label="Source records checked" value={run.checkedOrScrapedLabel} />
-                <RunMetric label="Skipped prior" value={String(run.skippedCount)} />
-                <RunMetric label="AI attempts recorded" value={String(run.aiCallCount)} />
-                <RunMetric label="Triaged" value={String(run.counts.candidatesTriaged)} />
-                <RunMetric label="Source failures" value={String(run.counts.sourceFailures)} />
-              </section>
-
-              <section className="run-output-grid" aria-label={`${run.heading} AI output`}>
-                <RunMetric label="Meets criteria" value={String(run.counts.confirmedMatches)} />
-                <RunMetric label="Needs review" value={String(run.counts.reviewNeeded)} />
-                <RunMetric label="Does not meet criteria" value={String(run.counts.rejected)} />
-              </section>
-
-              <section
-                className="run-history-section"
-                aria-label={`${run.heading} output listings`}
-              >
-                <h4>Output listings</h4>
-                {run.candidateSummaries.length === 0 ? (
-                  <p>No candidate output recorded for this run.</p>
-                ) : (
-                  <div className="run-output-list">
-                    {run.candidateSummaries.map((candidate) => (
-                      <article key={`${run.runId}-${candidate.listingId}`}>
-                        <span>{formatLabel(candidate.bucket)}</span>
-                        <strong>{candidate.title}</strong>
-                        <small>{candidate.suggestedAction}</small>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              <section
-                className="run-history-section"
-                aria-label={`${run.heading} source coverage`}
-              >
-                <h4>Source/API coverage</h4>
-                <div className="run-source-list">
-                  {run.sourceCoverage.map((coverage) => (
-                    <article
-                      key={`${run.runId}-${coverage.source}`}
-                      className={`run-source ${coverage.status}`}
-                    >
-                      <div>
-                        <strong>{coverage.source}</strong>
-                        <span>{formatLabel(coverage.status)}</span>
-                      </div>
-                      <p>
-                        {coverage.candidateCount} API match(es), {coverage.checkedCount} checked,{" "}
-                        {coverage.rawArtifactPointers.length} storage pointer(s)
-                        {coverage.failureCode ? ` · ${coverage.failureCode}` : ""}
-                      </p>
-                      {coverage.failureMessage ? <p>{coverage.failureMessage}</p> : null}
-                    </article>
-                  ))}
-                </div>
-              </section>
-
-              <section
-                className="run-history-section"
-                aria-label={`${run.heading} provider metadata`}
-              >
-                <h4>AI calls</h4>
-                {run.providerMetadata.length === 0 ? (
-                  <p>No AI call metadata recorded for this run.</p>
-                ) : (
-                  <ul>
-                    {run.providerMetadata.map((metadata, index) => (
-                      <li key={`${run.runId}-provider-${metadata}-${index}`}>
-                        <strong>{metadata}</strong>
-                        {run.providerDetails[index] ? ` · ${run.providerDetails[index]}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-
-              <section
-                className="run-history-section"
-                aria-label={`${run.heading} storage pointers`}
-              >
-                <h4>Stored pointers</h4>
-                {run.artifactPointers.length === 0 ? (
-                  <p>No storage pointers recorded for this run.</p>
-                ) : (
-                  <>
-                    <p>
-                      These are D1 storage keys for evidence metadata rows retained by the run. They
-                      are not openable files yet because there is no artifact viewer route.
-                    </p>
-                    <div className="artifact-pointer-grid">
-                      {run.artifactPointers.map((artifact) => (
-                        <div id={artifact.id} key={artifact.id} className="artifact-pointer-row">
-                          <span>{artifact.label}</span>
-                          <strong>{artifact.storageKey}</strong>
-                          {artifact.contentType ? <small>{artifact.contentType}</small> : null}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </section>
-            </div>
-          </details>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function createRunHistoryHeading(run: BriefingRunHistoryRun): string {
-  if (run.cadence === "manual") {
-    return "Manual import catch-up";
-  }
-  if (run.cadence === "hourly") {
-    return "Hourly-ready smoke run";
-  }
-
-  return "Daily scheduled search";
-}
-
-function createRunArtifactPointers(
-  run: BriefingRunHistoryRun,
-  sourceCoverage: SourceCoverageSummary[],
-): RunHistoryArtifactPointer[] {
-  const pointers = uniquePointers([
-    ...run.rawArtifactPointers.filter((pointer) => !isSyntheticFixturePointer(pointer)),
-    ...sourceCoverage.flatMap((coverage) => coverage.rawArtifactPointers),
-    ...run.candidateSummaries.flatMap((candidate) => candidate.evidenceSummary.rawArtifactPointers),
-  ]).filter((pointer) => !isSyntheticFixturePointer(pointer));
-
-  return pointers.map((pointer, index) => {
-    const id = `artifact-${slugify(run.runId)}-${index}`;
-
-    return {
-      id,
-      label: `${pointer.owner.toUpperCase()} pointer`,
-      ownerLabel: pointer.owner.toUpperCase(),
-      storageKey: pointer.key,
-      contentType: pointer.contentType,
-    };
-  });
-}
-
-function uniquePointers(pointers: EvidenceStoragePointer[]): EvidenceStoragePointer[] {
-  const byKey = new Map<string, EvidenceStoragePointer>();
-
-  for (const pointer of pointers) {
-    byKey.set(`${pointer.owner}:${pointer.key}`, pointer);
-  }
-
-  return [...byKey.values()];
-}
-
-function isSyntheticFixtureCoverage(coverage: SourceCoverageSummary): boolean {
-  return (
-    coverage.source.startsWith("fixture-") || coverage.failureCode?.startsWith("fixture-") === true
-  );
-}
-
-function isSyntheticFixturePointer(pointer: EvidenceStoragePointer): boolean {
-  return pointer.key.includes("source-failure") || pointer.key.includes("fixture-");
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function uniqueNonEmpty(items: string[]): string[] {
-  return [...new Set(items.map((item) => item.trim()).filter(Boolean))];
 }
 
 function normalizeReviewNeededListing(listing: ListingCandidate): ListingCandidate {
@@ -2214,79 +1853,6 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function ListingSection({ groups = [], selectedId, onSelect, onSourceOpen }: ListingSectionProps) {
-  const safeGroups = groups.map((group) => ({ ...group, listings: group.listings ?? [] }));
-  const visibleListings = safeGroups.flatMap((group) => group.listings);
-  const hasListings = visibleListings.length > 0;
-
-  if (!hasListings) {
-    return <p className="empty-state">No listings.</p>;
-  }
-
-  return (
-    <section className="listing-section" aria-label="Listing table">
-      <div className="listing-table-head" aria-hidden="true">
-        <span>Status</span>
-        <span>Listing</span>
-        <span>Avg Rent</span>
-      </div>
-      <div className="listing-cards">
-        {visibleListings.map((listing) => (
-          <ListingCard
-            key={listing.id}
-            listing={listing}
-            selected={listing.id === selectedId}
-            onSelect={onSelect}
-            onSourceOpen={onSourceOpen}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ListingCard({
-  listing,
-  selected,
-  onSelect,
-  onSourceOpen,
-}: {
-  listing: ListingCandidate;
-  selected: boolean;
-  onSelect: (listingId: string) => void;
-  onSourceOpen: (listing: ListingCandidate) => void;
-}) {
-  return (
-    <article className={selected ? "listing-card selected" : "listing-card"}>
-      <button
-        type="button"
-        className="listing-row-button"
-        onClick={() => onSelect(listing.id)}
-        aria-pressed={selected}
-        aria-label={`${selected ? "Selected" : "Select"} ${listing.title}`}
-      >
-        <span className={`card-status status-${listing.reviewStatus}`}>
-          {formatLabel(listing.reviewStatus)}
-        </span>
-        <span className="listing-row-main">
-          <strong>{listing.title}</strong>
-          <small>{listing.neighborhood ?? listing.address}</small>
-        </span>
-        <strong>{formatAverageRent(listing)}</strong>
-      </button>
-      <a
-        href={listing.url}
-        target="_blank"
-        rel="noreferrer"
-        aria-label={`Open source for ${listing.title}`}
-        onClick={() => onSourceOpen(listing)}
-      >
-        ↗<span className="sr-only"> Source</span>
-      </a>
-    </article>
-  );
-}
-
 function ReviewStatusDropdown({
   listing,
   disabled = false,
@@ -3129,24 +2695,6 @@ function ReactionNameGroup({ label, names }: { label: string; names: string[] })
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function RunMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="run-metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
 function getEvidenceSummary(listing: ListingCandidate): string {
   const firstEvidence = listing.evidence[0];
 
@@ -3163,39 +2711,6 @@ function getConcernSummary(listing: ListingCandidate): string {
   }
 
   return listing.concerns.slice(0, 2).join(" · ");
-}
-
-function formatMoney(value?: number) {
-  if (value === undefined) {
-    return "Rent TBD";
-  }
-
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-export function formatAverageRent(listing: Pick<ListingCandidate, "rent" | "bedrooms">) {
-  if (listing.rent === undefined || listing.bedrooms === undefined || listing.bedrooms <= 0) {
-    return "?";
-  }
-
-  return formatMoney(listing.rent / listing.bedrooms);
-}
-
-function formatListingAddedAge(createdAt: string) {
-  const createdTime = new Date(createdAt).getTime();
-
-  if (!Number.isFinite(createdTime)) {
-    return "TBD";
-  }
-
-  const dayInMilliseconds = 24 * 60 * 60 * 1000;
-  const ageDays = Math.max(0, Math.floor((Date.now() - createdTime) / dayInMilliseconds));
-
-  return `${ageDays} ${ageDays === 1 ? "day" : "days"}`;
 }
 
 function getListingAboutPreview(description?: string): string | undefined {
@@ -3288,10 +2803,6 @@ function ExternalLinkIcon() {
   );
 }
 
-function formatDateTimeLabel(value: string) {
-  return value.slice(0, 16).replace("T", " ");
-}
-
 function getProviderIntakeKind(listing: ListingCandidate): string {
   return (
     listing.providerRouting?.intakeKind ?? (listing.userQualified ? "pasted-url" : "batch-run")
@@ -3306,8 +2817,4 @@ function getAddedByLabel(listing: ListingCandidate): string {
   }
 
   return `Added by ${listing.submittedBy?.trim() || "AI"}`;
-}
-
-function formatLabel(value: string) {
-  return value.replace(/[-_]/g, " ");
 }

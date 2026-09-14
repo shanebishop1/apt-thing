@@ -89,7 +89,7 @@ describe("run history panel", () => {
 
 describe("run history verification guardrails", () => {
   it("keeps group listing reads from sending invite codes in query strings", () => {
-    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const componentSource = readSavedListComponentSource();
 
     expect(componentSource).toContain('"X-Invite-Code": activeIdentity.inviteCode');
     expect(componentSource).toContain('"X-Display-Name": activeIdentity.displayName');
@@ -113,7 +113,7 @@ describe("run history verification guardrails", () => {
 
   it("does not expose a push-notification dependency in history surfaces", () => {
     const markup = renderRunHistoryMarkup();
-    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const componentSource = readSavedListComponentSource();
 
     expect(markup).not.toMatch(/push notification|email|slack|sms/i);
     expect(componentSource).not.toMatch(
@@ -124,7 +124,7 @@ describe("run history verification guardrails", () => {
 
 describe("map review realism guardrails", () => {
   it("uses Leaflet with apartment pins and an interactive MTA subway overlay", () => {
-    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const componentSource = readSavedListComponentSource();
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
 
     expect(componentSource).toContain("/api/map/tiles/{z}/{x}/{y}.png?inviteCode=");
@@ -180,7 +180,7 @@ describe("map review realism guardrails", () => {
   });
 
   it("keeps the map page focused and opens mobile map selections in the detail modal", () => {
-    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const componentSource = readSavedListComponentSource();
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
 
     expect(componentSource).not.toContain("Map-enhanced review");
@@ -228,7 +228,7 @@ describe("listing detail attribution", () => {
   });
 
   it("labels compact listing rows with average rent per bedroom", () => {
-    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const componentSource = readSavedListComponentSource();
 
     expect(componentSource).toContain("<span>Avg Rent</span>");
     expect(componentSource).toContain("<strong>{formatAverageRent(listing)}</strong>");
@@ -239,7 +239,7 @@ describe("listing detail attribution", () => {
   });
 
   it("opens listing detail as a dismissible full-screen overlay on mobile widths", () => {
-    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const componentSource = readSavedListComponentSource();
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
     const markup = renderListingEditorMarkup(fixtureListings[0]!);
 
@@ -297,7 +297,7 @@ describe("listing detail attribution", () => {
   it("adds a map selector to the photo carousel that uses only the current listing", () => {
     const listingWithPhotos = fixtureListings.find((listing) => listing.photos.length > 0)!;
     const markup = renderListingEditorMarkup(listingWithPhotos);
-    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const componentSource = readSavedListComponentSource();
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
 
     expect(markup).toContain('class="listing-photo-thumbnail listing-map-thumbnail"');
@@ -325,7 +325,7 @@ describe("listing detail attribution", () => {
   it("lets side arrow keys navigate both inline and enlarged photo carousels", () => {
     const listingWithPhotos = fixtureListings.find((listing) => listing.photos.length > 0)!;
     const markup = renderListingEditorMarkup(listingWithPhotos);
-    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const componentSource = readSavedListComponentSource();
 
     expect(markup).toContain('tabindex="0"');
     expect(componentSource).toContain("const handlePhotoCarouselKeyDown");
@@ -494,7 +494,7 @@ describe("T-1.6 mobile-first and accessibility acceptance guardrails", () => {
   });
 
   it("keeps identity persistence behind explicit save and then loads the shared snapshot", () => {
-    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const componentSource = readSavedListComponentSource();
 
     expect(componentSource).toContain("function handleIdentitySubmit");
     expect(componentSource).toContain("writeInviteIdentity(");
@@ -590,7 +590,7 @@ describe("T-1.6 mobile-first and accessibility acceptance guardrails", () => {
   });
 
   it("does not ship unsupported newer JS calls in iOS Safari runtime paths", () => {
-    const componentSource = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const componentSource = readSavedListComponentSource();
     const listingSource = readFileSync(new URL("../lib/listings.ts", import.meta.url), "utf8");
 
     expect(componentSource).not.toMatch(/\.at\(/);
@@ -695,7 +695,7 @@ describe("T-1.6 mobile-first and accessibility acceptance guardrails", () => {
   });
 
   it("renders the score below the listing title and above listing facts", () => {
-    const source = readFileSync(new URL("./SavedListApp.tsx", import.meta.url), "utf8");
+    const source = readSavedListComponentSource();
     const titleIndex = source.indexOf("<h2>{listing.title}</h2>");
     const badgeIndex = source.indexOf(
       "<ReactionScoreBadge reactions={actions?.reactions ?? []} />",
@@ -804,6 +804,18 @@ function createGroupAction(
     provenance: { source: "user-entered", visibleToGroup: true },
     createdAt: "2026-06-07T00:00:00.000Z",
   };
+}
+
+function readSavedListComponentSource(): string {
+  return [
+    "./SavedListApp.tsx",
+    "./saved-list/ListingSection.tsx",
+    "./saved-list/RunHistoryPanel.tsx",
+    "./saved-list/run-history-model.ts",
+    "./saved-list/listing-presentation.tsx",
+  ]
+    .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
+    .join("\n");
 }
 
 function renderListingEditorMarkup(listing: ListingCandidate): string {
