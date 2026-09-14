@@ -813,6 +813,9 @@ function readSavedListComponentSource(): string {
     "./saved-list/RunHistoryPanel.tsx",
     "./saved-list/run-history-model.ts",
     "./saved-list/listing-presentation.tsx",
+    "./saved-list/map/geographic-data.ts",
+    "./saved-list/map/leaflet-layers.ts",
+    "./saved-list/map/LeafletListingMap.tsx",
   ]
     .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
     .join("\n");
