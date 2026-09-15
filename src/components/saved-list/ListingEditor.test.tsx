@@ -78,6 +78,7 @@ describe("ListingEditor", () => {
     const onReaction = vi.fn();
     const onCommentTextChange = vi.fn();
     const onComment = vi.fn();
+    const onFieldChange = vi.fn();
 
     render(
       <ListingEditor
@@ -86,7 +87,7 @@ describe("ListingEditor", () => {
         actions={actions}
         commentText="Ask about windows"
         onCommentTextChange={onCommentTextChange}
-        onFieldChange={vi.fn()}
+        onFieldChange={onFieldChange}
         onStatusChange={vi.fn()}
         onReviewDecision={onReviewDecision}
         onSourceOpen={vi.fn()}
@@ -98,6 +99,10 @@ describe("ListingEditor", () => {
     expect(
       screen.getByRole("button", { name: `Change review status for ${listing.title}` }),
     ).toHaveProperty("disabled", true);
+    await user.click(screen.getByRole("button", { name: `Edit fields for ${listing.title}` }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "rent" }), {
+      target: { value: "16000" },
+    });
     await user.click(screen.getByRole("button", { name: "Approve" }));
     await user.click(screen.getByRole("button", { name: "Reject and remove" }));
     await user.click(screen.getByRole("button", { name: `React thumbs up to ${listing.title}` }));
@@ -112,5 +117,6 @@ describe("ListingEditor", () => {
     ]);
     expect(onReaction).toHaveBeenCalledWith(listing, "thumbs-up");
     expect(onComment).toHaveBeenCalledTimes(1);
+    expect(onFieldChange).toHaveBeenCalledWith(listing.id, "rent", "16000");
   });
 });
