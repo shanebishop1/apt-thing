@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { InviteIdentity } from "../../lib/listings";
 import { useIdentityRequestCoordinator } from "./useIdentityRequestCoordinator";
 
-const identity: InviteIdentity = {
+const identity: InviteIdentity & { inviteCode: string } = {
   groupId: "group-1",
   inviteCode: "invite-1",
   displayName: "Ari",

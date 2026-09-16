@@ -1,8 +1,6 @@
 import type { GroupActionRecord } from "./agent-contracts";
 import {
-  createInviteIdentity,
   createGroupScopedDuplicateKey,
-  defaultSearchGroup,
   normalizeUrl,
   updateListingField,
   updateReviewStatus,
@@ -12,7 +10,6 @@ import {
   type ReviewStatus,
 } from "./listings";
 import { appendGroupAction, upsertRejectedMemory } from "./saved-list-storage";
-import { isAllowedInviteCode } from "./api-auth";
 import {
   appendSharedGroupAction,
   deleteSavedListingAtRevision,
@@ -29,8 +26,6 @@ import {
 import { extractListingFromUrlLive, type SingleLinkExtractionEnv } from "./single-link-extraction";
 
 export type SharedApiEnv = SingleLinkExtractionEnv & { DB?: D1DatabaseLike };
-export const allowedInviteCode = defaultSearchGroup.inviteCode;
-export { isAllowedInviteCode };
 
 export type ListingMutationErrorCode = "listing-not-found" | "listing-revision-conflict";
 
@@ -221,17 +216,6 @@ export async function appendSharedAction({
   const actionRecord = appendGroupAction([], identity, listing, action)[0];
   if (actionRecord) await appendSharedGroupAction(db, actionRecord);
   return readSharedListingSnapshot(db, identity.groupId);
-}
-
-export function parseApiIdentity(body: Record<string, unknown>): InviteIdentity | undefined {
-  const inviteCode = typeof body.inviteCode === "string" ? body.inviteCode.trim() : "";
-  const displayName = typeof body.displayName === "string" ? body.displayName : "Apartment Search";
-
-  if (inviteCode !== allowedInviteCode) {
-    return undefined;
-  }
-
-  return createInviteIdentity(inviteCode, displayName);
 }
 
 async function requireListing(db: D1DatabaseLike, groupId: string, listingId: string) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createGroupScopedListingState,
-  createInviteIdentity,
+  createGroupIdentity,
   defaultSearchGroup,
   MAX_IMAGES_PER_LISTING,
 } from "./listings";
@@ -16,7 +16,7 @@ import {
   zillowManualFixture,
 } from "./fixtures";
 
-const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "Tester")!;
+const identity = createGroupIdentity(defaultSearchGroup.id, "Tester")!;
 
 describe("fixture extraction pipeline", () => {
   it("resolves a pasted StreetEasy sample through exact urlPath metadata and saves it as user-qualified", () => {

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireGroupCode } from "@/lib/api-auth";
+import { authorizeGroupRequest } from "@/lib/api-auth";
 import { readPersistedRunHistory } from "@/lib/run-history-store";
 import type { D1DatabaseLike } from "@/lib/shared-listing-store";
 
 type AppRouteEnv = Partial<Record<"DB", unknown>>;
 
 export async function GET(request: NextRequest) {
-  const auth = requireGroupCode(request, undefined, "Run History API");
+  const auth = await authorizeGroupRequest(request, { displayName: "Run History API" });
   if (!auth.ok) return auth.response;
 
   const env = await getAppRouteEnv();

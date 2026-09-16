@@ -1,23 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createInviteIdentity, defaultSearchGroup } from "./listings";
-import { isAllowedInviteCode, parseApiIdentity } from "./shared-listing-api";
+import { createGroupIdentity, defaultSearchGroup } from "./listings";
 import { extractListingFromUrlLive } from "./single-link-extraction";
 
-const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "Verifier")!;
+const identity = createGroupIdentity(defaultSearchGroup.id, "Verifier")!;
 
 describe("single-link live extraction", () => {
-  it("requires the single allowed invite code before API identity creation", () => {
-    expect(isAllowedInviteCode(defaultSearchGroup.inviteCode)).toBe(true);
-    expect(isAllowedInviteCode("wrong-code")).toBe(false);
-    expect(parseApiIdentity({ inviteCode: "wrong-code", displayName: "Nope" })).toBeUndefined();
-    expect(
-      parseApiIdentity({ inviteCode: defaultSearchGroup.inviteCode, displayName: "Ok" }),
-    ).toMatchObject({
-      groupId: defaultSearchGroup.id,
-      displayName: "Ok",
-    });
-  });
-
   it("uses page metadata for title, facts, photos, and evidence before Gemini output", async () => {
     const html = `
       <html>

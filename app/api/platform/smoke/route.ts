@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireGroupCode } from "@/lib/api-auth";
+import { authorizeGroupRequest } from "@/lib/api-auth";
 
 type BindingState = "bound" | "missing";
 type ContextStatus = "available" | "unavailable";
@@ -42,7 +42,7 @@ async function getPlatformSmokeEnv(): Promise<PlatformSmokeEnv | undefined> {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = requireGroupCode(request, undefined, "Platform Smoke API");
+  const auth = await authorizeGroupRequest(request, { displayName: "Platform Smoke API" });
   if (!auth.ok) return auth.response;
 
   const env = await getPlatformSmokeEnv();

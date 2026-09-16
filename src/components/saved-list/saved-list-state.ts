@@ -21,10 +21,13 @@ export type NormalizedSharedSnapshot = {
   memory: SeenRejectedMemoryRecord[];
 };
 
-export function getIdentityKey(identity: InviteIdentity): string {
-  return [identity.groupId, identity.inviteCode, identity.displayName, identity.identityToken].join(
-    "\u0000",
-  );
+export function getIdentityKey(identity: InviteIdentity & { inviteCode?: string }): string {
+  return [
+    identity.groupId,
+    identity.inviteCode ?? "",
+    identity.displayName,
+    identity.identityToken,
+  ].join("\u0000");
 }
 
 export function normalizeSharedSnapshot(snapshot: SharedListingSnapshot): NormalizedSharedSnapshot {

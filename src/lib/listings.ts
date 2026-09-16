@@ -113,36 +113,28 @@ export type ListingEvidence = {
   pointerId?: string;
 };
 
+/**
+ * Public group metadata. Accepted invite codes are server-only configuration
+ * (`GROUP_INVITE_CODES`, see src/lib/api-auth.ts) and are never part of this type.
+ */
 export type SearchGroup = {
   id: string;
-  inviteCode: string;
-  invitePath: string;
   name: string;
   createdAt: string;
 };
 
 export type InviteIdentity = {
   groupId: string;
-  inviteCode: string;
   displayName: string;
   identityToken: string;
   persistedIn?: "localStorage";
   storageKey?: typeof INVITE_IDENTITY_STORAGE_KEY;
 };
 
-export type SearchGroupInviteResolution =
-  | {
-      status: "valid";
-      resolvedFrom: "invite-code" | "invite-link";
-      inviteCode: string;
-      group: SearchGroup;
-    }
-  | {
-      status: "invalid";
-      resolvedFrom: "invite-code" | "invite-link";
-      inviteCode: string;
-      feedback: string;
-    };
+export type ParsedInviteInput = {
+  resolvedFrom: "invite-code" | "invite-link";
+  inviteCode: string;
+};
 
 export type SubmittedUrl = {
   id: string;
@@ -548,17 +540,15 @@ export const REVIEW_STATUSES: ReviewStatus[] = [
   "rejected",
 ];
 
-export const hardcodedSearchGroups: SearchGroup[] = [
+export const searchGroups: SearchGroup[] = [
   {
     id: "nyc-5br-2026",
-    inviteCode: "apt-g1",
-    invitePath: "/invite/apt-g1",
     name: "NYC 5BR search",
     createdAt: "2026-06-04T00:00:00.000Z",
   },
 ];
 
-export const defaultSearchGroup = hardcodedSearchGroups[0];
+export const defaultSearchGroup = searchGroups[0]!;
 
 export function validateApartmentUrl(rawUrl: string): UrlValidationResult {
   const trimmedUrl = rawUrl.trim();
@@ -723,36 +713,15 @@ export function createInviteLinkPath(inviteCode: string): string {
   return `${INVITE_LINK_BASE_PATH}/${encodeURIComponent(inviteCode.trim())}`;
 }
 
-export function resolveSearchGroup(inviteCode: string): SearchGroup | undefined {
-  return hardcodedSearchGroups.find((group) => group.inviteCode === inviteCode.trim());
+export function findSearchGroup(groupId: string): SearchGroup | undefined {
+  return searchGroups.find((group) => group.id === groupId.trim());
 }
 
-export function resolveSearchGroupInvite(inviteInput: string): SearchGroupInviteResolution {
-  const { inviteCode, resolvedFrom } = parseInviteInput(inviteInput);
-  const group = resolveSearchGroup(inviteCode);
-
-  if (!group) {
-    return {
-      status: "invalid",
-      resolvedFrom,
-      inviteCode,
-      feedback: "Enter a valid invite code before saving group records.",
-    };
-  }
-
-  return {
-    status: "valid",
-    resolvedFrom,
-    inviteCode: group.inviteCode,
-    group,
-  };
-}
-
-export function createInviteIdentity(
-  inviteCode: string,
+export function createGroupIdentity(
+  groupId: string,
   displayName: string,
 ): InviteIdentity | undefined {
-  const group = resolveSearchGroup(inviteCode);
+  const group = findSearchGroup(groupId);
   const normalizedDisplayName = displayName.trim();
 
   if (!group || !normalizedDisplayName) {
@@ -761,7 +730,6 @@ export function createInviteIdentity(
 
   return {
     groupId: group.id,
-    inviteCode: group.inviteCode,
     displayName: normalizedDisplayName,
     identityToken: createActorIdentityToken(group.id, normalizedDisplayName),
     persistedIn: "localStorage",
@@ -1161,9 +1129,7 @@ export function hasMinimumRowFields(row: Partial<MinimumSavedListRow>): boolean 
   return Boolean(row.url && row.title && row.rent !== undefined && row.bedrooms !== undefined);
 }
 
-function parseInviteInput(
-  inviteInput: string,
-): Pick<SearchGroupInviteResolution, "resolvedFrom" | "inviteCode"> {
+export function parseInviteInput(inviteInput: string): ParsedInviteInput {
   const trimmedInput = inviteInput.trim();
 
   try {

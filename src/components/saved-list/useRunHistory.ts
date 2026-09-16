@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { InviteIdentity } from "../../lib/listings";
 import type { RunHistoryState } from "./RunHistoryPanel";
 import { getIdentityKey } from "./saved-list-state";
-import { loadRunHistory } from "./shared-listings-client";
+import { loadRunHistory, type GroupSession } from "./shared-listings-client";
 
-export function useRunHistory(identity: InviteIdentity | undefined, active: boolean) {
+export function useRunHistory(identity: GroupSession | undefined, active: boolean) {
   const [state, setState] = useState<RunHistoryState>({ status: "loading" });
   const controllerRef = useRef<AbortController | undefined>(undefined);
   const identityKey = identity ? getIdentityKey(identity) : undefined;

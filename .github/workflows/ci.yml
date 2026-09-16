@@ -48,3 +48,9 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Scan client assets for server-only secrets
+        run: pnpm check:client-secrets

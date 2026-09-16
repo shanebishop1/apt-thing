@@ -6,23 +6,21 @@ import {
   createListingGroupActions,
   createSelectedListingStorageKey,
   findSelectedListing,
+  normalizeInviteIdentityInput,
   readGroupActions,
-  readInviteIdentity,
   readSeenRejectedMemory,
-  writeInviteIdentity,
+  readStoredInviteIdentity,
+  writeStoredInviteIdentity,
 } from "../../lib/saved-list-storage";
-import type {
-  FieldProvenance,
-  InviteIdentity,
-  ListingCandidate,
-  ReviewStatus,
-} from "../../lib/listings";
+import type { FieldProvenance, ListingCandidate, ReviewStatus } from "../../lib/listings";
 import {
   createSharedListing,
+  establishGroupSession,
   loadSharedSnapshot,
   patchSharedListing,
   postSharedAction,
   SharedListingRequestError,
+  type GroupSession,
   type SharedListingSnapshot,
 } from "./shared-listings-client";
 import { useIdentityRequestCoordinator } from "./useIdentityRequestCoordinator";
@@ -39,7 +37,7 @@ export { sharedSnapshotPollMs, type IdentityFormState } from "./saved-list-state
 
 export function useSavedListings() {
   const [identityForm, setIdentityForm] = useState<IdentityFormState>(defaultIdentityForm);
-  const [identity, setIdentity] = useState<InviteIdentity>();
+  const [identity, setIdentity] = useState<GroupSession>();
   const [listings, setListings] = useState<ListingCandidate[]>([]);
   const [groupActions, setGroupActions] = useState<GroupActionRecord[]>([]);
   const [, setSeenRejectedMemory] = useState<SeenRejectedMemoryRecord[]>([]);
@@ -51,6 +49,8 @@ export function useSavedListings() {
   const [hasHydrated, setHasHydrated] = useState(false);
   const createRequestIdRef = useRef(0);
   const listingsRef = useRef<ListingCandidate[]>([]);
+  const identityRef = useRef<GroupSession | undefined>(undefined);
+  const sessionRequestIdRef = useRef(0);
   const coordinator = useIdentityRequestCoordinator();
 
   const selectedListing = identity ? findSelectedListing(listings, selectedId) : undefined;
@@ -61,35 +61,22 @@ export function useSavedListings() {
 
   useEffect(() => {
     try {
-      const savedIdentity = readInviteIdentity(window.localStorage);
+      const storedIdentity = readStoredInviteIdentity(window.localStorage);
 
-      if (savedIdentity) {
-        setIdentityForm({
-          inviteCode: savedIdentity.storedIdentity.inviteCode,
-          displayName: savedIdentity.storedIdentity.displayName,
-        });
-      }
-
-      if (savedIdentity?.kind === "invalid") {
-        resetIdentity(invalidIdentityMessage);
-        return;
-      }
-
-      if (!savedIdentity || savedIdentity.kind !== "valid") {
+      if (!storedIdentity) {
         resetIdentity(
           "Enter the invite code and display name to load this shared apartment search.",
         );
         return;
       }
 
-      const activeIdentity = savedIdentity.identity;
-      activateIdentity(activeIdentity);
-      setIdentity(activeIdentity);
-      hydrateGroupState(activeIdentity);
-      refreshSharedSnapshot(activeIdentity, { silent: true });
-      setMessage("");
+      setIdentityForm({
+        inviteCode: storedIdentity.inviteCode,
+        displayName: storedIdentity.displayName,
+      });
+      startSession(storedIdentity.inviteCode, storedIdentity.displayName, { restoring: true });
     } catch {
-      setMessage("Browser storage is unavailable; using fixture listings for this session.");
+      setMessage("Browser storage is unavailable; enter the invite code to continue.");
     } finally {
       setHasHydrated(true);
     }
@@ -97,12 +84,58 @@ export function useSavedListings() {
 
   useSharedSnapshotPolling({ hasHydrated, identity, refreshSnapshot: refreshSharedSnapshot });
 
-  function activateIdentity(nextIdentity: InviteIdentity | undefined) {
+  function startSession(
+    inviteCode: string,
+    displayName: string,
+    { restoring }: { restoring: boolean },
+  ) {
+    const requestId = ++sessionRequestIdRef.current;
+    setMessage(restoring ? "Connecting to the shared list…" : "Checking invite…");
+
+    establishGroupSession(inviteCode, displayName).then(
+      (session) => {
+        if (requestId !== sessionRequestIdRef.current) return;
+        const groupChanged = identityRef.current?.groupId !== session.groupId;
+        activateIdentity(session);
+        identityRef.current = session;
+        setIdentity(session);
+
+        if (groupChanged) {
+          listingsRef.current = [];
+          setListings([]);
+          hydrateGroupState(session);
+        }
+
+        refreshSharedSnapshot(session, { silent: true });
+        try {
+          writeStoredInviteIdentity(window.localStorage, {
+            inviteCode,
+            displayName: session.displayName,
+            groupId: session.groupId,
+          });
+          setMessage(restoring ? "" : `Invite identity saved for ${session.displayName}.`);
+        } catch {
+          setMessage("Could not persist invite identity in this browser session.");
+        }
+      },
+      (error: unknown) => {
+        if (requestId !== sessionRequestIdRef.current) return;
+        if (error instanceof SharedListingRequestError && error.isRejectedInvite) {
+          resetIdentity(invalidIdentityMessage);
+          return;
+        }
+        setMessage(
+          `Could not reach the shared list service (${error instanceof Error ? error.message : "network-error"}). Try again.`,
+        );
+      },
+    );
+  }
+  function activateIdentity(nextIdentity: GroupSession | undefined) {
     if (coordinator.activateIdentity(nextIdentity)) {
       setApiBusy(false);
     }
   }
-  function hydrateGroupState(activeIdentity: InviteIdentity) {
+  function hydrateGroupState(activeIdentity: GroupSession) {
     const storage = window.localStorage;
     setGroupActions(readGroupActions(storage, activeIdentity.groupId));
     setSeenRejectedMemory(readSeenRejectedMemory(storage, activeIdentity.groupId));
@@ -110,6 +143,7 @@ export function useSavedListings() {
   }
   function resetIdentity(nextMessage: string) {
     activateIdentity(undefined);
+    identityRef.current = undefined;
     setIdentity(undefined);
     listingsRef.current = [];
     setListings([]);
@@ -119,10 +153,14 @@ export function useSavedListings() {
     setMessage(nextMessage);
   }
   function showRequestError(error: unknown, fallbackMessage: string) {
+    if (error instanceof SharedListingRequestError && error.isRejectedInvite) {
+      resetIdentity(invalidIdentityMessage);
+      return;
+    }
     setMessage(error instanceof Error ? error.message : fallbackMessage);
   }
   function refreshSharedSnapshot(
-    activeIdentity: InviteIdentity,
+    activeIdentity: GroupSession,
     options: { silent?: boolean } = {},
   ): Promise<void> {
     return coordinator.execute(
@@ -131,13 +169,19 @@ export function useSavedListings() {
       (signal) => loadSharedSnapshot(activeIdentity, { signal }),
       {
         onSuccess: applySharedSnapshot,
-        onError: options.silent
-          ? undefined
-          : (error) => showRequestError(error, "Could not load shared D1 listing state."),
+        onError: (error) => {
+          if (
+            options.silent &&
+            !(error instanceof SharedListingRequestError && error.isRejectedInvite)
+          ) {
+            return;
+          }
+          showRequestError(error, "Could not load shared D1 listing state.");
+        },
       },
     );
   }
-  function createListing(activeIdentity: InviteIdentity, sourceUrl: string, createId: number) {
+  function createListing(activeIdentity: GroupSession, sourceUrl: string, createId: number) {
     void coordinator.execute(
       activeIdentity,
       "mutation",
@@ -161,7 +205,7 @@ export function useSavedListings() {
     );
   }
   function mutateListing(
-    activeIdentity: InviteIdentity,
+    activeIdentity: GroupSession,
     listingId: string,
     payload: Record<string, unknown>,
     successMessage: string,
@@ -200,7 +244,7 @@ export function useSavedListings() {
   function findObservedRevision(listingId: string) {
     return listingsRef.current.find((listing) => listing.id === listingId)?.revision;
   }
-  function recoverStaleListing(activeIdentity: InviteIdentity, error: SharedListingRequestError) {
+  function recoverStaleListing(activeIdentity: GroupSession, error: SharedListingRequestError) {
     if (error.snapshot) {
       applySharedSnapshot(error.snapshot);
     } else {
@@ -212,7 +256,7 @@ export function useSavedListings() {
         : "Someone else changed that listing first, so your change was not saved. Showing the latest version; reapply your change if it is still needed.",
     );
   }
-  function requireIdentity(errorMessage: string): InviteIdentity | undefined {
+  function requireIdentity(errorMessage: string): GroupSession | undefined {
     if (identity) return identity;
     setMessage(errorMessage);
     return undefined;
@@ -267,33 +311,13 @@ export function useSavedListings() {
   function onIdentitySubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    try {
-      const resolution = writeInviteIdentity(
-        window.localStorage,
-        identityForm.inviteCode,
-        identityForm.displayName,
-      );
-
-      if (resolution.kind === "invalid") {
-        resetIdentity(invalidIdentityMessage);
-        return;
-      }
-
-      const groupChanged = identity?.groupId !== resolution.identity.groupId;
-      activateIdentity(resolution.identity);
-      setIdentity(resolution.identity);
-
-      if (groupChanged) {
-        listingsRef.current = [];
-        setListings([]);
-        hydrateGroupState(resolution.identity);
-      }
-
-      refreshSharedSnapshot(resolution.identity, { silent: true });
-      setMessage(resolution.feedback);
-    } catch {
-      setMessage("Could not persist invite identity in this browser session.");
+    const input = normalizeInviteIdentityInput(identityForm.inviteCode, identityForm.displayName);
+    if (input.kind === "incomplete") {
+      setMessage(input.feedback);
+      return;
     }
+
+    startSession(input.inviteCode, input.displayName, { restoring: false });
   }
   function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

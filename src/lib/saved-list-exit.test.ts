@@ -20,18 +20,18 @@ import {
   PROHIBITED_SOURCE_AUTOMATION,
   createGroupScopedDuplicateKey,
   createGroupScopedListingState,
-  createInviteIdentity,
+  createGroupIdentity,
   defaultSearchGroup,
-  resolveSearchGroup,
+  findSearchGroup,
 } from "./listings";
 import {
   createReviewDashboardModel,
   createSavedListing,
-  readInviteIdentity,
+  readStoredInviteIdentity,
   readSavedListings,
   updateSavedListingField,
   updateSavedListingStatus,
-  writeInviteIdentity,
+  writeStoredInviteIdentity,
   writeSavedListings,
   type StorageLike,
 } from "./saved-list-storage";
@@ -53,26 +53,31 @@ class MemoryStorage implements StorageLike {
   }
 }
 
-const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "Exit Tester")!;
+const identity = createGroupIdentity(defaultSearchGroup.id, "Exit Tester")!;
 
 describe("G1 saved-list exit verification", () => {
   it("covers URL intake, extraction, batch skipping, group persistence, edits, dedupe, and guardrails", async () => {
     const storage = new MemoryStorage();
-    const storedIdentity = writeInviteIdentity(storage, " apt-g1 ", " Exit Tester ");
-
-    expect(resolveSearchGroup("apt-g1")).toEqual(defaultSearchGroup);
-    expect(resolveSearchGroup("self-serve-group")).toBeUndefined();
-    expect(createInviteIdentity("self-serve-group", "Exit Tester")).toBeUndefined();
-    expect(storedIdentity).toMatchObject({
-      kind: "valid",
-      identity: {
-        groupId: defaultSearchGroup.id,
-        displayName: "Exit Tester",
-        persistedIn: "localStorage",
-        storageKey: INVITE_IDENTITY_STORAGE_KEY,
-      },
+    writeStoredInviteIdentity(storage, {
+      inviteCode: " user-entered-code ",
+      displayName: " Exit Tester ",
+      groupId: defaultSearchGroup.id,
     });
-    expect(readInviteIdentity(storage)).toMatchObject({ kind: "valid" });
+
+    expect(findSearchGroup(defaultSearchGroup.id)).toEqual(defaultSearchGroup);
+    expect(findSearchGroup("self-serve-group")).toBeUndefined();
+    expect(createGroupIdentity("self-serve-group", "Exit Tester")).toBeUndefined();
+    expect(identity).toMatchObject({
+      groupId: defaultSearchGroup.id,
+      displayName: "Exit Tester",
+      persistedIn: "localStorage",
+      storageKey: INVITE_IDENTITY_STORAGE_KEY,
+    });
+    expect(readStoredInviteIdentity(storage)).toMatchObject({
+      inviteCode: "user-entered-code",
+      displayName: "Exit Tester",
+      groupId: defaultSearchGroup.id,
+    });
 
     const pastedStreetEasy = extractSingleLinkFixture({
       rawUrl: streetEasyPastedFixture.sourceUrl,

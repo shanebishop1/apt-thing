@@ -16,7 +16,7 @@ import {
   createDuplicateKey,
   createGroupScopedDuplicateKey,
   createGroupScopedListingState,
-  createInviteIdentity,
+  createGroupIdentity,
   createInviteLinkPath,
   createListingFromUrl,
   createProviderRoutingMetadata,
@@ -28,13 +28,13 @@ import {
   getProviderRoute,
   getSourceTarget,
   hasMinimumRowFields,
-  resolveSearchGroup,
-  resolveSearchGroupInvite,
+  findSearchGroup,
+  parseInviteInput,
   updateListingField,
   updateReviewStatus,
 } from "./listings";
 
-const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "Tester")!;
+const identity = createGroupIdentity(defaultSearchGroup.id, "Tester")!;
 
 const streetEasyQuery = {
   endpoint: "search/rent" as const,
@@ -98,38 +98,32 @@ describe("listing contracts", () => {
     ).not.toBe(createGroupScopedDuplicateKey("group-b", "https://zillow.com/homedetails/abc/"));
   });
 
-  it("resolves only hardcoded search groups and models localStorage invite identity for G1", () => {
-    expect(resolveSearchGroup(defaultSearchGroup.inviteCode)).toEqual(defaultSearchGroup);
-    expect(resolveSearchGroup("unknown-group")).toBeUndefined();
+  it("builds identities only for known groups without embedding invite credentials", () => {
+    expect(findSearchGroup(defaultSearchGroup.id)).toEqual(defaultSearchGroup);
+    expect(findSearchGroup("unknown-group")).toBeUndefined();
+    expect(createGroupIdentity("unknown-group", "Tester")).toBeUndefined();
+    expect(Object.keys(defaultSearchGroup).sort()).toEqual(["createdAt", "id", "name"]);
     expect(identity).toMatchObject({
       groupId: defaultSearchGroup.id,
       displayName: "Tester",
       persistedIn: "localStorage",
       storageKey: INVITE_IDENTITY_STORAGE_KEY,
     });
+    expect(identity).not.toHaveProperty("inviteCode");
     expect(identity.identityToken).toMatch(/^actor_nyc-5br-2026_/);
   });
 
-  it("resolves invite code and invite link inputs without enabling self-serve groups", () => {
-    const invitePath = createInviteLinkPath(defaultSearchGroup.inviteCode);
+  it("parses invite code and invite link inputs without deciding validity", () => {
+    const invitePath = createInviteLinkPath("user-entered-code");
 
-    expect(invitePath).toBe("/invite/apt-g1");
-    expect(resolveSearchGroupInvite(" apt-g1 ")).toMatchObject({
-      status: "valid",
+    expect(invitePath).toBe("/invite/user-entered-code");
+    expect(parseInviteInput(" user-entered-code ")).toEqual({
       resolvedFrom: "invite-code",
-      group: defaultSearchGroup,
+      inviteCode: "user-entered-code",
     });
-    expect(resolveSearchGroupInvite(`https://apt-thing.test${invitePath}`)).toMatchObject({
-      status: "valid",
+    expect(parseInviteInput(`https://apt-thing.test${invitePath}`)).toEqual({
       resolvedFrom: "invite-link",
-      group: defaultSearchGroup,
-      inviteCode: defaultSearchGroup.inviteCode,
-    });
-    expect(resolveSearchGroupInvite("https://apt-thing.test/invite/self-serve-group")).toEqual({
-      status: "invalid",
-      resolvedFrom: "invite-link",
-      inviteCode: "self-serve-group",
-      feedback: "Enter a valid invite code before saving group records.",
+      inviteCode: "user-entered-code",
     });
   });
 

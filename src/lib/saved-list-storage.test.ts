@@ -11,7 +11,8 @@ import {
   createSeenRejectedMemoryStorageKey,
   getFixtureBatchRunSummary,
   readGroupActions,
-  readInviteIdentity,
+  normalizeInviteIdentityInput,
+  readStoredInviteIdentity,
   readSeenRejectedMemory,
   readSavedListings,
   sortSavedListingsForDashboard,
@@ -19,7 +20,7 @@ import {
   updateSavedListingStatus,
   upsertRejectedMemory,
   writeGroupActions,
-  writeInviteIdentity,
+  writeStoredInviteIdentity,
   writeSeenRejectedMemory,
   writeSavedListings,
   type StorageLike,
@@ -27,7 +28,7 @@ import {
 import {
   INVITE_IDENTITY_STORAGE_KEY,
   REVIEW_STATUSES,
-  createInviteIdentity,
+  createGroupIdentity,
   createListingFromUrl,
   defaultSearchGroup,
 } from "./listings";
@@ -49,7 +50,7 @@ class MemoryStorage implements StorageLike {
   }
 }
 
-const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "Tester")!;
+const identity = createGroupIdentity(defaultSearchGroup.id, "Tester")!;
 
 describe("saved-list local storage helpers", () => {
   it("hydrates group-scoped fixture listings when local storage is empty", () => {
@@ -114,53 +115,46 @@ describe("saved-list local storage helpers", () => {
     expect(hydratedListing.imageEvidence).toEqual(fixtureListing.imageEvidence);
   });
 
-  it("stores invite code and display name indefinitely while blocking invalid invites", () => {
+  it("stores the user-entered invite and display name without validating the code locally", () => {
     const storage = new MemoryStorage();
-    const valid = writeInviteIdentity(storage, " apt-g1 ", " Ada ");
-    const validInviteLink = writeInviteIdentity(storage, "/invite/apt-g1", " Grace ");
 
-    expect(valid).toMatchObject({
-      kind: "valid",
-      identity: {
-        groupId: defaultSearchGroup.id,
-        inviteCode: defaultSearchGroup.inviteCode,
-        displayName: "Ada",
-      },
+    expect(normalizeInviteIdentityInput(" /invite/user-code ", " Grace ")).toEqual({
+      kind: "complete",
+      inviteCode: "user-code",
+      displayName: "Grace",
+    });
+    expect(normalizeInviteIdentityInput("user-code", " ")).toMatchObject({ kind: "incomplete" });
+    expect(normalizeInviteIdentityInput(" ", "Grace")).toMatchObject({ kind: "incomplete" });
+
+    expect(readStoredInviteIdentity(storage)).toBeUndefined();
+    writeStoredInviteIdentity(storage, {
+      inviteCode: " user-code ",
+      displayName: " Grace ",
+      groupId: defaultSearchGroup.id,
     });
     expect(storage.getItem(INVITE_IDENTITY_STORAGE_KEY)).toContain('"displayName":"Grace"');
-    expect(readInviteIdentity(storage)).toMatchObject({
-      kind: "valid",
-      identity: { groupId: defaultSearchGroup.id, displayName: "Grace" },
-    });
-    expect(validInviteLink).toMatchObject({
-      kind: "valid",
-      identity: { groupId: defaultSearchGroup.id, inviteCode: "apt-g1", displayName: "Grace" },
+    expect(readStoredInviteIdentity(storage)).toMatchObject({
+      inviteCode: "user-code",
+      displayName: "Grace",
+      groupId: defaultSearchGroup.id,
+      persistedIn: "localStorage",
     });
 
-    const invalid = writeInviteIdentity(storage, "not-a-real-invite", "Ada");
-    const rejected = createSavedListing(
-      [],
-      "https://streeteasy.com/building/invalid-invite/1",
-      invalid.kind === "valid" ? invalid.identity : undefined,
-    );
-    const forgedIdentity = createSavedListing(
-      [],
-      "https://streeteasy.com/building/forged-invite/1",
-      { ...identity, inviteCode: "not-a-real-invite" },
-    );
+    storage.setItem(INVITE_IDENTITY_STORAGE_KEY, "{not json");
+    expect(readStoredInviteIdentity(storage)).toBeUndefined();
+  });
 
-    expect(invalid).toMatchObject({
-      kind: "invalid",
-      storedIdentity: { inviteCode: "not-a-real-invite", displayName: "Ada" },
-      feedback: "Enter a valid invite code before saving group records.",
+  it("refuses local saved-list writes for identities outside a known group", () => {
+    const rejected = createSavedListing([], "https://streeteasy.com/building/invalid-invite/1", {
+      ...identity,
+      groupId: "self-serve-group",
     });
-    expect(readInviteIdentity(storage)).toMatchObject({ kind: "invalid" });
+
     expect(rejected).toEqual({
       kind: "rejected",
       listings: [],
       feedback: "Enter a valid invite code before saving group records.",
     });
-    expect(forgedIdentity).toEqual(rejected);
   });
 
   it("creates listings, detects duplicates, and keeps the existing record openable", () => {
@@ -371,7 +365,7 @@ describe("saved-list local storage helpers", () => {
         bedrooms: 5,
       },
     );
-    const otherIdentity = createInviteIdentity(defaultSearchGroup.inviteCode, "Other Tester")!;
+    const otherIdentity = createGroupIdentity(defaultSearchGroup.id, "Other Tester")!;
 
     const actions = [
       { actionType: "reaction" as const, reaction: "thumbs-up" as const },

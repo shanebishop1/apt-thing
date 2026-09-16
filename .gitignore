@@ -30,6 +30,8 @@ Desktop.ini
 !.env.test.sample
 !.env.test.template
 .direnv/
+.dev.vars
+.dev.vars.*
 
 # Python
 __pycache__/

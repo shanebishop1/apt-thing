@@ -1,9 +1,10 @@
+import { TEST_INVITE_CODE } from "../test-support/group-auth";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET as runsGET } from "../../app/api/group/runs/route";
 import { createSqliteD1, type SqliteD1 } from "../test-support/sqlite-d1";
 import { runDailySourceAgentLoop } from "./daily-source-loop";
-import { createInviteIdentity, defaultSearchGroup } from "./listings";
+import { createGroupIdentity, defaultSearchGroup } from "./listings";
 import { readPersistedRunHistory, type PersistedRunHistory } from "./run-history-store";
 
 const mockState = vi.hoisted(() => ({ env: {} as Record<string, unknown> }));
@@ -12,7 +13,7 @@ vi.mock("@opennextjs/cloudflare", () => ({
   getCloudflareContext: async () => ({ env: mockState.env }),
 }));
 
-const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "Run History Test")!;
+const identity = createGroupIdentity(defaultSearchGroup.id, "Run History Test")!;
 let db: SqliteD1;
 
 beforeEach(() => {
@@ -122,7 +123,7 @@ describe("GET /api/group/runs", () => {
     const run = await runDailySourceAgentLoop({ identity, env: { DB: db } });
     const response = await runsGET(
       new NextRequest("http://localhost/api/group/runs", {
-        headers: { "X-Invite-Code": defaultSearchGroup.inviteCode },
+        headers: { "X-Invite-Code": TEST_INVITE_CODE },
       }),
     );
     const body = (await response.json()) as { ok: boolean; history: PersistedRunHistory };

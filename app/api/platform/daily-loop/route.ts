@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireGroupCode } from "@/lib/api-auth";
+import { authorizeGroupRequest } from "@/lib/api-auth";
 import {
   createDailyLoopCronPayload,
   runDailySourceAgentLoop,
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     normalizeTrigger(searchParams.get("trigger")) ?? (cadence === "daily" ? "cron" : "manual");
   const requestedMode = normalizeMode(searchParams.get("mode"));
   const mode: DailyLoopMode = requestedMode ?? "fixture";
-  const auth = requireGroupCode(request, undefined, "Daily Loop API");
+  const auth = await authorizeGroupRequest(request, { displayName: "Daily Loop API" });
   if (!auth.ok) return auth.response;
 
   const result = await runDailySourceAgentLoop({
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
   const trigger =
     normalizeTrigger(searchParams.get("trigger")) ?? normalizeTrigger(body.trigger) ?? "manual";
   const mode = normalizeMode(searchParams.get("mode")) ?? normalizeMode(body.mode) ?? "fixture";
-  const auth = requireGroupCode(request, body, "Daily Loop API");
+  const auth = await authorizeGroupRequest(request, { body, displayName: "Daily Loop API" });
   if (!auth.ok) return auth.response;
 
   const result = await runDailySourceAgentLoop({

@@ -42,7 +42,7 @@ describe("G2B shared agent contracts and fixtures", () => {
     expect(bundle.groupAccess[0]).toMatchObject({
       contract: "group-access-v1",
       groupId: "nyc-5br-2026",
-      inviteCode: "apt-g1",
+      credentialSource: "server-configured-invite",
       resolvedFrom: "invite-link",
       actorDisplayName: "G2B Fixture",
       identityPersistence: "localStorage",

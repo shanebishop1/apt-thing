@@ -6,7 +6,6 @@ import type {
   ListingCandidate,
   ReviewStatus,
   RunStatus,
-  SearchGroup,
   SourceType,
   TriageBucket,
   TriageStatus,
@@ -74,8 +73,8 @@ export type GroupAccessRecord = {
   id: string;
   contract: "group-access-v1";
   groupId: string;
-  inviteCode: string;
-  invitePath: string;
+  /** Invite codes are verified server-side against GROUP_INVITE_CODES and never recorded. */
+  credentialSource: "server-configured-invite";
   resolvedFrom: "invite-code" | "invite-link";
   actorDisplayName: string;
   actorIdentityToken: string;
@@ -85,12 +84,10 @@ export type GroupAccessRecord = {
 
 export function groupAccessRecordFromIdentity({
   identity,
-  group,
   resolvedFrom,
   createdAt,
 }: {
   identity: InviteIdentity;
-  group: SearchGroup;
   resolvedFrom: GroupAccessRecord["resolvedFrom"];
   inviteUrl?: string;
   createdAt: string;
@@ -99,8 +96,7 @@ export function groupAccessRecordFromIdentity({
     id: `group-access-${identity.groupId}-${identity.identityToken}`,
     contract: "group-access-v1",
     groupId: identity.groupId,
-    inviteCode: identity.inviteCode,
-    invitePath: group.invitePath,
+    credentialSource: "server-configured-invite",
     resolvedFrom,
     actorDisplayName: identity.displayName,
     actorIdentityToken: identity.identityToken,
@@ -790,7 +786,9 @@ function validateGroupAccess(
 
   requireNonEmpty(errors, record.id, `${path}.id`);
   requireNonEmpty(errors, record.groupId, `${path}.groupId`);
-  requireNonEmpty(errors, record.inviteCode, `${path}.inviteCode`);
+  if (record.credentialSource !== "server-configured-invite") {
+    errors.push(`${path}.credentialSource must be server-configured-invite`);
+  }
   requireNonEmpty(errors, record.actorDisplayName, `${path}.actorDisplayName`);
   requireNonEmpty(errors, record.actorIdentityToken, `${path}.actorIdentityToken`);
   requireIsoTimestamp(errors, record.createdAt, `${path}.createdAt`);

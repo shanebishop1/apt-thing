@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { defaultSearchGroup } from "@/lib/listings";
-import { requireGroupCode } from "@/lib/api-auth";
-import { createListingFromSharedApi, parseApiIdentity } from "@/lib/shared-listing-api";
+import { authorizeGroupRequest } from "@/lib/api-auth";
+import { createListingFromSharedApi } from "@/lib/shared-listing-api";
 import { readSharedListingSnapshot, type D1DatabaseLike } from "@/lib/shared-listing-store";
 
 type AppRouteEnv = Partial<
@@ -9,33 +8,30 @@ type AppRouteEnv = Partial<
 >;
 
 export async function GET(request: NextRequest) {
+  const auth = await authorizeGroupRequest(request, { displayName: "Group Listings API" });
+  if (!auth.ok) return auth.response;
+
   const env = await getAppRouteEnv();
   if (!isD1Database(env?.DB)) {
     return NextResponse.json({ ok: false, error: "d1-binding-missing" }, { status: 503 });
   }
 
-  const groupId = request.nextUrl.searchParams.get("groupId") ?? defaultSearchGroup.id;
-  const auth = requireGroupCode(request, undefined, "Group Listings API");
-  if (!auth.ok) return auth.response;
-
-  const snapshot = await readSharedListingSnapshot(env.DB, groupId);
+  // Group scope always comes from the authenticated identity, never from the query string.
+  const snapshot = await readSharedListingSnapshot(env.DB, auth.identity.groupId);
   return NextResponse.json({ ok: true, snapshot });
 }
 
 export async function POST(request: NextRequest) {
+  const body = await readJson(request);
+  const auth = await authorizeGroupRequest(request, { body, displayName: "Group Listings API" });
+  if (!auth.ok) return auth.response;
+
   const env = await getAppRouteEnv();
   if (!isD1Database(env?.DB)) {
     return NextResponse.json({ ok: false, error: "d1-binding-missing" }, { status: 503 });
   }
-
-  const body = await readJson(request);
-  const auth = requireGroupCode(request, body, "Group Listings API");
-  if (!auth.ok) return auth.response;
-  const identity = parseApiIdentity({ ...body, inviteCode: auth.inviteCode });
+  const identity = auth.identity;
   const rawUrl = typeof body.url === "string" ? body.url : "";
-  if (!identity) {
-    return NextResponse.json({ ok: false, error: "invalid-invite-code" }, { status: 403 });
-  }
 
   try {
     const result = await createListingFromSharedApi({

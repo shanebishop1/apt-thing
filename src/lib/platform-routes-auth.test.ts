@@ -1,9 +1,9 @@
+import { TEST_INVITE_CODE } from "../test-support/group-auth";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET as smokeGET } from "../../app/api/platform/smoke/route";
 import { GET as proofGET } from "../../app/api/platform/proof/route";
 import { GET as tileGET } from "../../app/api/map/tiles/[z]/[x]/[y]/route";
-import { defaultSearchGroup } from "./listings";
 
 describe("platform API route authorization", () => {
   afterEach(() => {
@@ -15,22 +15,22 @@ describe("platform API route authorization", () => {
     const response = await smokeGET(new NextRequest("http://localhost/api/platform/smoke"));
     const body = (await response.json()) as Record<string, unknown>;
 
-    expect(response.status).toBe(403);
-    expect(body).toEqual({ ok: false, error: "invalid-invite-code" });
+    expect(response.status).toBe(401);
+    expect(body).toEqual({ ok: false, error: "authentication-required" });
   });
 
   it("rejects platform proof without the group code before provider proof work", async () => {
     const response = await proofGET(new NextRequest("http://localhost/api/platform/proof"));
     const body = (await response.json()) as Record<string, unknown>;
 
-    expect(response.status).toBe(403);
-    expect(body).toEqual({ ok: false, error: "invalid-invite-code" });
+    expect(response.status).toBe(401);
+    expect(body).toEqual({ ok: false, error: "authentication-required" });
   });
 
   it("accepts platform smoke with the group code", async () => {
     const response = await smokeGET(
       new NextRequest("http://localhost/api/platform/smoke", {
-        headers: { "X-Invite-Code": defaultSearchGroup.inviteCode },
+        headers: { "X-Invite-Code": TEST_INVITE_CODE },
       }),
     );
     const body = (await response.json()) as Record<string, unknown>;
@@ -51,8 +51,8 @@ describe("platform API route authorization", () => {
     );
     const body = (await response.json()) as Record<string, unknown>;
 
-    expect(response.status).toBe(403);
-    expect(body).toEqual({ ok: false, error: "invalid-invite-code" });
+    expect(response.status).toBe(401);
+    expect(body).toEqual({ ok: false, error: "authentication-required" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -67,9 +67,9 @@ describe("platform API route authorization", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await tileGET(
-      new NextRequest(
-        `http://localhost/api/map/tiles/13/2412/3077.png?inviteCode=${defaultSearchGroup.inviteCode}`,
-      ),
+      new NextRequest("http://localhost/api/map/tiles/13/2412/3077.png", {
+        headers: { "X-Invite-Code": TEST_INVITE_CODE },
+      }),
       { params: Promise.resolve({ z: "13", x: "2412", y: "3077.png" }) },
     );
 
@@ -95,9 +95,9 @@ describe("platform API route authorization", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await tileGET(
-      new NextRequest(
-        `http://localhost/api/map/tiles/13/2412/3077.png?inviteCode=${defaultSearchGroup.inviteCode}`,
-      ),
+      new NextRequest("http://localhost/api/map/tiles/13/2412/3077.png", {
+        headers: { "X-Invite-Code": TEST_INVITE_CODE },
+      }),
       { params: Promise.resolve({ z: "13", x: "2412", y: "3077.png" }) },
     );
 
@@ -117,9 +117,9 @@ describe("platform API route authorization", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await tileGET(
-      new NextRequest(
-        `http://localhost/api/map/tiles/13/2412/3077@2x.png?inviteCode=${defaultSearchGroup.inviteCode}`,
-      ),
+      new NextRequest("http://localhost/api/map/tiles/13/2412/3077@2x.png", {
+        headers: { "X-Invite-Code": TEST_INVITE_CODE },
+      }),
       { params: Promise.resolve({ z: "13", x: "2412", y: "3077@2x.png" }) },
     );
 

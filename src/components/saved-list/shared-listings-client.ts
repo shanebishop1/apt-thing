@@ -19,6 +19,12 @@ export type CreateSharedListingResult = {
   };
 };
 
+/**
+ * The browser's active group session: the server-issued identity plus the user-entered invite
+ * code kept in localStorage so an expired HTTP-only session cookie can be re-established.
+ */
+export type GroupSession = InviteIdentity & { inviteCode: string };
+
 export type SharedListingsApiResponse =
   | {
       ok: true;
@@ -41,64 +47,76 @@ export class SharedListingRequestError extends Error {
   get isStaleListing() {
     return this.code === "listing-revision-conflict" || this.code === "listing-not-found";
   }
+
+  get isRejectedInvite() {
+    return this.code === "invalid-invite-code" || this.code === "display-name-required";
+  }
 }
 
 type RequestOptions = {
   signal?: AbortSignal;
 };
 
+type ApiErrorPayload = { ok: false; error?: string; snapshot?: SharedListingSnapshot };
+
+export async function establishGroupSession(
+  inviteCode: string,
+  displayName: string,
+  options: RequestOptions = {},
+): Promise<GroupSession> {
+  const response = await fetch("/api/group/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ inviteCode, displayName }),
+    signal: options.signal,
+  });
+  const payload = (await response.json()) as
+    | { ok: true; identity: InviteIdentity }
+    | ApiErrorPayload;
+  if (!response.ok || !payload.ok) {
+    throw toRequestError(response, payload, "session-create-failed");
+  }
+  return { ...payload.identity, inviteCode };
+}
+
 export async function loadSharedSnapshot(
-  identity: InviteIdentity,
+  session: GroupSession,
   options: RequestOptions = {},
 ): Promise<SharedListingSnapshot> {
-  const response = await fetch(
-    `/api/group/listings?groupId=${encodeURIComponent(identity.groupId)}`,
-    {
-      headers: {
-        "X-Invite-Code": identity.inviteCode,
-        "X-Display-Name": identity.displayName,
-      },
-      signal: options.signal,
-    },
-  );
+  const response = await sessionFetch(session, "/api/group/listings", {
+    signal: options.signal,
+  });
   const payload = await readSharedListingsResponse(response, "snapshot-load-failed");
   return payload.snapshot;
 }
 
 export async function loadRunHistory(
-  identity: InviteIdentity,
+  session: GroupSession,
   options: RequestOptions = {},
 ): Promise<PersistedRunHistory> {
-  const response = await fetch("/api/group/runs", {
-    headers: {
-      "X-Invite-Code": identity.inviteCode,
-      "X-Display-Name": identity.displayName,
-    },
-    signal: options.signal,
-  });
+  const response = await sessionFetch(session, "/api/group/runs", { signal: options.signal });
   const payload = (await response.json()) as
     | { ok: true; history: PersistedRunHistory }
-    | { ok: false; error?: string };
+    | ApiErrorPayload;
   if (!response.ok || !payload.ok) {
-    throw new Error(
-      payload.ok ? "run-history-load-failed" : (payload.error ?? "run-history-load-failed"),
-    );
+    throw toRequestError(response, payload, "run-history-load-failed");
   }
   return payload.history;
 }
 
 export async function createSharedListing(
-  identity: InviteIdentity,
+  session: GroupSession,
   url: string,
   options: RequestOptions = {},
 ): Promise<{
   snapshot: SharedListingSnapshot;
   result?: CreateSharedListingResult;
 }> {
-  const response = await fetch("/api/group/listings", {
+  const response = await sessionFetch(session, "/api/group/listings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(identityPayload(identity, { url })),
+    body: JSON.stringify({ url }),
     signal: options.signal,
   });
   const payload = await readSharedListingsResponse(response, "create-listing-failed");
@@ -106,43 +124,55 @@ export async function createSharedListing(
 }
 
 export async function patchSharedListing(
-  identity: InviteIdentity,
+  session: GroupSession,
   listingId: string,
   mutation: Record<string, unknown>,
   options: RequestOptions = {},
 ): Promise<SharedListingSnapshot> {
-  const response = await fetch(`/api/group/listings/${encodeURIComponent(listingId)}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(identityPayload(identity, mutation)),
-    signal: options.signal,
-  });
+  const response = await sessionFetch(
+    session,
+    `/api/group/listings/${encodeURIComponent(listingId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(mutation),
+      signal: options.signal,
+    },
+  );
   const payload = await readSharedListingsResponse(response, "listing-mutation-failed");
   return payload.snapshot;
 }
 
 export async function postSharedAction(
-  identity: InviteIdentity,
+  session: GroupSession,
   listingId: string,
   action: Record<string, unknown>,
   options: RequestOptions = {},
 ): Promise<SharedListingSnapshot> {
-  const response = await fetch(`/api/group/listings/${encodeURIComponent(listingId)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(identityPayload(identity, action)),
-    signal: options.signal,
-  });
+  const response = await sessionFetch(
+    session,
+    `/api/group/listings/${encodeURIComponent(listingId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(action),
+      signal: options.signal,
+    },
+  );
   const payload = await readSharedListingsResponse(response, "listing-action-failed");
   return payload.snapshot;
 }
 
-function identityPayload(identity: InviteIdentity, payload: Record<string, unknown>) {
-  return {
-    ...payload,
-    inviteCode: identity.inviteCode,
-    displayName: identity.displayName,
-  };
+/** Sends a same-origin request with the session cookie, re-establishing the session once on 401. */
+async function sessionFetch(session: GroupSession, input: string, init: RequestInit) {
+  const request = () => fetch(input, { ...init, credentials: "same-origin" });
+  const response = await request();
+  if (response.status !== 401) return response;
+
+  await establishGroupSession(session.inviteCode, session.displayName, {
+    signal: init.signal ?? undefined,
+  });
+  return request();
 }
 
 async function readSharedListingsResponse(
@@ -151,11 +181,19 @@ async function readSharedListingsResponse(
 ): Promise<Extract<SharedListingsApiResponse, { ok: true }>> {
   const payload = (await response.json()) as SharedListingsApiResponse;
   if (!response.ok || !payload.ok) {
-    throw new SharedListingRequestError(
-      payload.ok ? fallback : (payload.error ?? fallback),
-      response.status,
-      payload.ok ? undefined : payload.snapshot,
-    );
+    throw toRequestError(response, payload, fallback);
   }
   return payload;
+}
+
+function toRequestError(
+  response: Response,
+  payload: { ok: boolean; error?: string; snapshot?: SharedListingSnapshot },
+  fallback: string,
+) {
+  return new SharedListingRequestError(
+    payload.ok ? fallback : (payload.error ?? fallback),
+    response.status,
+    payload.ok ? undefined : payload.snapshot,
+  );
 }

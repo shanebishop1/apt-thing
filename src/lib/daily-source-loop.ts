@@ -29,7 +29,7 @@ import {
   createDuplicateKey,
   createGroupScopedDuplicateKey,
   createGroupScopedListingState,
-  createInviteIdentity,
+  createGroupIdentity,
   defaultSearchGroup,
   MAX_IMAGES_PER_LISTING,
   type AiProviderAttemptMetadata,
@@ -215,8 +215,7 @@ export async function runDailySourceAgentLoop(
   const mode = options.mode ?? "fixture";
   const cadence = options.cadence ?? "manual";
   const trigger = options.trigger ?? (cadence === "daily" ? "cron" : "manual");
-  const identity =
-    options.identity ?? createInviteIdentity(defaultSearchGroup.inviteCode, "Daily Loop")!;
+  const identity = options.identity ?? createGroupIdentity(defaultSearchGroup.id, "Daily Loop")!;
   const now = options.now ?? new Date().toISOString();
   const concurrencyLimit = normalizeConcurrencyLimit(
     options.concurrencyLimit ?? DAILY_LOOP_DEFAULT_CONCURRENCY,

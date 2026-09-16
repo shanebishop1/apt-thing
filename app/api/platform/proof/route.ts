@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireGroupCode } from "@/lib/api-auth";
+import { authorizeGroupRequest } from "@/lib/api-auth";
 import { runG2BPlatformProof, type PlatformProofEnv } from "@/lib/platform-proof";
 
 type PlatformProofRouteEnv = PlatformProofEnv & Partial<Record<"GEMINI_API_KEY", string>>;
@@ -16,7 +16,7 @@ async function getPlatformProofEnv(): Promise<PlatformProofRouteEnv | undefined>
 }
 
 export async function GET(request: NextRequest) {
-  const auth = requireGroupCode(request, undefined, "Platform Proof API");
+  const auth = await authorizeGroupRequest(request, { displayName: "Platform Proof API" });
   if (!auth.ok) return auth.response;
 
   const env = await getPlatformProofEnv();

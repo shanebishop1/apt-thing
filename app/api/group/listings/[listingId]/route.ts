@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireGroupCode } from "@/lib/api-auth";
+import { authorizeGroupRequest } from "@/lib/api-auth";
 import { REVIEW_STATUSES, type FieldProvenance } from "@/lib/listings";
 import {
   ListingMutationError,
@@ -7,7 +7,6 @@ import {
   mutateSharedListingReviewDecision,
   mutateSharedListingField,
   mutateSharedListingStatus,
-  parseApiIdentity,
   parseExpectedRevision,
 } from "@/lib/shared-listing-api";
 import { readSharedListingSnapshot, type D1DatabaseLike } from "@/lib/shared-listing-store";
@@ -16,18 +15,15 @@ type AppRouteEnv = Partial<Record<"DB", unknown>>;
 type RouteContext = { params: Promise<{ listingId: string }> };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  const body = await readJson(request);
+  const auth = await authorizeGroupRequest(request, { body, displayName: "Group Listing API" });
+  if (!auth.ok) return auth.response;
+
   const env = await getAppRouteEnv();
   if (!isD1Database(env?.DB)) {
     return NextResponse.json({ ok: false, error: "d1-binding-missing" }, { status: 503 });
   }
-
-  const body = await readJson(request);
-  const auth = requireGroupCode(request, body, "Group Listing API");
-  if (!auth.ok) return auth.response;
-  const identity = parseApiIdentity({ ...body, inviteCode: auth.inviteCode });
-  if (!identity) {
-    return NextResponse.json({ ok: false, error: "invalid-invite-code" }, { status: 403 });
-  }
+  const identity = auth.identity;
 
   const { listingId } = await context.params;
   const expectedRevision = parseExpectedRevision(body.revision);
@@ -80,18 +76,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  const body = await readJson(request);
+  const auth = await authorizeGroupRequest(request, { body, displayName: "Group Listing API" });
+  if (!auth.ok) return auth.response;
+
   const env = await getAppRouteEnv();
   if (!isD1Database(env?.DB)) {
     return NextResponse.json({ ok: false, error: "d1-binding-missing" }, { status: 503 });
   }
-
-  const body = await readJson(request);
-  const auth = requireGroupCode(request, body, "Group Listing API");
-  if (!auth.ok) return auth.response;
-  const identity = parseApiIdentity({ ...body, inviteCode: auth.inviteCode });
-  if (!identity) {
-    return NextResponse.json({ ok: false, error: "invalid-invite-code" }, { status: 403 });
-  }
+  const identity = auth.identity;
 
   const { listingId } = await context.params;
   try {

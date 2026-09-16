@@ -34,11 +34,15 @@ vi.mock("leaflet", () => {
 });
 
 const fetchMock = vi.fn();
+const validInviteCode = "user-entered-invite-code";
 
 beforeEach(() => {
   localStorage.clear();
+  sessionRequests = [];
   fetchMock.mockReset();
-  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input) === "/api/group/session" ? sessionResponse(init) : fetchMock(input, init),
+  );
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
     if (String(input).includes("FeatureServer")) {
       return jsonResponse({ type: "FeatureCollection", features: [] });
@@ -86,18 +90,21 @@ describe("SavedListApp identity and shared listing behavior", () => {
     await submitIdentity(user, "Ari");
 
     expect(await screen.findByRole("heading", { name: listing.title })).toBeTruthy();
+    expect(sessionRequests).toEqual([{ inviteCode: validInviteCode, displayName: "Ari" }]);
     const getCall = fetchMock.mock.calls.find(
       ([input, init]) =>
-        String(input).includes("/api/group/listings?") &&
+        String(input) === "/api/group/listings" &&
         (init as RequestInit | undefined)?.method === undefined,
     );
     expect(getCall).toBeTruthy();
-    expect(String(getCall?.[0])).toBe(
-      `/api/group/listings?groupId=${encodeURIComponent(defaultSearchGroup.id)}`,
-    );
-    const headers = new Headers((getCall?.[1] as RequestInit | undefined)?.headers);
-    expect(headers.get("X-Invite-Code")).toBe("apt-g1");
-    expect(headers.get("X-Display-Name")).toBe("Ari");
+    const getInit = getCall?.[1] as RequestInit;
+    expect(getInit.credentials).toBe("same-origin");
+    expect(new Headers(getInit.headers).has("X-Invite-Code")).toBe(false);
+    expect(JSON.parse(localStorage.getItem("apt-thing:v1:g1-invite-identity")!)).toMatchObject({
+      inviteCode: validInviteCode,
+      displayName: "Ari",
+      groupId: defaultSearchGroup.id,
+    });
 
     await user.click(screen.getByRole("button", { name: `Selected ${listing.title}` }));
     await user.click(
@@ -120,8 +127,6 @@ describe("SavedListApp identity and shared listing behavior", () => {
       mutation: "status",
       status: "interested",
       revision: 1,
-      inviteCode: "apt-g1",
-      displayName: "Ari",
     });
   });
 
@@ -213,33 +218,28 @@ describe("SavedListApp identity and shared listing behavior", () => {
     const newListing = buildListing("new-listing", "New identity apartment");
     const oldResponse = deferred<Response>();
     const newResponse = deferred<Response>();
+    let snapshotLoads = 0;
 
-    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
       if (String(input).includes("FeatureServer")) {
         return Promise.resolve(jsonResponse({ type: "FeatureCollection", features: [] }));
       }
 
-      const displayName = new Headers(init?.headers).get("X-Display-Name");
-      return displayName === "Old" ? oldResponse.promise : newResponse.promise;
+      snapshotLoads += 1;
+      return snapshotLoads === 1 ? oldResponse.promise : newResponse.promise;
     });
 
     render(<SavedListApp />);
     await submitIdentity(user, "Old");
+    await waitFor(() => expect(snapshotLoads).toBe(1));
     await user.click(screen.getByRole("button", { name: "Settings" }));
     const displayNameInput = screen.getByLabelText("Display name");
     await user.clear(displayNameInput);
     await user.type(displayNameInput, "New");
     fireEvent.submit(screen.getByRole("form", { name: "Active group identity" }));
 
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(
-          ([input, init]) =>
-            String(input).includes("/api/group/listings?") &&
-            new Headers((init as RequestInit | undefined)?.headers).get("X-Display-Name") === "New",
-        ),
-      ).toBe(true);
-    });
+    await waitFor(() => expect(snapshotLoads).toBe(2));
+    expect(sessionRequests.map((body) => body.displayName)).toEqual(["Old", "New"]);
     newResponse.resolve(jsonResponse({ ok: true, snapshot: snapshot([newListing]) }));
     await user.click(screen.getByRole("button", { name: "List" }));
     expect(await screen.findByRole("heading", { name: newListing.title })).toBeTruthy();
@@ -249,6 +249,44 @@ describe("SavedListApp identity and shared listing behavior", () => {
       expect(screen.getByRole("heading", { name: newListing.title })).toBeTruthy();
       expect(screen.queryByRole("heading", { name: oldListing.title })).toBeNull();
     });
+  });
+
+  it("keeps the invite gate and stores nothing when the server rejects the invite", async () => {
+    const user = userEvent.setup();
+
+    render(<SavedListApp />);
+    await user.type(screen.getByLabelText("Invite code"), "apt-g1");
+    await user.type(screen.getByLabelText("Display name"), "Ari");
+    fireEvent.submit(screen.getByRole("form", { name: "Invite identity" }));
+
+    expect(await screen.findByText("Invite code or display name is invalid.")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Invite gate" })).toBeTruthy();
+    expect(localStorage.getItem("apt-thing:v1:g1-invite-identity")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/group/listings", expect.anything());
+  });
+
+  it("restores a stored identity through a new session and re-establishes it after a 401", async () => {
+    const listing = buildListing("restored-listing", "Restored apartment");
+    localStorage.setItem(
+      "apt-thing:v1:g1-invite-identity",
+      JSON.stringify({ inviteCode: validInviteCode, displayName: "Ari" }),
+    );
+    let loads = 0;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).includes("FeatureServer")) {
+        return jsonResponse({ type: "FeatureCollection", features: [] });
+      }
+      loads += 1;
+      return loads === 1
+        ? jsonResponse({ ok: false, error: "session-invalid" }, 401)
+        : jsonResponse({ ok: true, snapshot: snapshot([listing]) });
+    });
+
+    render(<SavedListApp />);
+
+    expect(await screen.findByRole("heading", { name: listing.title })).toBeTruthy();
+    expect(sessionRequests).toHaveLength(2);
+    expect(loads).toBe(2);
   });
 
   it("sends identity and URL on create, then selects the created listing and message", async () => {
@@ -278,7 +316,7 @@ describe("SavedListApp identity and shared listing behavior", () => {
 
     render(<SavedListApp />);
     await submitIdentity(user, "Ari");
-    await user.click(screen.getByLabelText("Add listing"));
+    await user.click(await screen.findByLabelText("Add listing"));
     const urlInput = screen.getByPlaceholderText("https://streeteasy.com/building/...");
     await user.type(urlInput, "https://example.com/listing");
     fireEvent.submit(urlInput.closest("form") as HTMLFormElement);
@@ -297,8 +335,6 @@ describe("SavedListApp identity and shared listing behavior", () => {
     expect(postCall).toBeTruthy();
     if (!postCall) throw new Error("create request was not sent");
     expect(JSON.parse((postCall[1] as RequestInit).body as string)).toEqual({
-      inviteCode: "apt-g1",
-      displayName: "Ari",
       url: "https://example.com/listing",
     });
   });
@@ -364,8 +400,27 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+let sessionRequests: Array<{ inviteCode: string; displayName: string }> = [];
+
+function sessionResponse(init?: RequestInit): Response {
+  const body = JSON.parse(String(init?.body)) as { inviteCode: string; displayName: string };
+  sessionRequests.push(body);
+  if (body.inviteCode !== validInviteCode) {
+    return jsonResponse({ ok: false, error: "invalid-invite-code" }, 403);
+  }
+  return jsonResponse({
+    ok: true,
+    identity: {
+      groupId: defaultSearchGroup.id,
+      groupName: defaultSearchGroup.name,
+      displayName: body.displayName.trim(),
+      identityToken: `actor_${defaultSearchGroup.id}_${body.displayName.trim()}`,
+    },
+  });
+}
+
 async function submitIdentity(user: ReturnType<typeof userEvent.setup>, displayName: string) {
-  await user.type(screen.getByLabelText("Invite code"), "apt-g1");
+  await user.type(screen.getByLabelText("Invite code"), validInviteCode);
   await user.type(screen.getByLabelText("Display name"), displayName);
   fireEvent.submit(screen.getByRole("form", { name: "Invite identity" }));
 }

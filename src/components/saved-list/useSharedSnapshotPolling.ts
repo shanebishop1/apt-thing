@@ -3,16 +3,16 @@ import type { InviteIdentity } from "../../lib/listings";
 import { getIdentityKey, sharedSnapshotPollMs } from "./saved-list-state";
 
 type RefreshOptions = { silent?: boolean };
-type RefreshSnapshot = (identity: InviteIdentity, options?: RefreshOptions) => Promise<void>;
+type RefreshSnapshot<T> = (identity: T, options?: RefreshOptions) => Promise<void>;
 
-export function useSharedSnapshotPolling({
+export function useSharedSnapshotPolling<T extends InviteIdentity>({
   hasHydrated,
   identity,
   refreshSnapshot,
 }: {
   hasHydrated: boolean;
-  identity: InviteIdentity | undefined;
-  refreshSnapshot: RefreshSnapshot;
+  identity: T | undefined;
+  refreshSnapshot: RefreshSnapshot<T>;
 }) {
   const refreshSnapshotRef = useRef(refreshSnapshot);
   refreshSnapshotRef.current = refreshSnapshot;

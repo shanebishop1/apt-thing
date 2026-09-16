@@ -10,6 +10,8 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS",
   },
+  // Secrets are never committed here. GROUP_INVITE_CODES (and provider keys) are set with
+  // `wrangler secret put` for deployments, or in an untracked .dev.vars for `wrangler dev`.
   "vars": {
     "NEXTJS_ENV": "production",
     "APP_ENV": "local",

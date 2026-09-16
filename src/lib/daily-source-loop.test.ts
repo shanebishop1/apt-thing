@@ -1,3 +1,4 @@
+import { TEST_INVITE_CODE } from "../test-support/group-auth";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
@@ -8,11 +9,7 @@ import {
   runDailySourceAgentLoop,
 } from "./daily-source-loop";
 import { streetEasyBatchFixture } from "./fixtures";
-import {
-  createGroupScopedListingState,
-  createInviteIdentity,
-  defaultSearchGroup,
-} from "./listings";
+import { createGroupScopedListingState, createGroupIdentity, defaultSearchGroup } from "./listings";
 import { validateBriefingRunHistoryContract } from "./agent-contracts";
 import {
   DAILY_SOURCE_AGENT_LOOP_WORKFLOW_BINDING,
@@ -24,7 +21,7 @@ vi.mock("@opennextjs/cloudflare", () => ({
   getCloudflareContext: async () => ({ env: {} }),
 }));
 
-const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "Daily Loop Test")!;
+const identity = createGroupIdentity(defaultSearchGroup.id, "Daily Loop Test")!;
 
 describe("runDailySourceAgentLoop", () => {
   it("runs fixture-mode manual/daily-compatible loop with StreetEasy and Zillow manual fixture", async () => {
@@ -1027,7 +1024,7 @@ describe("runDailySourceAgentLoop", () => {
     process.env.GEMINI_API_KEY = "";
     const response = await GET(
       new NextRequest("http://localhost/api/platform/daily-loop?cadence=daily&trigger=cron", {
-        headers: { "X-Invite-Code": defaultSearchGroup.inviteCode },
+        headers: { "X-Invite-Code": TEST_INVITE_CODE },
       }),
     );
     process.env.GEMINI_API_KEY = previousGeminiKey;
@@ -1061,7 +1058,7 @@ describe("runDailySourceAgentLoop", () => {
     );
     const body = (await response.json()) as Record<string, unknown>;
 
-    expect(response.status).toBe(403);
-    expect(body).toEqual({ ok: false, error: "invalid-invite-code" });
+    expect(response.status).toBe(401);
+    expect(body).toEqual({ ok: false, error: "authentication-required" });
   });
 });

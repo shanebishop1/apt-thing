@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireGroupCode } from "@/lib/api-auth";
+import { authorizeGroupRequest } from "@/lib/api-auth";
 
 type MapTileRouteEnv = Partial<Record<"STADIA_MAPS_API_KEY", unknown>>;
 
@@ -10,7 +10,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ z: string; x: string; y: string }> },
 ) {
-  const auth = requireGroupCode(request, undefined, "Map Tiles API");
+  const auth = await authorizeGroupRequest(request, { displayName: "Map Tiles API" });
   if (!auth.ok) return auth.response;
 
   const { z, x, y } = await params;

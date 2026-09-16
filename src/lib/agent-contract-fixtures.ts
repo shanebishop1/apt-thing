@@ -28,7 +28,7 @@ import {
   createDuplicateKey,
   createGroupScopedDuplicateKey,
   createGroupScopedListingState,
-  createInviteIdentity,
+  createGroupIdentity,
   createListingFromUrl,
   defaultSearchGroup,
   updateReviewStatus,
@@ -37,7 +37,7 @@ import {
 } from "./listings";
 
 const generatedAt = "2026-06-07T12:00:00.000Z";
-const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "G2B Fixture")!;
+const identity = createGroupIdentity(defaultSearchGroup.id, "G2B Fixture")!;
 
 const pastedExtraction = extractSingleLinkFixture({
   rawUrl: streetEasyPastedFixture.sourceUrl,
@@ -176,8 +176,7 @@ const groupAccess: GroupAccessRecord[] = [
     id: "group-access-g2b-fixture",
     contract: "group-access-v1",
     groupId: defaultSearchGroup.id,
-    inviteCode: defaultSearchGroup.inviteCode,
-    invitePath: defaultSearchGroup.invitePath,
+    credentialSource: "server-configured-invite",
     resolvedFrom: "invite-link",
     actorDisplayName: identity.displayName,
     actorIdentityToken: identity.identityToken,

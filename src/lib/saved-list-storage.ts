@@ -1,10 +1,10 @@
 import { fixtureBatchRun, fixtureListings } from "./fixtures";
 import {
   INVITE_IDENTITY_STORAGE_KEY,
-  createInviteIdentity,
+  createGroupIdentity,
   defaultSearchGroup,
   intakePastedListingUrl,
-  resolveSearchGroupInvite,
+  parseInviteInput,
   updateListingField,
   updateReviewStatus,
   type FieldProvenance,
@@ -58,18 +58,9 @@ export type StoredInviteIdentity = {
   updatedAt: string;
 };
 
-export type InviteIdentityResolution =
-  | {
-      kind: "valid";
-      identity: InviteIdentity;
-      storedIdentity: StoredInviteIdentity;
-      feedback: string;
-    }
-  | {
-      kind: "invalid";
-      storedIdentity: StoredInviteIdentity;
-      feedback: string;
-    };
+export type InviteIdentityInput =
+  | { kind: "complete"; inviteCode: string; displayName: string }
+  | { kind: "incomplete"; feedback: string };
 
 export type SavedListingCreateResult =
   | {
@@ -135,58 +126,33 @@ export function createSeenRejectedMemoryStorageKey(groupId: string): string {
   return `apt-thing:${SAVED_LIST_STORAGE_VERSION}:groups:${groupId}:seen-rejected-memory`;
 }
 
-export function resolveStoredInviteIdentity(
-  inviteCode: string,
+/**
+ * Normalizes user-entered invite input (a code or an invite link) and display name. Whether the
+ * code is accepted is decided only by the server; see POST /api/group/session.
+ */
+export function normalizeInviteIdentityInput(
+  inviteInput: string,
   displayName: string,
-): InviteIdentityResolution {
-  const normalizedInviteCode = inviteCode.trim();
+): InviteIdentityInput {
+  const { inviteCode } = parseInviteInput(inviteInput);
   const normalizedDisplayName = displayName.trim();
-  const inviteResolution = resolveSearchGroupInvite(normalizedInviteCode);
-  const group = inviteResolution.status === "valid" ? inviteResolution.group : undefined;
-  const resolvedInviteCode =
-    inviteResolution.status === "valid" ? inviteResolution.inviteCode : normalizedInviteCode;
-  const identity = createInviteIdentity(resolvedInviteCode, normalizedDisplayName);
-  const storedIdentity: StoredInviteIdentity = {
-    version: SAVED_LIST_STORAGE_VERSION,
-    inviteCode: resolvedInviteCode,
-    displayName: normalizedDisplayName,
-    groupId: group?.id,
-    persistedIn: "localStorage",
-    storageKey: INVITE_IDENTITY_STORAGE_KEY,
-    updatedAt: new Date().toISOString(),
-  };
 
-  if (!identity) {
-    return {
-      kind: "invalid",
-      storedIdentity,
-      feedback: group
-        ? "Enter a display name before saving group records."
-        : "Enter a valid invite code before saving group records.",
-    };
+  if (!inviteCode) {
+    return { kind: "incomplete", feedback: "Enter an invite code before saving group records." };
+  }
+  if (!normalizedDisplayName) {
+    return { kind: "incomplete", feedback: "Enter a display name before saving group records." };
   }
 
-  return {
-    kind: "valid",
-    identity,
-    storedIdentity: {
-      ...storedIdentity,
-      groupId: identity.groupId,
-    },
-    feedback: `Invite identity saved for ${identity.displayName}.`,
-  };
+  return { kind: "complete", inviteCode, displayName: normalizedDisplayName };
 }
 
-export function readInviteIdentity(storage: StorageLike): InviteIdentityResolution | undefined {
+export function readStoredInviteIdentity(storage: StorageLike): StoredInviteIdentity | undefined {
   try {
     const storedIdentity = storage.getItem(INVITE_IDENTITY_STORAGE_KEY);
-
-    if (!storedIdentity) {
-      return undefined;
-    }
+    if (!storedIdentity) return undefined;
 
     const parsedIdentity = JSON.parse(storedIdentity) as Partial<StoredInviteIdentity>;
-
     if (
       typeof parsedIdentity.inviteCode !== "string" ||
       typeof parsedIdentity.displayName !== "string"
@@ -194,26 +160,39 @@ export function readInviteIdentity(storage: StorageLike): InviteIdentityResoluti
       return undefined;
     }
 
-    return resolveStoredInviteIdentity(parsedIdentity.inviteCode, parsedIdentity.displayName);
+    return {
+      version: SAVED_LIST_STORAGE_VERSION,
+      inviteCode: parsedIdentity.inviteCode,
+      displayName: parsedIdentity.displayName,
+      groupId: typeof parsedIdentity.groupId === "string" ? parsedIdentity.groupId : undefined,
+      persistedIn: "localStorage",
+      storageKey: INVITE_IDENTITY_STORAGE_KEY,
+      updatedAt:
+        typeof parsedIdentity.updatedAt === "string"
+          ? parsedIdentity.updatedAt
+          : new Date(0).toISOString(),
+    };
   } catch {
     return undefined;
   }
 }
 
-export function writeInviteIdentity(
+export function writeStoredInviteIdentity(
   storage: StorageLike,
-  inviteCode: string,
-  displayName: string,
-): InviteIdentityResolution {
-  const resolution = resolveStoredInviteIdentity(inviteCode, displayName);
+  input: { inviteCode: string; displayName: string; groupId?: string },
+): StoredInviteIdentity {
+  const storedIdentity: StoredInviteIdentity = {
+    version: SAVED_LIST_STORAGE_VERSION,
+    inviteCode: input.inviteCode.trim(),
+    displayName: input.displayName.trim(),
+    groupId: input.groupId,
+    persistedIn: "localStorage",
+    storageKey: INVITE_IDENTITY_STORAGE_KEY,
+    updatedAt: new Date().toISOString(),
+  };
 
-  try {
-    storage.setItem(INVITE_IDENTITY_STORAGE_KEY, JSON.stringify(resolution.storedIdentity));
-  } catch {
-    return resolution;
-  }
-
-  return resolution;
+  storage.setItem(INVITE_IDENTITY_STORAGE_KEY, JSON.stringify(storedIdentity));
+  return storedIdentity;
 }
 
 export function getFixtureListingsForGroup(groupId = defaultSearchGroup.id): ListingCandidate[] {
@@ -470,7 +449,7 @@ export function createSavedListing(
   identity?: InviteIdentity,
 ): SavedListingCreateResult {
   const validatedIdentity = identity
-    ? createInviteIdentity(identity.inviteCode, identity.displayName)
+    ? createGroupIdentity(identity.groupId, identity.displayName)
     : undefined;
 
   if (!identity || !validatedIdentity || validatedIdentity.groupId !== identity.groupId) {

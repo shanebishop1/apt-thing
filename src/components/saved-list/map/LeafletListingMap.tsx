@@ -14,7 +14,8 @@ import {
 function createLeafletTileUrl(identity?: InviteIdentity) {
   if (!identity) return "";
 
-  return `/api/map/tiles/{z}/{x}/{y}.png?inviteCode=${encodeURIComponent(identity.inviteCode)}`;
+  // Tiles authenticate with the HTTP-only group session cookie, so the URL carries no credential.
+  return "/api/map/tiles/{z}/{x}/{y}.png";
 }
 
 export function LeafletListingMap({

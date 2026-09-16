@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ListingGroupActions } from "../../lib/saved-list-storage";
-import { createInviteIdentity, defaultSearchGroup } from "../../lib/listings";
+import { createGroupIdentity, defaultSearchGroup } from "../../lib/listings";
 import { fixtureListings } from "../../lib/fixtures";
 import { ListingEditor } from "./ListingEditor";
 
@@ -66,7 +66,7 @@ describe("ListingEditor", () => {
         reviewStatus: "review" as const,
       },
     };
-    const identity = createInviteIdentity("apt-g1", "Ari")!;
+    const identity = createGroupIdentity(defaultSearchGroup.id, "Ari")!;
     const actions: ListingGroupActions = {
       comments: [],
       reactions: [],

@@ -8,14 +8,14 @@ import type { ListingCandidate } from "./listings";
 import {
   PREFERRED_NEIGHBORHOODS,
   createGroupScopedListingState,
-  createInviteIdentity,
+  createGroupIdentity,
   createListingFromUrl,
   defaultSearchGroup,
   updateListingField,
   updateReviewStatus,
 } from "./listings";
 
-const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "Shane")!;
+const identity = createGroupIdentity(defaultSearchGroup.id, "Shane")!;
 
 const streeteasy = createListingFromUrl(
   "https://streeteasy.com/building/42-west-21-street-new_york/5",

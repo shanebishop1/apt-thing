@@ -1,3 +1,4 @@
+import { TEST_INVITE_CODE } from "../test-support/group-auth";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { PATCH } from "../../app/api/group/listings/[listingId]/route";
@@ -5,7 +6,7 @@ import { applyMigrations, createSqliteD1, type SqliteD1 } from "../test-support/
 import { DatabaseSync } from "node:sqlite";
 import { fixtureListings } from "./fixtures";
 import { runDailySourceAgentLoop } from "./daily-source-loop";
-import { createInviteIdentity, defaultSearchGroup, type ListingCandidate } from "./listings";
+import { createGroupIdentity, defaultSearchGroup, type ListingCandidate } from "./listings";
 import {
   ListingMutationError,
   mutateSharedListingField,
@@ -24,8 +25,8 @@ vi.mock("@opennextjs/cloudflare", () => ({
   getCloudflareContext: async () => ({ env: mockState.env }),
 }));
 
-const alice = createInviteIdentity(defaultSearchGroup.inviteCode, "Alice")!;
-const bob = createInviteIdentity(defaultSearchGroup.inviteCode, "Bob")!;
+const alice = createGroupIdentity(defaultSearchGroup.id, "Alice")!;
+const bob = createGroupIdentity(defaultSearchGroup.id, "Bob")!;
 let db: SqliteD1;
 let listing: ListingCandidate;
 
@@ -172,7 +173,7 @@ describe("shared listing optimistic concurrency (SQLite/D1 semantics)", () => {
 
   it("increments the revision when the daily loop rewrites a saved listing", async () => {
     vi.stubEnv("GEMINI_API_KEY", "");
-    const identity = createInviteIdentity(defaultSearchGroup.inviteCode, "Loop")!;
+    const identity = createGroupIdentity(defaultSearchGroup.id, "Loop")!;
     const now = "2026-09-15T00:00:00.000Z";
     const first = await runDailySourceAgentLoop({ identity, env: { DB: db }, now });
     const loopListing = first.listings[0]!;
@@ -190,7 +191,7 @@ describe("PATCH /api/group/listings/:id revision contract", () => {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "X-Invite-Code": defaultSearchGroup.inviteCode,
+          "X-Invite-Code": TEST_INVITE_CODE,
         },
         body: JSON.stringify({ displayName: "Route Tester", ...body }),
       }),
