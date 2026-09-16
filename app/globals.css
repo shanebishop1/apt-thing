@@ -172,7 +172,6 @@ p {
 
 .settings-card,
 .run-history-card,
-.batch-status-card,
 .map-review-card,
 .list-panel,
 .editor-panel {
@@ -583,24 +582,6 @@ label {
   overflow-wrap: anywhere;
 }
 
-.batch-status-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.78fr);
-  gap: 14px;
-  align-items: stretch;
-  margin-bottom: 14px;
-  padding: 18px;
-}
-
-.batch-status-card h2 {
-  margin-bottom: 8px;
-  font-family: var(--display);
-  font-size: clamp(1.45rem, 5vw, 2.35rem);
-  line-height: 0.98;
-  letter-spacing: -0.04em;
-}
-
-.batch-status-card p,
 .panel-heading p,
 .empty-state {
   margin-bottom: 0;
@@ -643,8 +624,7 @@ textarea:focus-visible {
 
 button,
 .editor-header a,
-.editor-icon-button,
-.listing-rowgrid a {
+.editor-icon-button {
   min-height: 48px;
   border: 1px solid var(--accent);
   border-radius: 999px;
@@ -1398,18 +1378,14 @@ button:disabled {
   line-height: 1.12;
 }
 
-.listing-rowgrid,
-.state-grid,
-.card-actions {
+.state-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
 
-.state-grid span,
-.listing-rowgrid span,
-.card-actions small {
+.state-grid span {
   color: var(--muted);
 }
 
@@ -1419,17 +1395,6 @@ button:disabled {
   border-radius: 999px;
   background: var(--panel-strong);
   padding: 5px 9px;
-}
-
-.listing-rowgrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  align-items: center;
-}
-
-.listing-rowgrid a {
-  min-height: 44px;
-  padding-block: 9px;
 }
 
 .state-grid {
@@ -1442,37 +1407,6 @@ button:disabled {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-.card-actions {
-  align-items: stretch;
-}
-
-.card-actions button,
-.card-actions details {
-  flex: 1 1 150px;
-}
-
-.card-actions details {
-  min-height: 48px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--paper);
-  padding: 0 12px 10px;
-}
-
-.card-actions summary {
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  color: var(--accent);
-  cursor: pointer;
-  font-weight: 800;
-}
-
-.card-actions details p,
-.card-actions details small {
-  overflow-wrap: anywhere;
 }
 
 .editor-panel {
@@ -2169,7 +2103,6 @@ button:disabled {
 
 @media (max-width: 860px) {
   .run-history-header,
-  .batch-status-card,
   .workspace-grid,
   .trust-grid {
     grid-template-columns: 1fr;
@@ -2201,7 +2134,6 @@ button:disabled {
   }
 
   .run-history-card,
-  .batch-status-card,
   .list-panel,
   .editor-panel {
     border-radius: 16px;
@@ -2212,8 +2144,7 @@ button:disabled {
   .group-action-form,
   .fact-strip,
   .run-detail-grid,
-  .run-output-grid,
-  .listing-rowgrid {
+  .run-output-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2280,7 +2211,6 @@ button:disabled {
   button,
   .editor-header a,
   .editor-icon-button,
-  .listing-rowgrid a,
   input,
   select,
   textarea {
@@ -2290,7 +2220,6 @@ button:disabled {
 
 /* Restored app-shell theme overrides: keep the MVP features, remove the light marketing-page feel. */
 .run-history-card,
-.batch-status-card,
 .map-review-card,
 .list-panel,
 .editor-panel,
@@ -2311,7 +2240,6 @@ textarea,
 .map-detail,
 .map-list-item,
 .listing-card,
-.card-actions details,
 .group-actions-panel,
 .group-action-form textarea,
 .group-action-form select,
@@ -2329,8 +2257,7 @@ textarea,
 
 button,
 .editor-header a,
-.editor-icon-button,
-.listing-rowgrid a {
+.editor-icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2469,7 +2396,6 @@ button,
 }
 
 .run-history-header h2,
-.batch-status-card h2,
 .map-detail h3,
 .run-history-item summary h3,
 .run-history-section h4 {
@@ -2488,7 +2414,6 @@ button,
 }
 
 .source-link-row a,
-.card-actions summary,
 .artifact-pointer-row span {
   color: var(--accent);
 }
