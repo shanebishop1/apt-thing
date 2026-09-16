@@ -2,63 +2,112 @@
 
 [![CI](https://github.com/shanebishop1/apt-thing/actions/workflows/ci.yml/badge.svg)](https://github.com/shanebishop1/apt-thing/actions/workflows/ci.yml)
 
-A shared apartment shortlist for a roommate group looking for a five-bedroom
-apartment in NYC. Save listing links, review extracted facts, compare locations,
-and keep the group's decisions in one place.
+A private shared apartment shortlist for a roommate group hunting for a
+five-bedroom apartment in NYC. Members join with one invite code, paste listing
+links, review the facts the server extracts, compare locations on a map, and keep
+the group's decisions in one place.
 
-## Capabilities
+## Features
 
-- Save URLs with duplicate detection and editable fallback records when extraction fails.
-- Extract listing details through RealtyAPI for StreetEasy or page fetching plus Gemini.
-- Review rent, rooms, photos, floor plans, evidence, and field-edit provenance.
-- Track interest and touring status, approve or reject candidates, and add comments and reactions.
-- Protect concurrent edits with per-listing revisions: stale edits are rejected with a visible conflict, never silently overwritten, and rejected listings are never recreated by a delayed update.
-- Review persisted source-loop runs (status, source coverage and failures, skips, triage counts, briefing) in the Runs tab.
+- Save listing URLs with duplicate detection, and keep an editable manual-review
+  record when extraction fails.
+- Extract details through RealtyAPI for StreetEasy links, or source-page fetching
+  plus Gemini for everything else.
+- Review rent, rooms, photos, floor plans, evidence, and per-field edit provenance.
+- Track interest and touring status, approve or reject candidates, and leave
+  comments and reactions.
+- Guard concurrent edits with per-listing revisions. A stale edit is rejected with
+  a visible conflict instead of silently overwriting, and a rejected listing is
+  never recreated by a delayed update.
+- Review persisted source-loop runs in the Runs tab: status, source coverage and
+  failures, skip counts, triage buckets, and the generated briefing.
 - Compare listings on a Leaflet map with neighborhood, subway, and grocery context.
-- Use list and map views on desktop or mobile, with light and dark themes.
+- Use list and map views on desktop or mobile, in light or dark theme.
 
 ## How It Works
 
 ```text
-Browser -> POST /api/group/session (invite code) -> HTTP-only session cookie
-Browser -> Next.js API routes -> source page / RealtyAPI / Gemini
-                            -> D1 listings (revisioned), group actions, run history
-Browser <- shared snapshot, refreshed periodically
+Browser  POST /api/group/session      invite code -> HttpOnly, SameSite=Strict cookie
+Browser  GET/POST /api/group/listings -> RealtyAPI or source page + Gemini
+                                      -> D1: listings (revisioned), group actions
+Browser  PATCH /api/group/listings/:id  revision-checked status, field, and decision edits
+Browser  GET  /api/group/runs         -> persisted daily-loop run history
+Browser  GET  /api/map/tiles/:z/:x/:y -> Stadia Maps, falling back to CARTO
+Cron     (disabled by default)        -> src/worker.ts scheduled -> daily source loop
 ```
 
-The frontend uses Next.js App Router, React, TypeScript, Leaflet, and CSS. The API
-stores shared state in Cloudflare D1; browser storage remembers the user-entered
-invite, display name, and UI preferences, not an independent shared database.
-Accepted invite codes exist only in server-side configuration (`GROUP_INVITE_CODES`). OpenNext packages the app for
-Cloudflare Workers, with `src/worker.ts` providing the fetch and scheduled entrypoints.
+Next.js App Router, React, TypeScript, Leaflet, and plain CSS on the front end.
+Every API route authorizes against the server-only `GROUP_INVITE_CODES` value,
+either through the session cookie or an operator `X-Invite-Code` header, and the
+group is always taken from the authenticated identity. Shared state lives in
+Cloudflare D1. Browser storage holds only the entered invite code, display name,
+and UI preferences. OpenNext packages the app for Cloudflare Workers, with
+`src/worker.ts` supplying the fetch and scheduled entrypoints.
 
-`app/` contains pages and API routes, `src/components/` contains the review UI,
-`src/lib/` holds extraction, storage, and source-loop logic, and `migrations/`
-defines the database schema. Vitest covers behavior; Oxlint, Oxfmt, and TypeScript
-provide static checks. GitHub Actions runs checks on pushes to `main` and pull requests,
-without deploying the app.
+## Project Layout
 
-## Current Limits
+| Path                | Contents                                                                   |
+| ------------------- | -------------------------------------------------------------------------- |
+| `app/`              | App Router pages plus the `group`, `platform`, and `map` API routes.       |
+| `src/components/`   | Review UI: workspace, listing editor, Leaflet map, run history panel.      |
+| `src/lib/`          | Auth, route plumbing, extraction, triage, D1 stores, agent contracts.      |
+| `src/lib/daily-loop/` | Source loop parts: sources, candidates, briefing, persistence, analyzer. |
+| `src/lib/utils/`    | Small shared helpers for ids, JSON, records, text, and concurrency.        |
+| `src/test-support/` | Test helpers, including an in-memory SQLite stand-in for D1.               |
+| `migrations/`       | D1 schema, applied with Wrangler.                                          |
+| `scripts/`          | Client-asset secret scan and the RealtyAPI proof script.                   |
 
-- The checked-in Cloudflare configuration is hibernated: no database, queue, or
-  workflow bindings, no cron schedule, and no public Worker URL. Starting Next.js
-  alone does **not** produce a working shared database.
-- Access is a shared, operator-configured invite code plus a self-chosen display
-  name, not per-person accounts. Anyone holding the code can act as any display
-  name, and there is no rate limiting on invite attempts, so use a long random
-  code and rotate it (which revokes all sessions) if it leaks.
+## Run It Locally
+
+Add a local `DB` binding to `wrangler.jsonc` first; [SETUP.md](SETUP.md) has the
+exact block. Then:
+
+```sh
+pnpm install --frozen-lockfile
+cp .env.example .env
+echo "GROUP_INVITE_CODES=nyc-5br-2026=$(openssl rand -hex 16)" >> .env
+pnpm exec wrangler d1 migrations apply DB --local
+pnpm dev
+```
+
+Open `http://localhost:3000` and enter the code you just generated. No cloud
+account or paid provider key is needed for the manual-review path.
+
+## Verification
+
+```sh
+pnpm check
+```
+
+That runs `format:check`, `lint`, `typecheck`, `test`, `build`, and
+`check:client-secrets` in order. Oxfmt and Oxlint cover `app`, `src`, `scripts`,
+and the root config files; `typecheck` regenerates Next's types before running
+`tsc`. Vitest covers behavior against fixtures, mocks, and an in-memory
+`node:sqlite` database that applies the real migrations.
+`check:client-secrets` fails the build if a server-only value reaches the client
+bundle. GitHub Actions runs the same checks on pushes to `main` and pull
+requests, and never deploys.
+
+## Limits And Security Posture
+
+- The committed Cloudflare configuration is hibernated: no database, cache, or
+  workflow bindings, an empty cron list, and no public Worker URL. Starting
+  Next.js alone does not produce a working shared database.
+- Access is one shared invite code plus a self-chosen display name, not per-person
+  accounts. Anyone with the code can act as any display name, and invite attempts
+  are not rate limited. Use a long random code and rotate it if it leaks, which
+  revokes every existing session.
 - Extraction depends on source access and provider availability. Blocked pages,
-  missing keys, or incomplete results need manual review; AI output is not a
-  guarantee of availability, accuracy, or apartment suitability.
-- The Runs tab shows only runs persisted to D1; it is empty until a manual or
-  scheduled source-loop run executes. Fixture-mode runs are labeled as such.
-  Automated discovery is not enabled by default and is not a comprehensive search
-  of every rental site.
-- Maps and source-hosted images need external services. Raw image/artifact storage
-  is disabled; there is no R2 archive.
+  missing keys, or partial results need manual review. Model output is not a
+  guarantee of accuracy, availability, or suitability.
+- The Runs tab shows only runs persisted to D1, so it is empty until a run
+  executes. Fixture runs are labeled as such. Scheduled discovery is off by
+  default and is not a comprehensive search of every rental site.
+- Maps and source-hosted images need external network access. Raw image and
+  artifact storage is disabled; there is no R2 archive.
 
 ## Setup
 
-See **[SETUP.md](SETUP.md)** for a clean-clone local setup, a local D1 database,
-optional provider credentials, verification commands, and optional Cloudflare
-deployment. No cloud account or paid API key is needed for the local manual-review path.
+See **[SETUP.md](SETUP.md)** for a clean-clone walkthrough: the local D1 database,
+invite codes, API checks, optional provider credentials, the source loop, and
+optional Cloudflare deployment.
