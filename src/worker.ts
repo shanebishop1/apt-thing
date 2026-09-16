@@ -16,7 +16,7 @@ export class DailySourceAgentLoopWorkflow extends WorkflowEntrypoint<
   DailyLoopScheduledEnv,
   DailyLoopWorkflowPayload
 > {
-  async run(event: Readonly<WorkflowEvent<DailyLoopWorkflowPayload>>, step: WorkflowStep) {
+  override async run(event: Readonly<WorkflowEvent<DailyLoopWorkflowPayload>>, step: WorkflowStep) {
     return step.do("run daily source agent loop", async () => {
       const result = await runDailySourceAgentLoop({
         mode: event.payload.mode ?? "live-safe",
