@@ -6,8 +6,10 @@ repository root unless a step says otherwise.
 
 ## 1. Install And Clone
 
-Install Git, Node.js **22.15.1**, and pnpm **10.13.1**, matching `package.json`.
-If pnpm is not installed, after selecting the correct Node version run:
+Install Git, Node.js **22.15.1** (the version in `.node-version`, which
+`package.json` requires as a floor and CI pins exactly), and pnpm **10.13.1**.
+`.editorconfig` carries the shared whitespace settings. If pnpm is not installed,
+after selecting the correct Node version run:
 
 ```sh
 npm install --global pnpm@10.13.1
@@ -74,18 +76,17 @@ pnpm exec wrangler d1 migrations apply DB --local
 pnpm cf:types
 ```
 
-Confirm the migration prompt if shown. The first migration creates the demo
-search group; the fourth creates the `app_*` tables used by the shared-list API;
-the fifth adds the listing `revision` column used for conflict detection; the
-sixth replaces the retired committed invite code stored in `search_groups` with a
-placeholder. Applying only some migrations is not sufficient. Migrations do not
-populate the shortlist with sample listings.
+Confirm the migration prompt if shown. 0001 creates the demo search group, 0003
+the `daily_loop_*` run tables, 0004 the `app_*` tables used by the shared-list
+API, 0005 the listing `revision` column used for conflict detection, and 0006
+replaces the retired committed invite code in `search_groups` with a placeholder.
+Applying only some of them is not enough, and no migration seeds sample listings.
 
-An existing local database created before these changes only needs the pending
-migrations: `wrangler d1 migrations apply DB --local` adds `revision = 1` to every
-saved listing without touching listing data. If Wrangler reports that 0001 is
-applied but `search_groups` does not exist, the local state is inconsistent;
-move `.wrangler/state/v3/d1` aside and apply all migrations to a fresh database.
+An existing local database only needs the pending migrations. The same
+`pnpm exec wrangler d1 migrations apply DB --local` adds `revision = 1` to every
+saved listing without touching listing data. If Wrangler reports 0001 as applied
+but `search_groups` does not exist, the local state is inconsistent: move
+`.wrangler/state/v3/d1` aside and apply all migrations to a fresh database.
 
 Local database files live under `.wrangler/state/`. They survive server restarts
 but are separate from any remote database. Removing that directory loses local
@@ -152,8 +153,9 @@ should have `ok: true` and a `snapshot`. A smoke response's `ok: true` alone doe
 not prove that a database is bound or migrated; check the binding fields and the
 listings endpoint.
 
-Protected routes (`/api/group/*`, `/api/platform/*`, and `/api/map/tiles/*`)
-accept either the browser session cookie or the operator `X-Invite-Code` header.
+Every route except `/api/group/session` is protected: `/api/group/listings*`,
+`/api/group/runs`, `/api/platform/*`, and `/api/map/tiles/*` accept either the
+browser session cookie or the operator `X-Invite-Code` header.
 Invite codes in query strings or JSON bodies are ignored. Responses: no credential
 → 401 `authentication-required`; expired or tampered session → 401
 `session-invalid`; wrong code → 403 `invalid-invite-code`; nothing configured → 503
@@ -207,11 +209,18 @@ The map and remote photos still require internet access without these keys.
 Verify provider results against the original listing; coordinates, extracted
 facts, availability, and visual evidence can be missing or incorrect.
 
+To check RealtyAPI access on its own, run `pnpm proof:streeteasy` with
+`REALTYAPI_KEY` exported in your shell or set in `.env.local`, which is the only
+env file that script reads. It writes request and response evidence to
+`tmp/streeteasy-live-proof/`. `pnpm proof:streeteasy -- --fixture` writes the same
+shape offline and makes no paid request.
+
 ### Source Loop And Fixtures
 
-`/api/platform/daily-loop` supports `fixture` (the default) and `live-safe` modes.
-It is an execution endpoint, including for GET requests, not a read-only history
-endpoint. If D1 is bound, it can write run records and shortlist data.
+`POST /api/platform/daily-loop` runs the loop in `fixture` (the default) or
+`live-safe` mode. POST is the only verb the route exports, so a GET returns 405;
+read past runs from `GET /api/group/runs` instead. With D1 bound, a run writes run
+records and shortlist data.
 
 **Fixture mode is not a universal no-spend switch:** a supplied Gemini key can
 still activate the analyzer. For provider-free fixtures, leave keys blank in
@@ -246,15 +255,18 @@ pnpm build
 pnpm check:client-secrets
 ```
 
-`pnpm check` runs those six steps in order. Tests use fixtures, mocks, and an
-in-memory `node:sqlite` database that applies the real migrations (for listing
-race, two-client, and run-history coverage); they do not require provider keys or
-a cloud account. `check:client-secrets` scans `.next/static` for the retired
-invite code, `GROUP_INVITE_CODES` values from the environment, `.env.local`, or
-`.dev.vars`, and provider key values; after `pnpm cf:build`, run
+`pnpm check` runs those six steps in order. Oxfmt and Oxlint cover `app`, `src`,
+`scripts`, and the root config files, and `typecheck` runs `next typegen` before
+`tsc --noEmit`, so a clean checkout generates Next's types on its first run.
+Tests use fixtures, mocks, and an
+in-memory `node:sqlite` database that applies the real migrations, covering the
+listing race, two-client, and run-history paths. They need no provider key and no
+cloud account. `check:client-secrets` scans `.next/static` for the retired invite
+code, for `GROUP_INVITE_CODES` entries found in the environment, `.env.local`, or
+`.dev.vars`, and for provider key values. After `pnpm cf:build`, run
 `node scripts/check-client-secrets.mjs --open-next` to scan the Worker assets too.
-GitHub Actions runs all of these checks on pushes to `main` and pull requests,
-without deploying. They do not prove live provider access or cloud bindings.
+GitHub Actions runs the same checks on pushes to `main` and pull requests, without
+deploying. None of them prove live provider access or cloud bindings.
 
 For Worker packaging and a local runtime check:
 
@@ -274,11 +286,12 @@ for local development. The repository's default config has `workers_dev: false`,
 `DAILY_LOOP_ENABLED: "false"`. Deploying it unchanged is not a usable hosted app.
 
 **Security first:** API and map-tile access requires the server-only invite code
-(or a session derived from it), but the static UI shell is public, the code is
-shared by the whole group, display names are not verified identities, and invite
-attempts are not rate limited. Use a long random code, share it privately, and
-rotate it if it leaks. Consider an additional perimeter (for example Cloudflare
-Access) before adding paid provider credentials.
+(or a session derived from it), and `next.config.ts` sets baseline response
+headers, but the static UI shell is public, the code is shared by the whole group,
+display names are not verified identities, and invite attempts are not rate
+limited. Use a long random code, share it privately, and rotate it if it leaks.
+Consider an additional perimeter (for example Cloudflare Access) before adding
+paid provider credentials.
 
 1. Choose your own Worker name in `wrangler.jsonc`, retain `main: "src/worker.ts"`
    and the existing assets/compatibility settings, and set `vars.APP_ENV` to
@@ -322,8 +335,8 @@ pnpm exec wrangler secret put GROUP_INVITE_CODES
 pnpm cf:deploy
 ```
 
-8. Add only the optional provider secrets you need,
-   using the interactive prompts rather than shell command arguments:
+8. Add only the optional provider secrets you need, using the interactive
+   prompts rather than shell command arguments:
 
 ```sh
 pnpm exec wrangler secret put GEMINI_API_KEY
@@ -360,7 +373,7 @@ Disabling the Cron schedule is not a substitute for securing those endpoints.
 
 | Symptom                               | Check                                                                                                            |
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Unsupported-engine warning            | Use Node 22.15.1 and pnpm 10.13.1.                                                                               |
+| Unsupported-engine warning            | Use Node 22.15.1 (see `.node-version`) and pnpm 10.13.1.                                                         |
 | `d1-binding-missing` / HTTP 503       | Add `DB`, restart the server, and check the smoke binding fields. `APP_ENV` does not create a binding.           |
 | `no such table` or foreign-key errors | Apply all migrations to the same local or remote database used by the server.                                    |
 | HTTP 401 `authentication-required`    | Sign in through the UI (session cookie) or send `X-Invite-Code`; codes in query strings or bodies are ignored.  |
@@ -370,13 +383,11 @@ Disabling the Cron schedule is not a substitute for securing those endpoints.
 | HTTP 400 `revision-required`          | Include the listing's current `revision` in `PATCH /api/group/listings/<id>` bodies.                             |
 | Empty shortlist after signing in      | A fresh database has no listings; an unavailable API can also leave the UI empty. Inspect `/api/group/listings`. |
 | Extraction needs manual review        | Check the reported source/provider error. Saving a fallback record does not mean extraction succeeded.           |
-| Blank or incomplete map               | Check tile requests, external network access, and whether the listing has usable coordinates.                    |
+| Blank or incomplete map               | Check tile requests, external network access, and whether the listing has usable coordinates. `tile-fetch-failed` (502 when the fallback returned no status) means both Stadia and CARTO refused the tile. |
 | Run missing from the Runs tab         | Check the run response's `persistence.d1` (a missing binding writes nothing), then use the Runs refresh button.  |
 | Deployed Worker has no reachable URL  | Check `workers_dev` or your route/domain configuration; both public URL mechanisms are off by default.           |
 
 ## References
-
-Setup details were cross-checked with Context7 against these upstream references:
 
 - [OpenNext Cloudflare setup](https://github.com/opennextjs/docs/blob/main/pages/cloudflare/get-started.mdx)
 - [Cloudflare local environment variables](https://developers.cloudflare.com/workers/configuration/environment-variables)
