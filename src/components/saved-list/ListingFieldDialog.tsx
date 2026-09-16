@@ -2,18 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
-import type { FieldProvenance, ListingCandidate } from "../../lib/listings";
+import {
+  EDITABLE_LISTING_FIELDS,
+  NUMERIC_LISTING_FIELDS,
+  type FieldProvenance,
+  type ListingCandidate,
+} from "@/lib/listings";
 
-const editableFields: FieldProvenance["field"][] = [
-  "title",
-  "address",
-  "neighborhood",
-  "rent",
-  "bedrooms",
-  "bathrooms",
-  "availableAt",
-];
-const numericFields = new Set<FieldProvenance["field"]>(["rent", "bedrooms", "bathrooms"]);
+const numericFields = new Set<FieldProvenance["field"]>(NUMERIC_LISTING_FIELDS);
 
 export type ListingFieldDialogProps = {
   listing: ListingCandidate;
@@ -79,11 +75,11 @@ export function ListingFieldDialog({
           </button>
         </header>
         <section className="edit-grid" aria-label="Editable saved-list fields">
-          {editableFields.map((field) => (
+          {EDITABLE_LISTING_FIELDS.map((field) => (
             <label key={field}>
               {field}
               <input
-                ref={field === editableFields[0] ? firstEditInputRef : undefined}
+                ref={field === EDITABLE_LISTING_FIELDS[0] ? firstEditInputRef : undefined}
                 type={numericFields.has(field) ? "number" : "text"}
                 inputMode={numericFields.has(field) ? "decimal" : "text"}
                 enterKeyHint="done"

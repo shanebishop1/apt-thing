@@ -92,6 +92,30 @@ export type FieldProvenance = {
   updatedAt: string;
 };
 
+/** The listing fields a reviewer may edit by hand, in the order the edit UI renders them. */
+export const EDITABLE_LISTING_FIELDS = [
+  "title",
+  "address",
+  "neighborhood",
+  "rent",
+  "bedrooms",
+  "bathrooms",
+  "availableAt",
+] as const satisfies readonly FieldProvenance["field"][];
+
+/** The subset of {@link EDITABLE_LISTING_FIELDS} whose values are parsed as numbers. */
+export const NUMERIC_LISTING_FIELDS = [
+  "rent",
+  "bedrooms",
+  "bathrooms",
+] as const satisfies readonly FieldProvenance["field"][];
+
+export function isEditableListingField(value: unknown): value is FieldProvenance["field"] {
+  return (
+    typeof value === "string" && (EDITABLE_LISTING_FIELDS as readonly string[]).includes(value)
+  );
+}
+
 export type EvidencePointer = {
   id: string;
   groupId: string;
@@ -1190,15 +1214,7 @@ function createSourceEvidencePointer(
   };
 }
 
-const editableProvenanceFields = new Set<string>([
-  "title",
-  "address",
-  "neighborhood",
-  "rent",
-  "bedrooms",
-  "bathrooms",
-  "availableAt",
-]);
+const editableProvenanceFields = new Set<string>(EDITABLE_LISTING_FIELDS);
 
 function createFieldProvenanceFromDraft(draft: ListingDraft, updatedAt: string): FieldProvenance[] {
   return Object.entries(draft)
