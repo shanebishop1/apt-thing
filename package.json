@@ -6,11 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "oxlint app src *.config.ts next.config.ts open-next.config.ts",
-    "lint:fix": "oxlint --fix app src *.config.ts next.config.ts open-next.config.ts",
-    "format": "oxfmt --write app src *.config.ts next.config.ts open-next.config.ts",
-    "format:check": "oxfmt --check app src *.config.ts next.config.ts open-next.config.ts",
-    "typecheck": "tsc --noEmit",
+    "lint": "oxlint app src scripts *.config.ts",
+    "lint:fix": "oxlint --fix app src scripts *.config.ts",
+    "format": "oxfmt --write app src scripts *.config.ts",
+    "format:check": "oxfmt --check app src scripts *.config.ts",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "proof:streeteasy": "node scripts/proof-streeteasy-realtyapi.mjs",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:client-secrets",
@@ -44,7 +44,7 @@
     "wrangler": "^4.98.0"
   },
   "engines": {
-    "node": "22.15.1",
+    "node": ">=22.15.1",
     "pnpm": "10.13.1"
   },
   "packageManager": "pnpm@10.13.1"

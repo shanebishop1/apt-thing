@@ -15,7 +15,9 @@ if (args.includes("--fixture")) {
 
 const apiKey = process.env.REALTYAPI_KEY;
 if (!apiKey) {
-  throw new Error("REALTYAPI_KEY is required in the environment or .env.local. Use --fixture for offline proof.");
+  throw new Error(
+    "REALTYAPI_KEY is required in the environment or .env.local. Use --fixture for offline proof.",
+  );
 }
 
 const targetUrl = args[0] ?? DEFAULT_URL;
@@ -30,7 +32,9 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const match = await findListingByUrlPath({ locationCandidates, targetPath, maxPages: 5 });
 if (!match) {
-  throw new Error(`No RealtyAPI search result matched ${targetPath} in ${locationCandidates.join(", ")}`);
+  throw new Error(
+    `No RealtyAPI search result matched ${targetPath} in ${locationCandidates.join(", ")}`,
+  );
 }
 
 const details = await getRentalDetailsById({
@@ -65,7 +69,9 @@ async function findListingByUrlPath({ locationCandidates, targetPath, maxPages }
       });
 
       const listings = data.search_results?.listings ?? [];
-      const edge = listings.find((candidate) => candidate.node?.urlPath?.toLowerCase() === targetPath);
+      const edge = listings.find(
+        (candidate) => candidate.node?.urlPath?.toLowerCase() === targetPath,
+      );
       if (edge?.node) {
         return {
           ...edge.node,
@@ -225,7 +231,10 @@ function loadDotenvLocal() {
     }
 
     const key = line.slice(0, separator).trim();
-    const value = line.slice(separator + 1).trim().replace(/^['"]|['"]$/g, "");
+    const value = line
+      .slice(separator + 1)
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
     if (key && process.env[key] === undefined) {
       process.env[key] = value;
     }
@@ -273,8 +282,11 @@ function writeFixtureProof() {
     },
   };
   const outputPath = path.join(OUT_DIR, "realtyapi_resolved_target_details.fixture.json");
-  fs.writeFileSync(outputPath, `${JSON.stringify(output, null, 2)}
-`);
+  fs.writeFileSync(
+    outputPath,
+    `${JSON.stringify(output, null, 2)}
+`,
+  );
   console.log(JSON.stringify(output.detailsSummary, null, 2));
   console.log(`wrote ${outputPath}`);
 }

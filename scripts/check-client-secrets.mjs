@@ -5,7 +5,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
-const assetRoots = [".next/static", ...(process.argv.includes("--open-next") ? [".open-next/assets"] : [])]
+const assetRoots = [
+  ".next/static",
+  ...(process.argv.includes("--open-next") ? [".open-next/assets"] : []),
+]
   .map((directory) => join(root, directory))
   .filter((directory) => existsSync(directory));
 
@@ -14,7 +17,12 @@ if (!existsSync(join(root, ".next/static"))) {
   process.exit(2);
 }
 
-const serverOnlyNames = ["GROUP_INVITE_CODES", "GEMINI_API_KEY", "REALTYAPI_KEY", "STADIA_MAPS_API_KEY"];
+const serverOnlyNames = [
+  "GROUP_INVITE_CODES",
+  "GEMINI_API_KEY",
+  "REALTYAPI_KEY",
+  "STADIA_MAPS_API_KEY",
+];
 const needles = new Map([
   ["apt-g1", "retired committed invite code"],
   ["GROUP_INVITE_CODES", "server-only env variable name"],
@@ -22,7 +30,8 @@ const needles = new Map([
 
 const envSources = [process.env, ...[".env.local", ".dev.vars"].map(readEnvFile)];
 for (const env of envSources) {
-  for (const code of parseInviteCodes(env.GROUP_INVITE_CODES)) needles.set(code, "configured invite code");
+  for (const code of parseInviteCodes(env.GROUP_INVITE_CODES))
+    needles.set(code, "configured invite code");
   for (const name of serverOnlyNames.slice(1)) {
     const value = env[name]?.trim();
     if (value && value.length >= 8) needles.set(value, `${name} value`);
@@ -41,7 +50,9 @@ for (const file of assetRoots.flatMap(listFiles)) {
 }
 
 if (findings.length > 0) {
-  console.error(`check-client-secrets: found server-only values in client assets:\n${findings.join("\n")}`);
+  console.error(
+    `check-client-secrets: found server-only values in client assets:\n${findings.join("\n")}`,
+  );
   process.exit(1);
 }
 
@@ -66,7 +77,13 @@ function readEnvFile(name) {
       .filter((line) => line && !line.startsWith("#") && line.includes("="))
       .map((line) => {
         const index = line.indexOf("=");
-        return [line.slice(0, index).trim(), line.slice(index + 1).trim().replace(/^["']|["']$/g, "")];
+        return [
+          line.slice(0, index).trim(),
+          line
+            .slice(index + 1)
+            .trim()
+            .replace(/^["']|["']$/g, ""),
+        ];
       }),
   );
 }
