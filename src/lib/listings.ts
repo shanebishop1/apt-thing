@@ -1,3 +1,6 @@
+import { stableHash } from "./utils/ids";
+import { titleCase } from "./utils/text";
+
 export type SourceType = "streeteasy" | "zillow" | "renthop" | "craigslist" | "other";
 
 export type IntakeKind = "pasted-url" | "batch-search" | "manual-entry";
@@ -1308,16 +1311,5 @@ function getLastPathSegment(readablePath: string): string {
 }
 
 function createId(normalizedUrl: string): string {
-  const bytes = new TextEncoder().encode(normalizedUrl);
-  let hash = 0;
-
-  for (const byte of bytes) {
-    hash = (hash * 31 + byte) >>> 0;
-  }
-
-  return `listing-${hash.toString(36)}`;
-}
-
-function titleCase(value: string): string {
-  return value.replace(/\b\w/g, (character) => character.toUpperCase());
+  return `listing-${stableHash(normalizedUrl)}`;
 }

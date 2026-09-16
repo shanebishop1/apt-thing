@@ -8,6 +8,7 @@ import type {
 } from "./agent-contracts";
 import type { Cadence, ListingCandidate, RunStatus } from "./listings";
 import type { D1DatabaseLike } from "./shared-listing-store";
+import { parseJson } from "./utils/json";
 
 export const RUN_HISTORY_LIMIT = 25;
 
@@ -222,12 +223,4 @@ function toSourceCoverage(row: SourceRow): SourceCoverageSummary {
     failureMessage: row.failure_message ?? undefined,
     rawArtifactPointers: pointers,
   };
-}
-
-function parseJson<T>(value: string): T | undefined {
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return undefined;
-  }
 }

@@ -39,6 +39,11 @@ import {
   type ListingCandidate,
   type RunStatus,
 } from "./listings";
+import { normalizeConcurrencyLimit } from "./utils/concurrency";
+import { stableHash } from "./utils/ids";
+import { safeJson } from "./utils/json";
+import { firstRecord, isRecord, numberField, stringArrayField, stringField } from "./utils/records";
+import { uniqueStrings } from "./utils/text";
 
 export const DAILY_LOOP_CONTRACT_VERSION = "daily-source-loop-v1" as const;
 export const DAILY_LOOP_DEFAULT_CONCURRENCY = 2;
@@ -221,7 +226,7 @@ export async function runDailySourceAgentLoop(
     options.concurrencyLimit ?? DAILY_LOOP_DEFAULT_CONCURRENCY,
   );
   const runId = stableId(`${identity.groupId}:daily-loop:${cadence}:${trigger}:${now}`);
-  const d1TransitionErrors = uniqueNonEmpty(
+  const d1TransitionErrors = uniqueStrings(
     [
       await persistDailyLoopRunTransition({
         env: options.env,
@@ -968,14 +973,6 @@ function isPlausibleStreetEasySearchResult(
   );
 }
 
-async function safeJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch {
-    return undefined;
-  }
-}
-
 function normalizeStreetEasySearchPayload(
   payload: unknown,
   fallback: StreetEasyBatchFixture,
@@ -1081,7 +1078,7 @@ function normalizeStreetEasyDetails(
     amenities:
       stringArrayField(record, ["amenities"]) ??
       (isRecord(record.propertyDetails)
-        ? uniqueNonEmpty([
+        ? uniqueStrings([
             ...(realtyApiStringList(record.propertyDetails, "amenities") ?? []),
             ...(realtyApiStringList(record.propertyDetails, "features") ?? []),
           ])
@@ -1179,53 +1176,13 @@ function realtyApiPhotos(record: Record<string, unknown>) {
     }),
   );
 
-  return urls.length > 0 ? uniqueNonEmpty(urls) : undefined;
+  return urls.length > 0 ? uniqueStrings(urls) : undefined;
 }
 
 function realtyApiStringList(record: Record<string, unknown>, container: string) {
   const value = record[container];
   if (!isRecord(value) || !Array.isArray(value.list)) return undefined;
   return value.list.filter((item): item is string => typeof item === "string" && Boolean(item));
-}
-
-function firstRecord(value: unknown): Record<string, unknown> | undefined {
-  if (isRecord(value)) {
-    if (isRecord(value.data)) return value.data;
-    if (isRecord(value.result)) return value.result;
-    if (isRecord(value.listing)) return value.listing;
-    return value;
-  }
-  return undefined;
-}
-
-function stringField(record: Record<string, unknown>, names: string[]): string | undefined {
-  for (const name of names) {
-    const value = record[name];
-    if (typeof value === "string" && value.trim()) return value;
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return undefined;
-}
-
-function numberField(record: Record<string, unknown>, names: string[]): number | undefined {
-  for (const name of names) {
-    const value = record[name];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string") {
-      const parsed = Number(value.replace(/[$,]/g, ""));
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-  return undefined;
-}
-
-function stringArrayField(record: Record<string, unknown>, names: string[]): string[] | undefined {
-  for (const name of names) {
-    const value = record[name];
-    if (Array.isArray(value))
-      return value.filter((item): item is string => typeof item === "string");
-  }
-  return undefined;
 }
 
 function normalizeStreetEasyUrl(url: string): string {
@@ -1825,18 +1782,18 @@ function createDailyLoopOperatorEvidence(input: {
     debugIdentifiers: {
       runId: input.run.id,
       groupId: input.run.groupId,
-      sourceKeys: uniqueNonEmpty(input.coverage.map((coverage) => coverage.sourceKey)),
-      sourceUrls: uniqueNonEmpty([
+      sourceKeys: uniqueStrings(input.coverage.map((coverage) => coverage.sourceKey)),
+      sourceUrls: uniqueStrings([
         ...input.listings.map((listing) => listing.url),
         ...input.skipped.map((item) => item.sourceUrl),
       ]),
-      listingIds: uniqueNonEmpty(input.listings.map((listing) => listing.id)),
-      sourceListingIds: uniqueNonEmpty([
+      listingIds: uniqueStrings(input.listings.map((listing) => listing.id)),
+      sourceListingIds: uniqueStrings([
         ...input.listings.flatMap((listing) => listing.sourceListingId ?? []),
         ...input.skipped.flatMap((item) => item.listingId ?? []),
       ]),
-      duplicateKeys: uniqueNonEmpty(input.listings.map((listing) => listing.duplicateKey)),
-      groupScopedDuplicateKeys: uniqueNonEmpty(
+      duplicateKeys: uniqueStrings(input.listings.map((listing) => listing.duplicateKey)),
+      groupScopedDuplicateKeys: uniqueStrings(
         input.listings.map((listing) => listing.groupScopedDuplicateKey),
       ),
     },
@@ -1858,20 +1815,16 @@ function identifiersForSource(
   const sourceListings = listings.filter((listing) => listing.source === coverage.source);
   const sourceSkips = skipped.filter((item) => item.source === coverage.source);
   return {
-    sourceUrls: uniqueNonEmpty([
+    sourceUrls: uniqueStrings([
       ...sourceListings.map((listing) => listing.url),
       ...sourceSkips.map((item) => item.sourceUrl),
     ]),
-    listingIds: uniqueNonEmpty(sourceListings.map((listing) => listing.id)),
-    sourceListingIds: uniqueNonEmpty([
+    listingIds: uniqueStrings(sourceListings.map((listing) => listing.id)),
+    sourceListingIds: uniqueStrings([
       ...sourceListings.flatMap((listing) => listing.sourceListingId ?? []),
       ...sourceSkips.flatMap((item) => item.listingId ?? []),
     ]),
   };
-}
-
-function uniqueNonEmpty(values: string[]): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
 function createSeenMemory(
@@ -2446,7 +2399,7 @@ async function persistD1(
       ? { attempted: true, rowsWritten, error: input.d1TransitionErrors.join("; ") }
       : { attempted: true, rowsWritten };
   } catch (error) {
-    const errors = uniqueNonEmpty([
+    const errors = uniqueStrings([
       ...input.d1TransitionErrors,
       error instanceof Error ? error.message : "d1-write-failed",
     ]);
@@ -2503,10 +2456,6 @@ async function persistKV(
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 function confidenceForListing(listing: ListingCandidate): ConfidenceScore {
   return {
     realFiveBedroom: listing.bedrooms !== undefined && listing.bedrooms >= 5 ? 0.9 : 0.35,
@@ -2522,13 +2471,6 @@ function confidenceForListing(listing: ListingCandidate): ConfidenceScore {
   };
 }
 
-function normalizeConcurrencyLimit(value: number): number {
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
-}
-
 function stableId(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let hash = 0;
-  for (const byte of bytes) hash = (hash * 31 + byte) >>> 0;
-  return `daily-loop-${hash.toString(36)}`;
+  return `daily-loop-${stableHash(value)}`;
 }

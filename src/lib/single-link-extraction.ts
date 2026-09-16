@@ -10,6 +10,9 @@ import {
   type ListingDraft,
   type ListingEvidence,
 } from "./listings";
+import { safeJson } from "./utils/json";
+import { firstRecord, isRecord, numberField, stringField } from "./utils/records";
+import { titleCase, uniqueStrings } from "./utils/text";
 
 export type SingleLinkExtractionEnv = {
   GEMINI_API_KEY?: string;
@@ -825,14 +828,6 @@ function parseNumber(value?: string): number | undefined {
   return value ? Number(value.match(/\d+(?:\.\d+)?/)?.[0]) || undefined : undefined;
 }
 
-function uniqueStrings(values: Array<string | undefined>): string[] {
-  return [
-    ...new Set(
-      values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)),
-    ),
-  ];
-}
-
 function decodeHtml(value?: string): string | undefined {
   return value
     ?.replace(/&amp;/g, "&")
@@ -883,18 +878,6 @@ function inferBorough(text: string): string | undefined {
       text.includes(name),
     ),
   );
-}
-
-function isRecord(value: unknown): value is Record<string, any> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-async function safeJson(response: Response): Promise<unknown> {
-  try {
-    return await response.clone().json();
-  } catch {
-    return undefined;
-  }
 }
 
 async function safeText(response: Response): Promise<string> {
@@ -990,35 +973,7 @@ function arrayRecords(value: unknown): Array<Record<string, unknown>> {
   return array.filter((item): item is Record<string, unknown> => isRecord(item));
 }
 
-function firstRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(value)) return undefined;
-  if (isRecord(value.data)) return value.data;
-  if (isRecord(value.result)) return value.result;
-  if (isRecord(value.listing)) return value.listing;
-  return value;
-}
-
-function stringField(record: Record<string, unknown>, names: string[]): string | undefined {
-  for (const name of names) {
-    const value = record[name];
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return undefined;
-}
-
-function numberField(record: Record<string, unknown>, names: string[]): number | undefined {
-  for (const name of names) {
-    const value = record[name];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string") {
-      const parsed = Number(value.replace(/[$,]/g, ""));
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-  return undefined;
-}
-
+/** Unlike the shared reader, this one also unwraps `{ url | src | href }` image objects. */
 function stringArrayField(record: Record<string, unknown>, names: string[]): string[] {
   for (const name of names) {
     const value = record[name];
@@ -1125,10 +1080,6 @@ function streetEasyAddressFromUrl(sourceUrl: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function titleCase(value: string): string {
-  return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function selectStreetEasyAddress(

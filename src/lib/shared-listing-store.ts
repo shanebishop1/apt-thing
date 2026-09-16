@@ -1,5 +1,6 @@
 import type { GroupActionRecord, SeenRejectedMemoryRecord } from "./agent-contracts";
 import { defaultSearchGroup, type ListingCandidate } from "./listings";
+import { parseJson } from "./utils/json";
 
 export type SharedListingSnapshot = {
   groupId: string;
@@ -334,12 +335,4 @@ function readChanges(result: unknown): number {
     if (typeof meta?.changes === "number") return meta.changes;
   }
   return 0;
-}
-
-function parseJson<T>(value: string): T | undefined {
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return undefined;
-  }
 }
