@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="apt-thing">
+  <rect width="64" height="64" rx="8" fill="#1e1814"/>
+  <path d="M14 34 32 16l18 18" fill="none" stroke="#d88a61" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M20 30v18h24V30" fill="none" stroke="#f7efe6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="28" y="38" width="8" height="10" rx="1.5" fill="#d88a61"/>
+</svg>
