@@ -8,7 +8,7 @@ describe("briefing run-history contract", () => {
     const errors = validateBriefingRunHistoryContract(history);
 
     expect(errors).toEqual([]);
-    expect(history.contract).toBe("g3c-briefing-run-history-v1");
+    expect(history.contract).toBe("briefing-run-history-v1");
     expect(history.latestRun).toMatchObject({
       cadence: "daily",
       status: "partial",

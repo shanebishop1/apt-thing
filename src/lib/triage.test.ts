@@ -35,8 +35,8 @@ function candidate(overrides: Partial<TriageCandidateInput> = {}): TriageCandida
   return {
     ownership: {
       groupId: "nyc-5br-2026",
-      runId: "run-g2c-fixture",
-      listingId: "listing-g2c-fixture",
+      runId: "run-fit-evidence-fixture",
+      listingId: "listing-fit-evidence-fixture",
     },
     source: "streeteasy",
     sourceName: "StreetEasy",
@@ -58,9 +58,9 @@ function candidate(overrides: Partial<TriageCandidateInput> = {}): TriageCandida
   };
 }
 
-describe("G2C fit/evidence triage core", () => {
+describe("fit/evidence triage core", () => {
   it("defines the accepted hard-constraint rubric and review-only checks", () => {
-    expect(AI_TRIAGE_SCHEMA_VERSION).toBe("g2c-fit-evidence-v1");
+    expect(AI_TRIAGE_SCHEMA_VERSION).toBe("fit-evidence-v1");
     expect(FIT_EVIDENCE_RUBRIC.hardConstraints).toMatchObject({
       bedroom: { minimum: 5, flexHighConfidenceThreshold: 0.9 },
       bathrooms: { minimum: 2 },
@@ -111,7 +111,7 @@ describe("G2C fit/evidence triage core", () => {
         artifactPointer: expect.objectContaining({ pointerId: expect.any(String) }),
       });
       expect(result.ownership).toEqual(
-        expect.objectContaining({ groupId: "nyc-5br-2026", runId: "run-g2c-fixture" }),
+        expect.objectContaining({ groupId: "nyc-5br-2026", runId: "run-fit-evidence-fixture" }),
       );
       assertTriageInvariants(result);
     }

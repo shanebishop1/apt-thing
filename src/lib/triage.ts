@@ -7,7 +7,7 @@ import {
   type TriageStatus,
 } from "./listings";
 
-export const AI_TRIAGE_SCHEMA_VERSION = "g2c-fit-evidence-v1" as const;
+export const AI_TRIAGE_SCHEMA_VERSION = "fit-evidence-v1" as const;
 
 export const FIT_EVIDENCE_RUBRIC = {
   hardConstraints: {
@@ -406,7 +406,7 @@ export function validateGeminiTriageOutput(
   }
 
   if (rawOutput.schemaVersion !== AI_TRIAGE_SCHEMA_VERSION) {
-    errors.push("schemaVersion must be g2c-fit-evidence-v1.");
+    errors.push("schemaVersion must be fit-evidence-v1.");
   }
   if (!isBucket(rawOutput.bucket)) {
     errors.push("bucket must be confirmed-match, review-needed, or rejected.");

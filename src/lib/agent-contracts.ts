@@ -339,8 +339,8 @@ export type LatestBriefingSummary = {
 };
 
 export type BriefingRunHistoryContract = {
-  contract: "g3c-briefing-run-history-v1";
-  schemaVersion: "g3c-briefing-run-history-v1";
+  contract: "briefing-run-history-v1";
+  schemaVersion: "briefing-run-history-v1";
   groupId: string;
   generatedAt: string;
   supportedCadences: Cadence[];
@@ -363,11 +363,11 @@ export function validateBriefingRunHistoryContract(history: BriefingRunHistoryCo
 
   requireNonEmpty(errors, history.groupId, "history.groupId");
   requireIsoTimestamp(errors, history.generatedAt, "history.generatedAt");
-  if (history.contract !== "g3c-briefing-run-history-v1") {
-    errors.push("history.contract must be g3c-briefing-run-history-v1");
+  if (history.contract !== "briefing-run-history-v1") {
+    errors.push("history.contract must be briefing-run-history-v1");
   }
-  if (history.schemaVersion !== "g3c-briefing-run-history-v1") {
-    errors.push("history.schemaVersion must be g3c-briefing-run-history-v1");
+  if (history.schemaVersion !== "briefing-run-history-v1") {
+    errors.push("history.schemaVersion must be briefing-run-history-v1");
   }
   if (
     !history.supportedCadences.includes("daily") ||

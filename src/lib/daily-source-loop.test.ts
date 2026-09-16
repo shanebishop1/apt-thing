@@ -954,7 +954,7 @@ describe("runDailySourceAgentLoop", () => {
     ).toBe(true);
 
     const mockedGeminiOutput = {
-      schemaVersion: "g2c-fit-evidence-v1",
+      schemaVersion: "fit-evidence-v1",
       bucket: "review-needed",
       confidence: { overall: 0.7, factors: { bedrooms: 0.9 } },
       evidence: [
@@ -1031,8 +1031,8 @@ describe("runDailySourceAgentLoop", () => {
     const body = (await response.json()) as Record<string, any>;
 
     expect(body.ok).toBe(true);
-    expect(body.contract).toBe("g4-daily-source-loop-v1");
-    expect(body.historyContract).toBe("g3c-briefing-run-history-v1");
+    expect(body.contract).toBe("daily-source-loop-v1");
+    expect(body.historyContract).toBe("briefing-run-history-v1");
     expect(body.cron).toMatchObject({
       cadence: "daily",
       cronCompatible: true,

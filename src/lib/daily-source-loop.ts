@@ -40,7 +40,7 @@ import {
   type RunStatus,
 } from "./listings";
 
-export const DAILY_LOOP_CONTRACT_VERSION = "g4-daily-source-loop-v1" as const;
+export const DAILY_LOOP_CONTRACT_VERSION = "daily-source-loop-v1" as const;
 export const DAILY_LOOP_DEFAULT_CONCURRENCY = 2;
 export const DAILY_LOOP_RETRY_POLICY = { maxRetries: 1, retryDelayMs: 250 } as const;
 
@@ -683,7 +683,7 @@ function runSecondaryZillowFixture({
       ...extraction.listing.providerRouting,
       intakeKind: "manual-entry" as const,
       notes:
-        "G2A-approved Zillow manual fixture/alert input; no crawling, hidden APIs, login automation, or CAPTCHA bypass.",
+        "Approved Zillow manual fixture/alert input; no crawling, hidden APIs, login automation, or CAPTCHA bypass.",
     },
   } satisfies ListingCandidate;
   return {
@@ -1609,8 +1609,8 @@ function createDailyLoopHistory({
     operatorEvidence: run.operatorEvidence,
   };
   return {
-    contract: "g3c-briefing-run-history-v1",
-    schemaVersion: "g3c-briefing-run-history-v1",
+    contract: "briefing-run-history-v1",
+    schemaVersion: "briefing-run-history-v1",
     groupId,
     generatedAt,
     supportedCadences: ["manual", "daily", "hourly"],

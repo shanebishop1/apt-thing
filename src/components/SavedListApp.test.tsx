@@ -100,7 +100,7 @@ describe("SavedListApp identity and shared listing behavior", () => {
     const getInit = getCall?.[1] as RequestInit;
     expect(getInit.credentials).toBe("same-origin");
     expect(new Headers(getInit.headers).has("X-Invite-Code")).toBe(false);
-    expect(JSON.parse(localStorage.getItem("apt-thing:v1:g1-invite-identity")!)).toMatchObject({
+    expect(JSON.parse(localStorage.getItem("apt-thing:v1:invite-identity")!)).toMatchObject({
       inviteCode: validInviteCode,
       displayName: "Ari",
       groupId: defaultSearchGroup.id,
@@ -265,14 +265,14 @@ describe("SavedListApp identity and shared listing behavior", () => {
 
     expect(await screen.findByText("Invite code or display name is invalid.")).toBeTruthy();
     expect(screen.getByRole("region", { name: "Invite gate" })).toBeTruthy();
-    expect(localStorage.getItem("apt-thing:v1:g1-invite-identity")).toBeNull();
+    expect(localStorage.getItem("apt-thing:v1:invite-identity")).toBeNull();
     expect(fetchMock).not.toHaveBeenCalledWith("/api/group/listings", expect.anything());
   });
 
   it("restores a stored identity through a new session and re-establishes it after a 401", async () => {
     const listing = buildListing("restored-listing", "Restored apartment");
     localStorage.setItem(
-      "apt-thing:v1:g1-invite-identity",
+      "apt-thing:v1:invite-identity",
       JSON.stringify({ inviteCode: validInviteCode, displayName: "Ari" }),
     );
     let loads = 0;

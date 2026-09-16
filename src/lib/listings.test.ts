@@ -301,7 +301,7 @@ describe("listing contracts", () => {
     );
   });
 
-  it("adds light fit flags for G1 constraints", () => {
+  it("adds light fit flags for search-group constraints", () => {
     expect(
       calculateFitFlags(
         {

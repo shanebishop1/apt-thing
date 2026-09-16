@@ -428,7 +428,7 @@ describe("saved-list local storage helpers", () => {
     });
   });
 
-  it("allows every G1 saved-list review status", () => {
+  it("allows every saved-list review status", () => {
     const listing = createListingFromUrl(
       "https://streeteasy.com/building/status-cycle/1",
       identity,

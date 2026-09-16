@@ -468,7 +468,7 @@ export const DEFAULT_STREETEASY_URL_RESOLUTION_QUERY: RealtyApiSearchQuery = {
   sort: "newest",
 };
 
-export const INVITE_IDENTITY_STORAGE_KEY = "apt-thing:v1:g1-invite-identity";
+export const INVITE_IDENTITY_STORAGE_KEY = "apt-thing:v1:invite-identity";
 export const INVITE_LINK_BASE_PATH = "/invite";
 
 export const GEMINI_PROVIDER_METADATA = {
@@ -684,7 +684,7 @@ export function createProviderRoutingMetadata(
       manualFallbackRequired: true,
       resolutionSteps: ["record-zillow-url", "queue-provider-proof-or-manual-entry"],
       notes:
-        "Zillow is a first-class source target, but G1 records provider/manual fallback metadata until a bounded provider proof is implemented.",
+        "Zillow is a first-class source target, but the app records provider/manual fallback metadata until a bounded provider integration is implemented.",
     };
   }
 

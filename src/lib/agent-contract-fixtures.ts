@@ -297,7 +297,7 @@ const sourceFailureUnit = {
 };
 
 const runSummary: AgentRunLogRecord = {
-  id: "agent-run-log-g2b-fixture-summary",
+  id: "agent-run-log-fixture-summary",
   contract: "agent-run-log-v1",
   groupId: defaultSearchGroup.id,
   cadence: "daily",
@@ -347,7 +347,7 @@ const runSummary: AgentRunLogRecord = {
 };
 
 const briefing: BriefingRecord = {
-  id: "briefing-record-g2b-fixture",
+  id: "briefing-record-fixture",
   contract: "briefing-record-v1",
   groupId: defaultSearchGroup.id,
   runId: runSummary.id,
@@ -482,8 +482,8 @@ export function createBriefingRunHistoryFixture(
   };
 
   return {
-    contract: "g3c-briefing-run-history-v1",
-    schemaVersion: "g3c-briefing-run-history-v1",
+    contract: "briefing-run-history-v1",
+    schemaVersion: "briefing-run-history-v1",
     groupId: bundle.groupId,
     generatedAt: bundle.generatedAt,
     supportedCadences: ["manual", "daily", "hourly"],
