@@ -181,24 +181,26 @@ const mapContextFixtures: MapContextFixture[] = [
 ];
 
 const contextByTitle = new Map(mapContextFixtures.map((fixture) => [fixture.listingId, fixture]));
+const knownAddressListingIds: readonly (readonly [address: string, listingId: string])[] = [
+  ["42 West 21st Street", "42 West 21st Street #5"],
+  ["100 West 14th Street", "100 West 14th Street"],
+  ["152 Manhattan Avenue", "152 Manhattan Avenue #4B"],
+  ["303 West 21st Street", "New Chelsea five bed batch candidate"],
+  ["185 North 10th Street", "Review-needed Williamsburg batch candidate"],
+  ["325 East 14 Street", "325 East 14 Street"],
+  ["325 East 14th Street", "325 East 14 Street"],
+  ["205 Avenue A", "205 Avenue A"],
+  ["58 2nd Avenue", "58 2nd Avenue"],
+  ["54 2nd Avenue", "54 2nd Avenue"],
+  ["176 Stanton Street", "176 Stanton Street"],
+  ["171 Attorney Street", "171 Attorney Street"],
+  ["247 Mulberry Street", "247 Mulberry Street"],
+  ["171 6th Avenue", "171 6th Avenue"],
+  ["71 Broadway", "71 Broadway"],
+];
+
 const contextByKnownAddress = new Map(
-  [
-    ["42 West 21st Street", "42 West 21st Street #5"],
-    ["100 West 14th Street", "100 West 14th Street"],
-    ["152 Manhattan Avenue", "152 Manhattan Avenue #4B"],
-    ["303 West 21st Street", "New Chelsea five bed batch candidate"],
-    ["185 North 10th Street", "Review-needed Williamsburg batch candidate"],
-    ["325 East 14 Street", "325 East 14 Street"],
-    ["325 East 14th Street", "325 East 14 Street"],
-    ["205 Avenue A", "205 Avenue A"],
-    ["58 2nd Avenue", "58 2nd Avenue"],
-    ["54 2nd Avenue", "54 2nd Avenue"],
-    ["176 Stanton Street", "176 Stanton Street"],
-    ["171 Attorney Street", "171 Attorney Street"],
-    ["247 Mulberry Street", "247 Mulberry Street"],
-    ["171 6th Avenue", "171 6th Avenue"],
-    ["71 Broadway", "71 Broadway"],
-  ]
+  knownAddressListingIds
     .map(([address, listingId]) => {
       const normalizedAddress = normalizeAddress(address);
       const fixture = contextByTitle.get(listingId);

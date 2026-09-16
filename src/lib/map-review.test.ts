@@ -151,14 +151,15 @@ describe("G3A map-enhanced review model", () => {
   });
 
   it("geocodes current live StreetEasy saved-list addresses with unit text", () => {
-    const listings = [
+    const addressFixtures: readonly (readonly [address: string, neighborhood: string])[] = [
       ["58 2nd Avenue 1F", "East Village"],
       ["54 2nd Avenue 3", "East Village"],
       ["176 Stanton Street 1A", "Lower East Side"],
       ["171 Attorney Street 4A", "Lower East Side"],
       ["247 Mulberry Street SW", "Nolita"],
       ["171 6th Avenue 3B", "Hudson Square"],
-    ].map(([address, neighborhood]) => ({
+    ];
+    const listings = addressFixtures.map(([address, neighborhood]) => ({
       ...fixtureListings[0]!,
       id: `streeteasy-${address}`,
       title: "StreetEasy listing",
