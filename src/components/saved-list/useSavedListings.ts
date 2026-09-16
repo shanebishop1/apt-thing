@@ -77,6 +77,7 @@ export function useSavedListings() {
     } finally {
       setHasHydrated(true);
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-only hydration from storage; `startSession` and `resetIdentity` are recreated on every render
   }, []);
 
   useSharedSnapshotPolling({ hasHydrated, identity, refreshSnapshot: refreshSharedSnapshot });
@@ -414,6 +415,7 @@ export function useSavedListings() {
         setMessage("Could not remember the currently opened record.");
       }
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `coordinator` is ref-backed and stable for the life of the hook, so adding it would only widen the trigger set
   }, [hasHydrated, identity, selectedId]);
 
   return {

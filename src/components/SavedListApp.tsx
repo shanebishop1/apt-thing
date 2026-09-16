@@ -36,6 +36,7 @@ export function SavedListApp() {
     } finally {
       setHasHydrated(true);
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `controller` is rebuilt every render; this effect must run once on mount and only calls it as an error sink
   }, []);
 
   useEffect(() => {
@@ -46,6 +47,7 @@ export function SavedListApp() {
     } catch {
       controller.onThemeStorageError();
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `controller` is rebuilt every render; this effect must re-run on theme changes only and only calls it as an error sink
   }, [hasHydrated, themeMode]);
 
   useEffect(() => {

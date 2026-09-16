@@ -90,6 +90,7 @@ export function LeafletListingMap({
           subwayOverlayRef.current = overlay;
         })
         .catch((error: unknown) => {
+          // oxlint-disable-next-line no-console -- the subway overlay is optional, so surface the failure without breaking the map
           console.error("MTA subway overlay failed to load", error);
         });
       stopResizeTrackingRef.current = trackLeafletContainerSize(mapContainerRef.current, map);
@@ -108,6 +109,7 @@ export function LeafletListingMap({
       leafletMapRef.current?.remove();
       leafletMapRef.current = null;
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- this effect only seeds the map at creation; later model and selection changes are applied by the sync effect below
   }, [tileUrl]);
 
   useEffect(() => {

@@ -114,6 +114,7 @@ export function ReviewStatusDropdown({
       <button
         type="button"
         className={`status-dropdown-trigger status-${listing.reviewStatus}`}
+        role="combobox"
         aria-label={`Change review status for ${listing.title}`}
         aria-haspopup="listbox"
         aria-expanded={isOpen}

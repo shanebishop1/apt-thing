@@ -174,6 +174,7 @@ export function createDailyLoopWorkerHandler(
       ctx.waitUntil(
         scheduledDailySourceAgentLoop(event, env).then((result) => {
           if (result.disabled) {
+            // oxlint-disable-next-line no-console -- the only signal operators get that a scheduled run was skipped
             console.info("daily-source-agent-loop-disabled", result);
           }
 

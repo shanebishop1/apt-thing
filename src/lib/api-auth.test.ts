@@ -40,13 +40,13 @@ const protectedRoutes: Array<{ name: string; method: string; path: string; handl
     name: "listing PATCH",
     method: "PATCH",
     path: "/api/group/listings/l1",
-    handler: (request) => listingPATCH(request, params({ listingId: "l1" })),
+    handler: (incoming) => listingPATCH(incoming, params({ listingId: "l1" })),
   },
   {
     name: "listing action POST",
     method: "POST",
     path: "/api/group/listings/l1",
-    handler: (request) => listingActionPOST(request, params({ listingId: "l1" })),
+    handler: (incoming) => listingActionPOST(incoming, params({ listingId: "l1" })),
   },
   { name: "runs GET", method: "GET", path: "/api/group/runs", handler: runsGET },
   { name: "smoke GET", method: "GET", path: "/api/platform/smoke", handler: smokeGET },
@@ -60,7 +60,7 @@ const protectedRoutes: Array<{ name: string; method: string; path: string; handl
     name: "map tile GET",
     method: "GET",
     path: "/api/map/tiles/13/2412/3077.png",
-    handler: (request) => tileGET(request, params({ z: "13", x: "2412", y: "3077.png" })),
+    handler: (incoming) => tileGET(incoming, params({ z: "13", x: "2412", y: "3077.png" })),
   },
 ];
 

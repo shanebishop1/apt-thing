@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "oxlint app src scripts *.config.ts",
+    "lint": "oxlint --deny-warnings app src scripts *.config.ts",
     "lint:fix": "oxlint --fix app src scripts *.config.ts",
     "format": "oxfmt --write app src scripts *.config.ts",
     "format:check": "oxfmt --check app src scripts *.config.ts",

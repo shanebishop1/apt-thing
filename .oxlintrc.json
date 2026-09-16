@@ -1,0 +1,86 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "react-hooks", "jsx-a11y", "nextjs", "import"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "warn",
+    "pedantic": "off"
+  },
+  "rules": {
+    // Curated rules we want enforced beyond the categories above.
+    "no-unused-vars": "error",
+    "eqeqeq": "error",
+    "no-console": "error",
+    "react-hooks/exhaustive-deps": "error",
+    "import/no-cycle": "error",
+
+    // Off: false positives for this stack.
+    // Next sets jsx: "react-jsx", so JSX never needs React in scope.
+    "react/react-in-jsx-scope": "off",
+    // Flags hoisted `function` declarations used by callbacks declared above them,
+    // which is safe; every hit is a helper declared later in the same hook.
+    "react/immutability": "off",
+    "react/memo-dependencies": "off",
+    // The hooks here deliberately write a "latest value" ref during render so that
+    // stable callbacks can read the current identity without re-subscribing.
+    "react/refs": "off",
+    // Duplicates react-hooks/exhaustive-deps, which is enabled above; the few
+    // intentional deviations are annotated at the call sites.
+    "react/exhaustive-effect-dependencies": "off",
+    // Hydration and identity-reset effects intentionally set state once on mount or
+    // on identity change; reworking them is a behavioural change, not a lint fix.
+    "react/set-state-in-effect": "off",
+    // Keys are composite (`${value}-${index}`); the index is part of the identity
+    // because these lists are positional and may repeat the same value.
+    "react/no-array-index-key": "off",
+    // Loops that await are rate-limited fetches and ordered writes; running them
+    // concurrently would change behaviour.
+    "eslint/no-await-in-loop": "off",
+    // app/layout.tsx imports globals.css for its side effect, which is the only way
+    // to load global styles in the App Router.
+    "import/no-unassigned-import": "off",
+
+    // Off: known debt, tracked rather than silently satisfied.
+    // The status dropdown, field dialog and photo lightbox are hand-built ARIA
+    // widgets; these rules want them rebuilt on native elements, which is a UI
+    // change well beyond a lint pass.
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "jsx-a11y/click-events-have-key-events": "off",
+    "jsx-a11y/no-static-element-interactions": "off",
+    "jsx-a11y/no-noninteractive-element-interactions": "off",
+    "jsx-a11y/no-noninteractive-tabindex": "off",
+    // Listing photos come from arbitrary third-party hosts and the Workers
+    // deployment does not run the Next image optimizer.
+    "nextjs/no-img-element": "off"
+  },
+  "overrides": [
+    {
+      // One-off maintenance scripts report progress on stdout by design, and their
+      // helpers deliberately mirror the top-level names of the script they serve.
+      "files": ["scripts/**"],
+      "rules": {
+        "no-console": "off",
+        "no-shadow": "off"
+      }
+    }
+  ],
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2022": true
+  },
+  "settings": {
+    "next": {
+      "rootDir": "."
+    }
+  },
+  "ignorePatterns": [
+    ".next/**",
+    ".open-next/**",
+    ".wrangler/**",
+    "coverage/**",
+    "node_modules/**",
+    "worker-configuration.d.ts"
+  ]
+}

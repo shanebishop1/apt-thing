@@ -9,6 +9,8 @@ export type ListingListGroup = {
   listings: ListingCandidate[];
 };
 
+const noGroups: ListingListGroup[] = [];
+
 type ListingSectionProps = {
   groups?: ListingListGroup[];
   selectedId?: string;
@@ -17,7 +19,7 @@ type ListingSectionProps = {
 };
 
 export function ListingSection({
-  groups = [],
+  groups = noGroups,
   selectedId,
   onSelect,
   onSourceOpen,

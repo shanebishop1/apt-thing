@@ -97,7 +97,7 @@ describe("ListingEditor", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: `Change review status for ${listing.title}` }),
+      screen.getByRole("combobox", { name: `Change review status for ${listing.title}` }),
     ).toHaveProperty("disabled", true);
     await user.click(screen.getByRole("button", { name: `Edit fields for ${listing.title}` }));
     fireEvent.change(screen.getByRole("spinbutton", { name: "rent" }), {

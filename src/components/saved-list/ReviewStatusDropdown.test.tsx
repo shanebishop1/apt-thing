@@ -15,7 +15,7 @@ describe("ReviewStatusDropdown", () => {
     const { rerender } = render(
       <ReviewStatusDropdown listing={listing} onStatusChange={onStatusChange} />,
     );
-    const trigger = screen.getByRole("button", {
+    const trigger = screen.getByRole("combobox", {
       name: `Change review status for ${listing.title}`,
     });
     await user.click(trigger);
@@ -29,7 +29,7 @@ describe("ReviewStatusDropdown", () => {
       <ReviewStatusDropdown listing={pendingListing} disabled onStatusChange={onStatusChange} />,
     );
     expect(
-      screen.getByRole("button", {
+      screen.getByRole("combobox", {
         name: `Change review status for ${pendingListing.title}`,
       }),
     ).toHaveProperty("disabled", true);

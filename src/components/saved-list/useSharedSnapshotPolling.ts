@@ -68,5 +68,6 @@ export function useSharedSnapshotPolling<T extends InviteIdentity>({
       window.removeEventListener("online", refreshNow);
       document.removeEventListener("visibilitychange", refreshNow);
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- keyed on the derived `identityKey` so polling restarts only when the identity actually changes, not on every render
   }, [hasHydrated, identityKey]);
 }

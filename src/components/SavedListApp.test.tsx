@@ -108,13 +108,14 @@ describe("SavedListApp identity and shared listing behavior", () => {
 
     await user.click(screen.getByRole("button", { name: `Selected ${listing.title}` }));
     await user.click(
-      screen.getByRole("button", { name: `Change review status for ${listing.title}` }),
+      screen.getByRole("combobox", { name: `Change review status for ${listing.title}` }),
     );
     await user.click(screen.getByRole("option", { name: "interested" }));
 
     expect(await screen.findByText("Status updated to interested.")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: `Change review status for ${listing.title}` }).textContent,
+      screen.getByRole("combobox", { name: `Change review status for ${listing.title}` })
+        .textContent,
     ).toContain("interested");
     const patchCall = fetchMock.mock.calls.find(
       ([input, init]) =>
@@ -169,7 +170,7 @@ describe("SavedListApp identity and shared listing behavior", () => {
     await screen.findByRole("heading", { name: listing.title });
     await user.click(screen.getByRole("button", { name: `Selected ${listing.title}` }));
     const statusButton = () =>
-      screen.getByRole("button", { name: `Change review status for ${listing.title}` });
+      screen.getByRole("combobox", { name: `Change review status for ${listing.title}` });
 
     await user.click(statusButton());
     await user.click(screen.getByRole("option", { name: "interested" }));
@@ -206,7 +207,7 @@ describe("SavedListApp identity and shared listing behavior", () => {
     await screen.findByRole("heading", { name: listing.title });
     await user.click(screen.getByRole("button", { name: `Selected ${listing.title}` }));
     await user.click(
-      screen.getByRole("button", { name: `Change review status for ${listing.title}` }),
+      screen.getByRole("combobox", { name: `Change review status for ${listing.title}` }),
     );
     await user.click(screen.getByRole("option", { name: "interested" }));
 
