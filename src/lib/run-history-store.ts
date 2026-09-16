@@ -10,7 +10,7 @@ import type { Cadence, ListingCandidate, RunStatus } from "./listings";
 import type { D1DatabaseLike } from "./shared-listing-store";
 import { parseJson } from "./utils/json";
 
-export const RUN_HISTORY_LIMIT = 25;
+const RUN_HISTORY_LIMIT = 25;
 
 export type PersistedRunSkipCounts = {
   seen: number;

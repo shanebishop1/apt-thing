@@ -112,7 +112,7 @@ type StreetEasyBatchExtractionRecord = {
   output: AiExtractionOutput;
 };
 
-export type GeminiFixtureAnalysisInput = {
+type GeminiFixtureAnalysisInput = {
   listing: ListingCandidate;
   extractionJob: ExtractionJob;
   output: AiExtractionOutput;
@@ -132,7 +132,7 @@ export type GeminiFixtureAnalyzer = (
   input: GeminiFixtureAnalysisInput,
 ) => Promise<GeminiFixtureAnalysisResult> | GeminiFixtureAnalysisResult;
 
-export type StreetEasyBatchGeminiAnalysisStatus = {
+type StreetEasyBatchGeminiAnalysisStatus = {
   listingId: string;
   sourceUrl: string;
   status: ExtractionStatus;
@@ -141,7 +141,7 @@ export type StreetEasyBatchGeminiAnalysisStatus = {
   providerMetadata: AiProviderAttemptMetadata;
 };
 
-export type StreetEasyBatchGeminiAnalysisSummary = {
+type StreetEasyBatchGeminiAnalysisSummary = {
   concurrencyLimit: number;
   maxObservedInFlight: number;
   listingStatuses: StreetEasyBatchGeminiAnalysisStatus[];
@@ -306,7 +306,7 @@ export async function runStreetEasyBatchFixtureWithGeminiAnalysis({
   };
 }
 
-export async function analyzeStreetEasyFixtureWithMockGemini(
+async function analyzeStreetEasyFixtureWithMockGemini(
   input: GeminiFixtureAnalysisInput,
 ): Promise<GeminiFixtureAnalysisResult> {
   await Promise.resolve();

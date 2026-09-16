@@ -13,13 +13,13 @@ export type ProviderRoute =
   | "zillow-provider-or-manual-fallback"
   | "generic-source-or-manual-fallback";
 
-export type UrlValidationErrorCode = "empty-url" | "invalid-url" | "unsupported-protocol";
+type UrlValidationErrorCode = "empty-url" | "invalid-url" | "unsupported-protocol";
 
-export type UrlValidationResult =
+type UrlValidationResult =
   | { ok: true; normalizedUrl: string }
   | { ok: false; errorCode: UrlValidationErrorCode; feedback: string };
 
-export type ProhibitedSourceAutomation =
+type ProhibitedSourceAutomation =
   | "credential-theft"
   | "captcha-bypass"
   | "login-automation"
@@ -50,7 +50,7 @@ export type TriageStatus =
   | "failed"
   | "skipped-seen";
 
-export type BatchJobStatus = "queued" | "running" | "success" | "partial" | "failed" | "cancelled";
+type BatchJobStatus = "queued" | "running" | "success" | "partial" | "failed" | "cancelled";
 
 export type RunStatus = BatchJobStatus;
 
@@ -73,9 +73,9 @@ export type FitFlag =
   | "manual_review_needed"
   | "missing_required_fields";
 
-export type StorageOwner = "d1" | "r2" | "kv" | "local-fixture";
+type StorageOwner = "d1" | "r2" | "kv" | "local-fixture";
 
-export type PersistenceBoundary = {
+type PersistenceBoundary = {
   owner: StorageOwner;
   scope: "authoritative-relational" | "raw-artifact" | "cache-config" | "local-mock";
   groupScoped: boolean;
@@ -191,13 +191,13 @@ export type RealtyApiSearchQuery = {
   perPage?: number;
 };
 
-export type NycGeoSearchResolutionMetadata = {
+type NycGeoSearchResolutionMetadata = {
   status: "pending" | "success" | "failed";
   strategy: "infer-location-candidates-from-streeteasy-url-slug";
   locationCandidates: string[];
 };
 
-export type StreetEasySearchMatchProvenance = {
+type StreetEasySearchMatchProvenance = {
   parsedUrlPath: string;
   listingId?: string;
   realtyApiListingId?: string;
@@ -221,7 +221,7 @@ export type StreetEasyUrlResolutionJob = {
   updatedAt: string;
 };
 
-export type BatchRunCounts = {
+type BatchRunCounts = {
   candidatesFound: number;
   candidatesSkippedSeen: number;
   candidatesSkippedTriaged: number;
@@ -282,7 +282,7 @@ export type AiProviderAttemptMetadata = {
   failureCode?: string;
 };
 
-export type NormalizedListingJson = {
+type NormalizedListingJson = {
   groupId: string;
   source: SourceType;
   sourceUrl: string;
@@ -319,7 +319,7 @@ export type ImageEvidence = {
   sentToAi: boolean;
 };
 
-export type ListingLocation = {
+type ListingLocation = {
   latitude?: number;
   longitude?: number;
   subwayContext?: string;
@@ -486,7 +486,7 @@ export const PROHIBITED_SOURCE_AUTOMATION: ProhibitedSourceAutomation[] = [
   "abusive-traffic",
 ];
 
-export const DEFAULT_STREETEASY_URL_RESOLUTION_QUERY: RealtyApiSearchQuery = {
+const DEFAULT_STREETEASY_URL_RESOLUTION_QUERY: RealtyApiSearchQuery = {
   endpoint: "search/rent",
   areas: [],
   minBeds: 5,
@@ -496,7 +496,7 @@ export const DEFAULT_STREETEASY_URL_RESOLUTION_QUERY: RealtyApiSearchQuery = {
 };
 
 export const INVITE_IDENTITY_STORAGE_KEY = "apt-thing:v1:invite-identity";
-export const INVITE_LINK_BASE_PATH = "/invite";
+const INVITE_LINK_BASE_PATH = "/invite";
 
 export const GEMINI_PROVIDER_METADATA = {
   provider: "google-direct",
@@ -586,7 +586,7 @@ export function isEditableListingField(value: unknown): value is FieldProvenance
   return EDITABLE_LISTING_FIELDS.some((field) => field === value);
 }
 
-export const searchGroups: SearchGroup[] = [
+const searchGroups: SearchGroup[] = [
   {
     id: "nyc-5br-2026",
     name: "NYC 5BR search",
@@ -596,7 +596,7 @@ export const searchGroups: SearchGroup[] = [
 
 export const defaultSearchGroup = searchGroups[0]!;
 
-export function validateApartmentUrl(rawUrl: string): UrlValidationResult {
+function validateApartmentUrl(rawUrl: string): UrlValidationResult {
   const trimmedUrl = rawUrl.trim();
 
   if (!trimmedUrl) {
