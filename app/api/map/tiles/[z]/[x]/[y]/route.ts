@@ -6,6 +6,7 @@ type MapTileRouteEnv = Partial<Record<"STADIA_MAPS_API_KEY", unknown>>;
 
 const tileCoordinatePattern = /^\d+$/;
 const tileFilePattern = /^(\d+)(@2x)?\.png$/;
+const OSM_USER_AGENT = "apt-thing/0.1 (+https://github.com/shanebishop1/apt-thing)";
 
 export async function GET(
   request: NextRequest,
@@ -49,10 +50,15 @@ export async function GET(
     }
   }
 
-  const fallback = await fetchTile(
-    `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${yMatch[1]}.png`,
-    { headers: { accept: "image/png,image/*;q=0.8,*/*;q=0.5" } },
-  );
+  // OpenStreetMap standard tiles as the keyless fallback. Its usage policy asks for an
+  // identifying User-Agent and attribution, which the map renders; the shared cache
+  // headers below keep repeat requests off the upstream.
+  const fallback = await fetchTile(`https://tile.openstreetmap.org/${z}/${x}/${yMatch[1]}.png`, {
+    headers: {
+      accept: "image/png,image/*;q=0.8,*/*;q=0.5",
+      "user-agent": OSM_USER_AGENT,
+    },
+  });
 
   if (!fallback?.ok || !fallback.body) {
     return jsonError(fallback?.status ?? 502, "tile-fetch-failed");

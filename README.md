@@ -32,7 +32,7 @@ Browser  GET/POST /api/group/listings -> RealtyAPI or source page + Gemini
                                       -> D1: listings (revisioned), group actions
 Browser  PATCH /api/group/listings/:id  revision-checked status, field, and decision edits
 Browser  GET  /api/group/runs         -> persisted daily-loop run history
-Browser  GET  /api/map/tiles/:z/:x/:y -> Stadia Maps, falling back to CARTO
+Browser  GET  /api/map/tiles/:z/:x/:y -> Stadia Maps, falling back to OpenStreetMap
 Cron     (disabled by default)        -> src/worker.ts scheduled -> daily source loop
 ```
 

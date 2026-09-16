@@ -107,7 +107,7 @@ describe("platform API route authorization", () => {
     );
   });
 
-  it("falls back to CARTO tiles when Stadia rejects the server-side request", async () => {
+  it("falls back to OpenStreetMap tiles when Stadia rejects the server-side request", async () => {
     vi.stubEnv("STADIA_MAPS_API_KEY", "server-only-test-key");
     const fetchMock = vi
       .fn()
@@ -130,7 +130,7 @@ describe("platform API route authorization", () => {
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
-      "https://basemaps.cartocdn.com/rastertiles/voyager/13/2412/3077.png",
+      "https://tile.openstreetmap.org/13/2412/3077.png",
     );
   });
 
@@ -151,7 +151,7 @@ describe("platform API route authorization", () => {
     expect(await response.json()).toEqual({ ok: false, error: "tile-fetch-failed" });
   });
 
-  it("falls back to CARTO tiles when the Stadia request throws", async () => {
+  it("falls back to OpenStreetMap tiles when the Stadia request throws", async () => {
     vi.stubEnv("STADIA_MAPS_API_KEY", "server-only-test-key");
     const fetchMock = vi
       .fn()
@@ -173,11 +173,11 @@ describe("platform API route authorization", () => {
 
     expect(response.status).toBe(200);
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
-      "https://basemaps.cartocdn.com/rastertiles/voyager/13/2412/3077.png",
+      "https://tile.openstreetmap.org/13/2412/3077.png",
     );
   });
 
-  it("uses non-retina CARTO fallback tiles for retina requests", async () => {
+  it("uses non-retina OpenStreetMap fallback tiles for retina requests", async () => {
     vi.stubEnv("STADIA_MAPS_API_KEY", "server-only-test-key");
     const fetchMock = vi
       .fn()
@@ -194,7 +194,7 @@ describe("platform API route authorization", () => {
 
     expect(response.status).toBe(200);
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
-      "https://basemaps.cartocdn.com/rastertiles/voyager/13/2412/3077.png",
+      "https://tile.openstreetmap.org/13/2412/3077.png",
     );
   });
 });

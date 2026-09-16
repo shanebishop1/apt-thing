@@ -194,7 +194,7 @@ the app itself is running locally; consult their current terms and pricing.
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GEMINI_API_KEY`      | A Google Gemini API key, obtainable through Google AI Studio. Single-link extraction tries `gemini-2.5-flash`, then `gemini-3.5-flash`; the daily-loop analyzer uses `gemini-3.5-flash`. Model access is account-dependent. |
 | `REALTYAPI_KEY`       | RealtyAPI access to its StreetEasy API. Requests use `x-realtyapi-key` at `https://streeteasy.realtyapi.io`, with `/search/rent` and `/rental_detailsbyid`. This is not a StreetEasy website login.                         |
-| `STADIA_MAPS_API_KEY` | Optional Stadia Maps raster tiles through the authenticated server-side tile proxy. Without it, or if Stadia fails, the proxy tries CARTO tiles.                                                                            |
+| `STADIA_MAPS_API_KEY` | Optional Stadia Maps raster tiles through the authenticated server-side tile proxy. Without it, or if Stadia fails, the proxy falls back to OpenStreetMap tiles.                                                                            |
 | `REALTYAPI_BASE_URL`  | Optional advanced override of the RealtyAPI base URL; normally leave unset. Only point it at a trusted endpoint because it receives your API key.                                                                           |
 | `APP_ENV`             | Diagnostic environment label; `local` by default. Not a security or provider-disable switch.                                                                                                                                |
 | `NEXTJS_ENV`          | OpenNext build/runtime environment setting; retain the template's `production` value.                                                                                                                                       |
@@ -383,7 +383,7 @@ Disabling the Cron schedule is not a substitute for securing those endpoints.
 | HTTP 400 `revision-required`          | Include the listing's current `revision` in `PATCH /api/group/listings/<id>` bodies.                             |
 | Empty shortlist after signing in      | A fresh database has no listings; an unavailable API can also leave the UI empty. Inspect `/api/group/listings`. |
 | Extraction needs manual review        | Check the reported source/provider error. Saving a fallback record does not mean extraction succeeded.           |
-| Blank or incomplete map               | Check tile requests, external network access, and whether the listing has usable coordinates. `tile-fetch-failed` (502 when the fallback returned no status) means both Stadia and CARTO refused the tile. |
+| Blank or incomplete map               | Check tile requests, external network access, and whether the listing has usable coordinates. `tile-fetch-failed` (502 when the fallback returned no status) means both Stadia and OpenStreetMap refused the tile. |
 | Run missing from the Runs tab         | Check the run response's `persistence.d1` (a missing binding writes nothing), then use the Runs refresh button.  |
 | Deployed Worker has no reachable URL  | Check `workers_dev` or your route/domain configuration; both public URL mechanisms are off by default.           |
 

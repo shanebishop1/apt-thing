@@ -55,16 +55,19 @@ export function LeafletListingMap({
 
       leafletRef.current = leaflet;
       const map = leaflet.map(mapContainerRef.current, {
-        attributionControl: false,
+        attributionControl: true,
         center: [40.7328, -73.9797],
         scrollWheelZoom: true,
         zoom: 13,
         zoomControl: true,
       });
+      // Drop the "Leaflet" prefix; only the data attribution matters here.
+      map.attributionControl?.setPrefix(false);
 
       leaflet
         .tileLayer(tileUrl, {
-          attribution: "",
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="https://stadiamaps.com/">Stadia Maps</a>',
           detectRetina: false,
           maxZoom: 20,
         })
