@@ -39,12 +39,14 @@ describe("createRunHistoryPanelModel", () => {
     expect(latest).toMatchObject({
       isLatest: true,
       modeLabel: "Live-safe mode",
+      aiAttemptsLabel: "AI attempt(s) recorded",
       skippedCount: 4,
       briefingSummary: "Two listings need review.",
     });
     expect(older).toMatchObject({
       isLatest: false,
       modeLabel: "Fixture mode",
+      aiAttemptsLabel: "simulated AI attempt(s), fixture mode",
       checkedOrScrapedCount: 4,
       apiMatchedCount: 3,
       completedLabel: "Still running",

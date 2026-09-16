@@ -88,6 +88,15 @@ export function SavedListWorkspace({
         </button>
       </nav>
 
+      {controller.listingNotice && activeTab !== "settings" ? (
+        <div className="listing-notice" role="alert">
+          <p>{controller.listingNotice}</p>
+          <button type="button" onClick={controller.dismissListingNotice}>
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
       {activeTab === "dashboard" ? (
         <div className="workspace-grid">
           <section className="list-panel" aria-label="Saved listing review queue">

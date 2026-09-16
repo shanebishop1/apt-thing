@@ -174,7 +174,9 @@ describe("SavedListApp identity and shared listing behavior", () => {
     await user.click(statusButton());
     await user.click(screen.getByRole("option", { name: "interested" }));
 
-    expect(await screen.findByText(/Someone else changed that listing first/)).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toMatch(
+      /Someone else changed that listing first/,
+    );
     expect(screen.queryByText("Status updated to interested.")).toBeNull();
     expect(statusButton().textContent).toContain("touring");
 
@@ -208,7 +210,9 @@ describe("SavedListApp identity and shared listing behavior", () => {
     );
     await user.click(screen.getByRole("option", { name: "interested" }));
 
-    expect(await screen.findByText(/That listing was removed by someone else/)).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toMatch(
+      /That listing was removed by someone else/,
+    );
     expect(screen.queryByRole("heading", { name: listing.title })).toBeNull();
   });
 

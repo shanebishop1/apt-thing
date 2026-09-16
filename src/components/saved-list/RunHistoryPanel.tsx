@@ -117,7 +117,9 @@ export function RunHistoryPanel({
                 </span>
                 <span className="run-cell run-output-cell">
                   <strong>{run.aiOutputLabel}</strong>
-                  <small>{run.aiCallCount} AI attempt(s) recorded</small>
+                  <small>
+                    {run.aiCallCount} {run.aiAttemptsLabel}
+                  </small>
                 </span>
               </summary>
 
@@ -149,7 +151,14 @@ export function RunHistoryPanel({
                   <RunMetric label="Material changes" value={String(run.materialChanges)} />
                   <RunMetric label="Seen-memory updates" value={String(run.memoryUpdates)} />
                   <RunMetric label="Completed" value={run.completedLabel} />
-                  <RunMetric label="AI attempts recorded" value={String(run.aiCallCount)} />
+                  <RunMetric
+                    label={
+                      run.modeLabel === "Fixture mode"
+                        ? "Simulated AI attempts"
+                        : "AI attempts recorded"
+                    }
+                    value={String(run.aiCallCount)}
+                  />
                   <RunMetric label="Triaged" value={String(run.counts.candidatesTriaged)} />
                   <RunMetric label="Source failures" value={String(run.counts.sourceFailures)} />
                 </section>

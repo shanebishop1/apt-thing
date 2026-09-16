@@ -661,6 +661,25 @@ label {
   gap: 12px;
 }
 
+.listing-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+  color: var(--bg-ink);
+}
+
+.listing-notice p {
+  flex: 1 1 16rem;
+  margin: 0;
+}
+
 .run-history-refresh {
   display: inline-flex;
   width: 40px;

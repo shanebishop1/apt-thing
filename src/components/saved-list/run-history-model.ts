@@ -39,6 +39,7 @@ export type RunHistoryPanelRunModel = {
   memoryUpdates: number;
   briefingSummary?: string;
   aiCallCount: number;
+  aiAttemptsLabel: string;
   aiOutputLabel: string;
   sourceCoverage: SourceCoverageSummary[];
   failures: SourceCoverageSummary[];
@@ -90,6 +91,11 @@ export function createRunHistoryPanelModel(history: PersistedRunHistory): RunHis
         memoryUpdates: run.memoryUpdates,
         briefingSummary: run.briefingSummary,
         aiCallCount: run.providerMetadata.length,
+        // Fixture-mode runs persist simulated provider metadata; never present it as real AI calls.
+        aiAttemptsLabel:
+          run.mode === "fixture"
+            ? "simulated AI attempt(s), fixture mode"
+            : "AI attempt(s) recorded",
         aiOutputLabel: `${counts.confirmedMatches} yes / ${counts.reviewNeeded} review / ${counts.rejected} no`,
         sourceCoverage,
         failures,

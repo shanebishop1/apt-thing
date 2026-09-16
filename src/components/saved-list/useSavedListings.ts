@@ -45,6 +45,7 @@ export function useSavedListings() {
   const [url, setUrl] = useState("");
   const [commentText, setCommentText] = useState("");
   const [message, setMessage] = useState("");
+  const [listingNotice, setListingNotice] = useState("");
   const [apiBusy, setApiBusy] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const createRequestIdRef = useRef(0);
@@ -146,6 +147,7 @@ export function useSavedListings() {
     identityRef.current = undefined;
     setIdentity(undefined);
     listingsRef.current = [];
+    setListingNotice("");
     setListings([]);
     setGroupActions([]);
     setSeenRejectedMemory([]);
@@ -229,6 +231,7 @@ export function useSavedListings() {
       {
         onSuccess: (snapshot) => {
           applySharedSnapshot(snapshot);
+          setListingNotice("");
           setMessage(successMessage);
         },
         onError: (error) => {
@@ -250,7 +253,8 @@ export function useSavedListings() {
     } else {
       void refreshSharedSnapshot(activeIdentity, { silent: true });
     }
-    setMessage(
+    // Shown as a workspace-level alert: the intake message area is hidden while collapsed.
+    setListingNotice(
       error.code === "listing-not-found"
         ? "That listing was removed by someone else, so your change was not saved. The list has been refreshed."
         : "Someone else changed that listing first, so your change was not saved. Showing the latest version; reapply your change if it is still needed.",
@@ -432,6 +436,8 @@ export function useSavedListings() {
     url,
     commentText,
     message,
+    listingNotice,
+    dismissListingNotice: () => setListingNotice(""),
     apiBusy,
     onIdentityChange,
     onIdentitySubmit,
