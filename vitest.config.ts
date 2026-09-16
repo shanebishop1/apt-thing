@@ -1,6 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+const setupFiles = ["src/test-support/setup-env.ts"];
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -8,8 +10,25 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
-    environment: "node",
-    setupFiles: ["src/test-support/setup-env.ts"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          include: ["src/**/*.test.ts"],
+          environment: "node",
+          setupFiles,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "components",
+          include: ["src/**/*.test.tsx"],
+          environment: "jsdom",
+          setupFiles,
+        },
+      },
+    ],
   },
 });
