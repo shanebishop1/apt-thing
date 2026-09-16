@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { g3cBriefingRunHistoryFixture } from "../../lib/agent-contract-fixtures";
+import { briefingRunHistoryFixture } from "../../lib/agent-contract-fixtures";
 import type { PersistedRunHistoryRun } from "../../lib/run-history-store";
 import { createRunHistoryPanelModel } from "./run-history-model";
 
 const baseRun: PersistedRunHistoryRun = {
-  ...g3cBriefingRunHistoryFixture.latestRun,
+  ...briefingRunHistoryFixture.latestRun,
   mode: "live-safe",
   skipped: { seen: 1, saved: 1, rejected: 0, triaged: 2 },
   materialChanges: 1,
@@ -29,7 +29,7 @@ describe("createRunHistoryPanelModel", () => {
     };
 
     const model = createRunHistoryPanelModel({
-      groupId: g3cBriefingRunHistoryFixture.groupId,
+      groupId: briefingRunHistoryFixture.groupId,
       generatedAt: "2026-09-16T00:00:00.000Z",
       runs: [olderRun, baseRun],
     });

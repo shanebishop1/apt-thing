@@ -3,7 +3,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { g3cBriefingRunHistoryFixture } from "../../lib/agent-contract-fixtures";
+import { briefingRunHistoryFixture } from "../../lib/agent-contract-fixtures";
 import { RunHistoryPanel } from "./RunHistoryPanel";
 
 afterEach(cleanup);
@@ -43,7 +43,7 @@ describe("RunHistoryPanel", () => {
             ...emptyHistory,
             runs: [
               {
-                ...g3cBriefingRunHistoryFixture.latestRun,
+                ...briefingRunHistoryFixture.latestRun,
                 runId: "persisted-run",
                 mode: "live-safe",
                 skipped: { seen: 0, saved: 0, rejected: 0, triaged: 0 },

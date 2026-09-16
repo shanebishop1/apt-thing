@@ -1,5 +1,4 @@
 import {
-  GEMINI_BRIEFING_SCHEMA_VERSION,
   evidencePointerToSourceEvidenceRecord,
   type AgentRunLogRecord,
   type BriefingCandidateSummary,
@@ -10,11 +9,9 @@ import {
   type ConfidenceTriageMetadata,
   type EvidenceStoragePointer,
   type FeedbackSummary,
-  type GeminiBriefingDraftContract,
-  type GroupAccessRecord,
   type GroupActionRecord,
   type LatestBriefingSummary,
-  type SharedAgentContractFixtureBundle,
+  type SeenRejectedMemoryRecord,
   type SourceCoverageSummary,
   type SourceEvidenceRecord,
 } from "./agent-contracts";
@@ -36,8 +33,28 @@ import {
   type ListingCandidate,
 } from "./listings";
 
+/**
+ * Deterministic fixture inputs assembled from the extraction pipeline so tests can
+ * exercise the briefing/run-history contract without a live run.
+ */
+type AgentContractFixtureBundle = {
+  generatedAt: string;
+  groupId: string;
+  listingCandidates: {
+    confirmedMatch: ListingCandidate;
+    reviewNeeded: ListingCandidate;
+    rejectedDowngraded: ListingCandidate;
+  };
+  sourceEvidence: SourceEvidenceRecord[];
+  triageMetadata: ConfidenceTriageMetadata[];
+  groupActions: GroupActionRecord[];
+  seenRejectedMemory: SeenRejectedMemoryRecord[];
+  runLogs: AgentRunLogRecord[];
+  briefingRecords: BriefingRecord[];
+};
+
 const generatedAt = "2026-06-07T12:00:00.000Z";
-const identity = createGroupIdentity(defaultSearchGroup.id, "G2B Fixture")!;
+const identity = createGroupIdentity(defaultSearchGroup.id, "Contract Fixture")!;
 
 const pastedExtraction = extractSingleLinkFixture({
   rawUrl: streetEasyPastedFixture.sourceUrl,
@@ -103,7 +120,6 @@ const rejectedDowngraded: ListingCandidate = {
 };
 
 const pastedIntake = pastedExtraction.listing;
-const streetEasyBatchCandidate = batchResult.listings[0]!;
 
 const sourceEvidence: SourceEvidenceRecord[] = [
   evidencePointerToSourceEvidenceRecord({
@@ -166,23 +182,9 @@ const sourceEvidence: SourceEvidenceRecord[] = [
 ];
 
 const triageMetadata: ConfidenceTriageMetadata[] = [
-  toTriageMetadata(confirmedMatch, "passed", "g2b-fixture-triage-v1"),
-  toTriageMetadata(reviewNeeded, "review-needed", "g2b-fixture-triage-v1"),
-  toTriageMetadata(rejectedDowngraded, "failed", "g2b-fixture-triage-v1"),
-];
-
-const groupAccess: GroupAccessRecord[] = [
-  {
-    id: "group-access-g2b-fixture",
-    contract: "group-access-v1",
-    groupId: defaultSearchGroup.id,
-    credentialSource: "server-configured-invite",
-    resolvedFrom: "invite-link",
-    actorDisplayName: identity.displayName,
-    actorIdentityToken: identity.identityToken,
-    identityPersistence: "localStorage",
-    createdAt: generatedAt,
-  },
+  toTriageMetadata(confirmedMatch, "passed", "fixture-triage-v1"),
+  toTriageMetadata(reviewNeeded, "review-needed", "fixture-triage-v1"),
+  toTriageMetadata(rejectedDowngraded, "failed", "fixture-triage-v1"),
 ];
 
 const shaneActor = {
@@ -377,14 +379,10 @@ const briefing: BriefingRecord = {
   ],
 };
 
-export const g2bAgentContractFixtureBundle: SharedAgentContractFixtureBundle = {
-  contract: "g2b-shared-agent-contract-fixtures-v1",
+const agentContractFixtureBundle: AgentContractFixtureBundle = {
   generatedAt,
   groupId: defaultSearchGroup.id,
-  groupAccess,
   listingCandidates: {
-    pastedIntake,
-    streetEasyBatchCandidate,
     confirmedMatch,
     reviewNeeded,
     rejectedDowngraded,
@@ -412,8 +410,8 @@ export const g2bAgentContractFixtureBundle: SharedAgentContractFixtureBundle = {
   briefingRecords: [briefing],
 };
 
-export function createG3CBriefingRunHistoryFixture(
-  bundle: SharedAgentContractFixtureBundle = g2bAgentContractFixtureBundle,
+export function createBriefingRunHistoryFixture(
+  bundle: AgentContractFixtureBundle = agentContractFixtureBundle,
 ): BriefingRunHistoryContract {
   const run = bundle.runLogs[0]!;
   const sourceBriefing = bundle.briefingRecords[0]!;
@@ -497,66 +495,7 @@ export function createG3CBriefingRunHistoryFixture(
   };
 }
 
-export const g3cBriefingRunHistoryFixture = createG3CBriefingRunHistoryFixture();
-
-export function createGeminiBriefingDraftFixture(
-  history: BriefingRunHistoryContract = g3cBriefingRunHistoryFixture,
-): GeminiBriefingDraftContract {
-  const candidate = history.latestRun.candidateSummaries[0]!;
-
-  return {
-    contract: "gemini-briefing-draft-v1",
-    schemaVersion: GEMINI_BRIEFING_SCHEMA_VERSION,
-    groupId: history.groupId,
-    runId: history.latestRun.runId,
-    generatedAt: history.generatedAt,
-    summary: history.latestBriefing.summary,
-    listingReferences: [
-      {
-        listingId: candidate.listingId,
-        sourceUrl: candidate.sourceUrl,
-        rationale: candidate.suggestedAction,
-        evidenceClaims: [candidate.evidenceSummary.evidenceQuotes[0]!],
-      },
-    ],
-    sourceCoverageClaims: history.latestRun.sourceCoverage.map((coverage) => ({
-      source: coverage.source,
-      status: coverage.status,
-      checkedCount: coverage.checkedCount,
-      failureCode: coverage.failureCode,
-    })),
-    suggestedActions: history.latestBriefing.suggestedActions,
-    providerMetadata: briefingProviderMetadata(),
-    rawArtifactPointers: history.latestRun.rawArtifactPointers,
-  };
-}
-
-export function createHallucinatedGeminiBriefingDraftFixture(
-  history: BriefingRunHistoryContract = g3cBriefingRunHistoryFixture,
-): GeminiBriefingDraftContract {
-  const draft = createGeminiBriefingDraftFixture(history);
-
-  return {
-    ...draft,
-    listingReferences: [
-      {
-        ...draft.listingReferences[0]!,
-        listingId: "hallucinated-listing-id",
-        sourceUrl: "https://made-up.example/listing/never-seen",
-        evidenceClaims: ["Invented source quote not in evidence."],
-      },
-    ],
-    sourceCoverageClaims: [
-      {
-        source: "made-up-source",
-        status: "failed",
-        checkedCount: 99,
-        failureCode: "made-up-failure",
-      },
-      ...draft.sourceCoverageClaims.slice(1),
-    ],
-  };
-}
+export const briefingRunHistoryFixture = createBriefingRunHistoryFixture();
 
 function toTriageMetadata(
   listing: ListingCandidate,
@@ -581,7 +520,7 @@ function toTriageMetadata(
 
 function toCandidateSummary(
   listing: ListingCandidate,
-  bundle: SharedAgentContractFixtureBundle,
+  bundle: AgentContractFixtureBundle,
 ): BriefingCandidateSummary {
   const triage = bundle.triageMetadata.find((record) => record.listingId === listing.id)!;
   const memory = bundle.seenRejectedMemory.find((record) => record.sourceUrl === listing.url);
@@ -622,7 +561,7 @@ function toCandidateSummary(
 }
 
 function createFeedbackSummaries(
-  bundle: SharedAgentContractFixtureBundle,
+  bundle: AgentContractFixtureBundle,
   candidates: BriefingCandidateSummary[],
 ): FeedbackSummary[] {
   return candidates
@@ -655,7 +594,7 @@ function createFeedbackSummaries(
 }
 
 function rawPointersForRun(
-  bundle: SharedAgentContractFixtureBundle,
+  bundle: AgentContractFixtureBundle,
   runId: string,
 ): EvidenceStoragePointer[] {
   return bundle.sourceEvidence
@@ -669,7 +608,7 @@ function briefingProviderMetadata(): AiProviderAttemptMetadata {
     model: "gemini-3.5-flash",
     apiKeyEnv: "GEMINI_API_KEY",
     purpose: "briefing",
-    attemptId: "provider-attempt-g3c-briefing-fixture",
+    attemptId: "provider-attempt-briefing-fixture",
     status: "success",
     startedAt: generatedAt,
     completedAt: generatedAt,
@@ -678,7 +617,7 @@ function briefingProviderMetadata(): AiProviderAttemptMetadata {
     outputTokenCount: 220,
     imageCount: 0,
     maxImagesPerListing: 5,
-    promptVersion: "g3c-briefing-fixture-v1",
+    promptVersion: "briefing-fixture-v1",
     schemaValidation: "passed",
   };
 }
