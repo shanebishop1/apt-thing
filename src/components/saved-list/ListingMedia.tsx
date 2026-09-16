@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { ChevronLeft, ChevronRight, Map as MapIcon, X } from "lucide-react";
-import type { InviteIdentity, ListingCandidate } from "../../lib/listings";
+import type { InviteIdentity, ListingCandidate } from "@/lib/listings";
 import { ListingInlineMap } from "./map/LeafletListingMap";
 
 export type ListingMediaProps = {
@@ -22,8 +27,8 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
     ? (photoUrls[selectedMediaIndex - 1] ?? photoUrls[0])
     : undefined;
   const showPhotoControls = mediaItemCount > 1;
-  const showModalPhotoControls = mediaItemCount > 1;
   const photoPositionLabel = `${selectedMediaIndex + 1} of ${mediaItemCount}`;
+  const photoAltText = `${listing.title} photo ${selectedMediaIndex}`;
 
   useEffect(() => {
     setSelectedMediaIndex(0);
@@ -91,6 +96,23 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
     }
   };
 
+  const listingMap = <ListingInlineMap identity={identity} listing={listing} />;
+  const sharedFrameProps = {
+    listingTitle: listing.title,
+    positionLabel: photoPositionLabel,
+    showNavigation: showPhotoControls,
+    onPrevious: handlePreviousPhoto,
+    onNext: handleNextPhoto,
+  };
+  const sharedStripProps = {
+    listingTitle: listing.title,
+    photoUrls,
+    selectedMediaIndex,
+    isMapSelected,
+    onSelectMap: () => setSelectedMediaIndex(mapMediaIndex),
+    onSelectPhoto: selectPhoto,
+  };
+
   return (
     <>
       <section
@@ -99,9 +121,9 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
         tabIndex={showPhotoControls ? 0 : undefined}
         onKeyDown={handlePhotoCarouselKeyDown}
       >
-        <figure className="listing-photo-frame">
+        <PhotoFrame {...sharedFrameProps}>
           {isMapSelected ? (
-            <ListingInlineMap identity={identity} listing={listing} />
+            listingMap
           ) : selectedPhotoUrl ? (
             <button
               type="button"
@@ -109,63 +131,11 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
               aria-label={`Enlarge photo ${selectedMediaIndex} of ${photoUrls.length} for ${listing.title}`}
               onClick={() => setIsPhotoModalOpen(true)}
             >
-              <img
-                src={selectedPhotoUrl}
-                alt={`${listing.title} photo ${selectedMediaIndex}`}
-                loading="lazy"
-              />
+              <img src={selectedPhotoUrl} alt={photoAltText} loading="lazy" />
             </button>
           ) : null}
-          <figcaption className="listing-photo-count">{photoPositionLabel}</figcaption>
-          {showPhotoControls ? (
-            <div className="listing-photo-controls" aria-label="Photo navigation controls">
-              <button
-                type="button"
-                className="listing-photo-arrow listing-photo-arrow-previous"
-                aria-label={`Show previous photo for ${listing.title}`}
-                onClick={handlePreviousPhoto}
-              >
-                <ChevronLeft aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="listing-photo-arrow listing-photo-arrow-next"
-                aria-label={`Show next photo for ${listing.title}`}
-                onClick={handleNextPhoto}
-              >
-                <ChevronRight aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
-        </figure>
-        {showPhotoControls ? (
-          <div className="listing-photo-media-strip" aria-label="Choose listing photo or map">
-            <button
-              type="button"
-              className="listing-photo-thumbnail listing-map-thumbnail"
-              aria-label={`Show map for ${listing.title}`}
-              aria-current={isMapSelected ? "true" : undefined}
-              onClick={() => setSelectedMediaIndex(mapMediaIndex)}
-            >
-              <MapIcon aria-hidden="true" />
-              <span>Map</span>
-            </button>
-            <div className="listing-photo-thumbnails" aria-label="Choose listing photo">
-              {photoUrls.map((photoUrl, index) => (
-                <button
-                  type="button"
-                  key={`${photoUrl}-${index}`}
-                  className="listing-photo-thumbnail"
-                  aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listing.title}`}
-                  aria-current={index + 1 === selectedMediaIndex ? "true" : undefined}
-                  onClick={() => selectPhoto(index + 1)}
-                >
-                  <img src={photoUrl} alt="" loading="lazy" />
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
+        </PhotoFrame>
+        {showPhotoControls ? <MediaStrip {...sharedStripProps} /> : null}
       </section>
 
       {isPhotoModalOpen ? (
@@ -196,71 +166,143 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
                 <X aria-hidden="true" />
               </button>
             </div>
-            <figure className="listing-photo-frame listing-photo-modal-frame">
+            <PhotoFrame {...sharedFrameProps} className="listing-photo-modal-frame">
               {isMapSelected ? (
-                <ListingInlineMap identity={identity} listing={listing} />
+                listingMap
               ) : selectedPhotoUrl ? (
-                <img src={selectedPhotoUrl} alt={`${listing.title} photo ${selectedMediaIndex}`} />
+                <img src={selectedPhotoUrl} alt={photoAltText} />
               ) : null}
-              <figcaption className="listing-photo-count">{photoPositionLabel}</figcaption>
-              {showModalPhotoControls ? (
-                <div className="listing-photo-controls" aria-label="Photo navigation controls">
-                  <button
-                    type="button"
-                    className="listing-photo-arrow listing-photo-arrow-previous"
-                    aria-label={`Show previous photo for ${listing.title}`}
-                    onClick={handlePreviousPhoto}
-                  >
-                    <ChevronLeft aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="listing-photo-arrow listing-photo-arrow-next"
-                    aria-label={`Show next photo for ${listing.title}`}
-                    onClick={handleNextPhoto}
-                  >
-                    <ChevronRight aria-hidden="true" />
-                  </button>
-                </div>
-              ) : null}
-            </figure>
-            {showModalPhotoControls ? (
-              <div
-                className="listing-photo-media-strip listing-photo-modal-media-strip"
-                aria-label="Choose listing photo or map"
-              >
-                <button
-                  type="button"
-                  className="listing-photo-thumbnail listing-map-thumbnail"
-                  aria-label={`Show map for ${listing.title}`}
-                  aria-current={isMapSelected ? "true" : undefined}
-                  onClick={() => setSelectedMediaIndex(mapMediaIndex)}
-                >
-                  <MapIcon aria-hidden="true" />
-                  <span>Map</span>
-                </button>
-                <div
-                  className="listing-photo-thumbnails listing-photo-modal-thumbnails"
-                  aria-label="Choose listing photo"
-                >
-                  {photoUrls.map((photoUrl, index) => (
-                    <button
-                      type="button"
-                      key={`${photoUrl}-${index}`}
-                      className="listing-photo-thumbnail"
-                      aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listing.title}`}
-                      aria-current={index + 1 === selectedMediaIndex ? "true" : undefined}
-                      onClick={() => selectPhoto(index + 1)}
-                    >
-                      <img src={photoUrl} alt="" loading="lazy" />
-                    </button>
-                  ))}
-                </div>
-              </div>
+            </PhotoFrame>
+            {showPhotoControls ? (
+              <MediaStrip
+                {...sharedStripProps}
+                className="listing-photo-modal-media-strip"
+                thumbnailsClassName="listing-photo-modal-thumbnails"
+              />
             ) : null}
           </section>
         </div>
       ) : null}
     </>
   );
+}
+
+/** The photo (or map) currently on show, its position caption, and the arrow controls. */
+function PhotoFrame({
+  className,
+  listingTitle,
+  positionLabel,
+  showNavigation,
+  onPrevious,
+  onNext,
+  children,
+}: {
+  className?: string;
+  listingTitle: string;
+  positionLabel: string;
+  showNavigation: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <figure className={joinClassNames("listing-photo-frame", className)}>
+      {children}
+      <figcaption className="listing-photo-count">{positionLabel}</figcaption>
+      {showNavigation ? (
+        <PhotoNavigation listingTitle={listingTitle} onPrevious={onPrevious} onNext={onNext} />
+      ) : null}
+    </figure>
+  );
+}
+
+function PhotoNavigation({
+  listingTitle,
+  onPrevious,
+  onNext,
+}: {
+  listingTitle: string;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="listing-photo-controls" aria-label="Photo navigation controls">
+      <button
+        type="button"
+        className="listing-photo-arrow listing-photo-arrow-previous"
+        aria-label={`Show previous photo for ${listingTitle}`}
+        onClick={onPrevious}
+      >
+        <ChevronLeft aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className="listing-photo-arrow listing-photo-arrow-next"
+        aria-label={`Show next photo for ${listingTitle}`}
+        onClick={onNext}
+      >
+        <ChevronRight aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+/** The map tile plus photo thumbnails used to jump straight to one item. */
+function MediaStrip({
+  className,
+  thumbnailsClassName,
+  listingTitle,
+  photoUrls,
+  selectedMediaIndex,
+  isMapSelected,
+  onSelectMap,
+  onSelectPhoto,
+}: {
+  className?: string;
+  thumbnailsClassName?: string;
+  listingTitle: string;
+  photoUrls: string[];
+  selectedMediaIndex: number;
+  isMapSelected: boolean;
+  onSelectMap: () => void;
+  onSelectPhoto: (index: number) => void;
+}) {
+  return (
+    <div
+      className={joinClassNames("listing-photo-media-strip", className)}
+      aria-label="Choose listing photo or map"
+    >
+      <button
+        type="button"
+        className="listing-photo-thumbnail listing-map-thumbnail"
+        aria-label={`Show map for ${listingTitle}`}
+        aria-current={isMapSelected ? "true" : undefined}
+        onClick={onSelectMap}
+      >
+        <MapIcon aria-hidden="true" />
+        <span>Map</span>
+      </button>
+      <div
+        className={joinClassNames("listing-photo-thumbnails", thumbnailsClassName)}
+        aria-label="Choose listing photo"
+      >
+        {photoUrls.map((photoUrl, index) => (
+          <button
+            type="button"
+            key={`${photoUrl}-${index}`}
+            className="listing-photo-thumbnail"
+            aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listingTitle}`}
+            aria-current={index + 1 === selectedMediaIndex ? "true" : undefined}
+            onClick={() => onSelectPhoto(index + 1)}
+          >
+            <img src={photoUrl} alt="" loading="lazy" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function joinClassNames(base: string, extra?: string): string {
+  return extra ? `${base} ${extra}` : base;
 }
