@@ -1,6 +1,6 @@
 # Readiness Hardening Plan
 
-Status: In progress — contracts fixed (see Contract Decisions)
+Status: Local implementation complete; deployment blocked on external activation (see Completion Record)
 Last updated: 2026-09-16
 
 ## Goal
@@ -286,3 +286,69 @@ The following cannot be claimed complete without user-provided access or explici
 - production secret provisioning and rotation.
 
 These blockers do not prevent local implementation and SQLite/D1-semantic verification, but they must remain explicit in final readiness reporting.
+
+## Completion Record
+
+Completed 2026-09-16 by a single agent, one lane at a time (no subagents).
+
+### Commits
+
+| Commit    | Summary                                                                                                                                                                                                                                                  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `9a9d863` | Document readiness hardening contracts                                                                                                                                                                                                                   |
+| `ac6eae1` | Load run history from D1: `GET /api/group/runs`, `src/lib/run-history-store.ts`, Runs tab loading/error/empty/refresh states, and the `node:sqlite` D1 test adapter                                                                                        |
+| `a3da5d2` | Reject stale listing mutations: migration 0005, insert-only creation, revision-checked update/delete, 409/404 payloads, and client revision submission and recovery                                                                                        |
+| `a56ac5f` | Move invite authorization server-side: `GROUP_INVITE_CODES`, `POST/DELETE /api/group/session`, fail-closed auth on every protected route, cookie-authenticated tiles, migration 0006, auth matrix tests, `check:client-secrets`, and CI build plus secret scan |
+| `2973648` | Cover multi-client readiness flows (two cookie-authenticated clients over SQLite)                                                                                                                                                                        |
+| `6fe0074` | Show listing conflicts as a workspace alert (browser smoke test found the message hidden in the collapsed intake panel) and label fixture-run AI metadata as simulated                                                                                    |
+| `77dd7f6` | Document secure setup and handoff (README, SETUP)                                                                                                                                                                                                         |
+
+The feature contract `docs/features/ai-apartment-search/mvp.md` was updated for server-configured invites, sessions, and revisions. `docs/` is excluded by `.git/info/exclude`, so that edit (and the `$INVITE_CODE` curl updates in `docs/operations/guides/development-and-deployment.md`) exists only in the local working tree.
+
+### Verification Evidence
+
+- `pnpm check` (format, lint, typecheck, 226 Vitest tests in 27 files, `next build`, `check:client-secrets`) passed on the working repo and on a fresh local clone after `pnpm install --frozen-lockfile` (Node 24.19.0 locally; CI pins 22.15.1).
+- SQLite/D1-semantic tests (`src/lib/shared-listing-concurrency.test.ts`):
+  - edit/edit: exactly one success and one 409;
+  - edit/reject: the rejected listing is never recreated;
+  - a delayed edit after rejection returns 404 and leaves no row;
+  - a stale status change records no side actions or memory;
+  - the daily-loop rewrite increments the revision;
+  - a pre-0005 database gets `revision = 1`.
+- Auth matrix (`src/lib/api-auth.test.ts`): all 10 protected handlers return 401 without credentials (no D1 or upstream access), 403 for wrong codes including `apt-g1`, 401 for forged cookies, 503 when unconfigured, and success with a valid session. Session tests cover cookie flags, tampering, expiry, and code rotation. A source scan confirms no invite credential in `app/`, `src/components/`, or `src/lib/`.
+- Two-client flow (`src/lib/multi-client-readiness.test.ts`): create/duplicate, edit, stale-edit conflict and recovery, status, comment, reaction, reject, delayed-edit 404, rejected memory, and shared persisted run history.
+- Local runtime smoke (`next dev` with the OpenNext dev bridge, local D1 emulator via a temporary uncommitted `d1_databases` binding and `.dev.vars`, provider keys blank):
+  - migrations 0001–0006 applied to a fresh local D1;
+  - curl returned 401, 403, 200 (header), 401 (tiles without a credential), and an empty Runs payload;
+  - two Playwright browser sessions (Alice/Bob) with a wrong code (403, nothing stored), a valid code, and an invite link; the HttpOnly cookie was not readable from JS;
+  - an approve vs stale reject race and a status vs stale status race each returned 200 then 409, and the losing client showed the conflict alert and adopted the current state (desktop 1280px and 390px screenshots);
+  - 18 map tiles loaded through the cookie, with no `inviteCode=` in any request URL;
+  - the Runs tab showed the empty state, then a `POST /api/platform/daily-loop` fixture run (44 D1 rows) appeared after refresh, labeled Fixture mode, partial, with the isolated Zillow fixture failure.
+- `pnpm build` with a random `GROUP_INVITE_CODES`, followed by `check:client-secrets`, and `pnpm cf:build` followed by `check-client-secrets.mjs --open-next`, found no secrets in `.next/static` or `.open-next/assets`. A stale pre-change `.open-next` bundle still contained `apt-g1` and was replaced by the rebuild.
+- Hibernation preserved: no deploys, no `--remote` commands, no cron or route or binding changes committed (`workers_dev: false`, `preview_urls: false`, `crons: []`), and no provider calls (keys blanked during the smoke run). The temporary local binding, `.dev.vars`, and the original `.wrangler/state` were restored afterward.
+
+### Deployment Requirements
+
+1. Provision D1 and add the `DB` binding (SETUP §6), then `wrangler d1 migrations apply DB --remote`. That applies 0005 (`revision`) and 0006 (retires `apt-g1` in `search_groups`).
+2. Run `wrangler secret put GROUP_INVITE_CODES` with `nyc-5br-2026=<openssl rand -hex 16>` before first traffic; without it every protected route returns 503.
+3. Share the new code privately. Anyone who used `apt-g1` must re-enter the new code.
+
+### Residual Risks
+
+- A shared group code, not per-person identity: display names are self-asserted, and there is no rate limiting or lockout on `POST /api/group/session`. Security relies on code entropy; 16+ characters are enforced.
+- The static UI shell is public; only API and tile routes are protected.
+- The daily loop's listing upsert still overwrites `listing_json` for a saved listing it reprocesses, now with a revision bump, so clients conflict instead of clobbering it. A concurrent user edit made between the loop's read and write can still be replaced by loop output.
+- Listing mutations and their side records (group actions, rejected memory) are sequential statements, not one transaction; a failure between them can leave the listing updated without its action record.
+- `GET /api/platform/daily-loop` executes and persists a run (pre-existing behavior); it is authenticated but not idempotent.
+- The field editor sends one PATCH per keystroke. Mutations are serialized client-side and chain revisions, but a remote change arriving mid-typing causes one rejected keystroke and a visible conflict.
+- With no Stadia key, the CARTO fallback served "API key required" watermarked tiles during the smoke run (pre-existing, unrelated to auth).
+- The pre-existing local `.wrangler/state` D1 had 0001 recorded but no `search_groups` table, so applying 0006 there failed. A fresh local database applies cleanly; SETUP documents the reset.
+
+### External Blockers
+
+Unchanged and still requiring explicit user access or approval:
+- production Cloudflare deployment;
+- remote D1 migration (0005/0006) and data restoration;
+- Cron/Workflow activation;
+- live Gemini, RealtyAPI, and Stadia verification;
+- production `GROUP_INVITE_CODES` provisioning and rotation.
