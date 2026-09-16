@@ -8,22 +8,12 @@ import {
   type DailyLoopTrigger,
 } from "@/lib/daily-source-loop";
 import { type Cadence } from "@/lib/listings";
+import { readCloudflareEnv, readJsonObject, readServerSecret } from "@/lib/route-support";
 
 type DailyLoopRouteEnv = DailyLoopEnv & Partial<Record<"APP_ENV", string>>;
 
-async function getDailyLoopEnv(): Promise<DailyLoopRouteEnv | undefined> {
-  try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const context = await getCloudflareContext({ async: true });
-
-    return context?.env as DailyLoopRouteEnv | undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export async function GET(request: NextRequest) {
-  const env = await getDailyLoopEnv();
+  const env = await readCloudflareEnv<DailyLoopRouteEnv>();
   const searchParams = new URL(request.url).searchParams;
   const cadence = normalizeCadence(searchParams.get("cadence")) ?? "manual";
   const trigger =
@@ -38,13 +28,7 @@ export async function GET(request: NextRequest) {
     cadence,
     trigger,
     identity: auth.identity,
-    env: {
-      GEMINI_API_KEY: env?.GEMINI_API_KEY ?? process.env.GEMINI_API_KEY,
-      REALTYAPI_KEY: env?.REALTYAPI_KEY ?? process.env.REALTYAPI_KEY,
-      REALTYAPI_BASE_URL: env?.REALTYAPI_BASE_URL ?? process.env.REALTYAPI_BASE_URL,
-      DB: env?.DB,
-      APP_CACHE: env?.APP_CACHE,
-    },
+    env: dailyLoopEnv(env),
   });
 
   return NextResponse.json({
@@ -64,9 +48,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const env = await getDailyLoopEnv();
+  const env = await readCloudflareEnv<DailyLoopRouteEnv>();
   const searchParams = new URL(request.url).searchParams;
-  const body = await readJson(request);
+  const body = await readJsonObject(request);
   const cadence =
     normalizeCadence(searchParams.get("cadence")) ?? normalizeCadence(body.cadence) ?? "manual";
   const trigger =
@@ -82,13 +66,7 @@ export async function POST(request: NextRequest) {
     identity: auth.identity,
     failStreetEasy: body.failStreetEasy === true,
     failSecondary: body.failSecondary === true,
-    env: {
-      GEMINI_API_KEY: env?.GEMINI_API_KEY ?? process.env.GEMINI_API_KEY,
-      REALTYAPI_KEY: env?.REALTYAPI_KEY ?? process.env.REALTYAPI_KEY,
-      REALTYAPI_BASE_URL: env?.REALTYAPI_BASE_URL ?? process.env.REALTYAPI_BASE_URL,
-      DB: env?.DB,
-      APP_CACHE: env?.APP_CACHE,
-    },
+    env: dailyLoopEnv(env),
   });
 
   return NextResponse.json({
@@ -106,15 +84,14 @@ export async function POST(request: NextRequest) {
   });
 }
 
-async function readJson(request: NextRequest): Promise<Record<string, unknown>> {
-  try {
-    const parsed = (await request.json()) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
+function dailyLoopEnv(env: DailyLoopRouteEnv | undefined): DailyLoopEnv {
+  return {
+    GEMINI_API_KEY: readServerSecret(env, "GEMINI_API_KEY"),
+    REALTYAPI_KEY: readServerSecret(env, "REALTYAPI_KEY"),
+    REALTYAPI_BASE_URL: readServerSecret(env, "REALTYAPI_BASE_URL"),
+    DB: env?.DB,
+    APP_CACHE: env?.APP_CACHE,
+  };
 }
 
 function normalizeCadence(value: unknown): Cadence | undefined {

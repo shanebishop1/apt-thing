@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { authorizeGroupRequest } from "@/lib/api-auth";
 import { REVIEW_STATUSES, type FieldProvenance } from "@/lib/listings";
 import {
+  d1BindingMissingResponse,
+  isD1Database,
+  jsonError,
+  readCloudflareEnv,
+  readJsonObject,
+} from "@/lib/route-support";
+import {
   ListingMutationError,
   appendSharedAction,
   mutateSharedListingReviewDecision,
@@ -15,20 +22,18 @@ type AppRouteEnv = Partial<Record<"DB", unknown>>;
 type RouteContext = { params: Promise<{ listingId: string }> };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const body = await readJson(request);
+  const body = await readJsonObject(request);
   const auth = await authorizeGroupRequest(request, { body, displayName: "Group Listing API" });
   if (!auth.ok) return auth.response;
 
-  const env = await getAppRouteEnv();
-  if (!isD1Database(env?.DB)) {
-    return NextResponse.json({ ok: false, error: "d1-binding-missing" }, { status: 503 });
-  }
+  const env = await readCloudflareEnv<AppRouteEnv>();
+  if (!isD1Database(env?.DB)) return d1BindingMissingResponse();
   const identity = auth.identity;
 
   const { listingId } = await context.params;
   const expectedRevision = parseExpectedRevision(body.revision);
   if (expectedRevision === undefined) {
-    return NextResponse.json({ ok: false, error: "revision-required" }, { status: 400 });
+    return jsonError(400, "revision-required");
   }
 
   try {
@@ -69,21 +74,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ ok: true, snapshot });
     }
 
-    return NextResponse.json({ ok: false, error: "unsupported-mutation" }, { status: 400 });
+    return jsonError(400, "unsupported-mutation");
   } catch (error) {
     return mutationErrorResponse(env.DB, identity.groupId, error, "listing-mutation-failed");
   }
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  const body = await readJson(request);
+  const body = await readJsonObject(request);
   const auth = await authorizeGroupRequest(request, { body, displayName: "Group Listing API" });
   if (!auth.ok) return auth.response;
 
-  const env = await getAppRouteEnv();
-  if (!isD1Database(env?.DB)) {
-    return NextResponse.json({ ok: false, error: "d1-binding-missing" }, { status: 503 });
-  }
+  const env = await readCloudflareEnv<AppRouteEnv>();
+  if (!isD1Database(env?.DB)) return d1BindingMissingResponse();
   const identity = auth.identity;
 
   const { listingId } = await context.params;
@@ -123,35 +126,7 @@ async function mutationErrorResponse(
     );
   }
 
-  return NextResponse.json(
-    { ok: false, error: error instanceof Error ? error.message : fallback },
-    { status: 400 },
-  );
-}
-
-async function getAppRouteEnv(): Promise<AppRouteEnv | undefined> {
-  try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const context = await getCloudflareContext({ async: true });
-    return context?.env as AppRouteEnv | undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function readJson(request: NextRequest): Promise<Record<string, unknown>> {
-  try {
-    const parsed = (await request.json()) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function isD1Database(value: unknown): value is D1DatabaseLike {
-  return Boolean(value && typeof value === "object" && "prepare" in value);
+  return jsonError(400, error instanceof Error ? error.message : fallback);
 }
 
 function isEditableField(value: unknown): value is FieldProvenance["field"] {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeGroupRequest } from "@/lib/api-auth";
+import { jsonError, readCloudflareEnv, readServerSecret } from "@/lib/route-support";
 
 type MapTileRouteEnv = Partial<Record<"STADIA_MAPS_API_KEY", unknown>>;
 
@@ -17,16 +18,16 @@ export async function GET(
   const yMatch = tileFilePattern.exec(y);
 
   if (!tileCoordinatePattern.test(z) || !tileCoordinatePattern.test(x) || !yMatch) {
-    return NextResponse.json({ ok: false, error: "invalid-tile-coordinates" }, { status: 400 });
+    return jsonError(400, "invalid-tile-coordinates");
   }
 
   const zoom = Number(z);
   if (!Number.isInteger(zoom) || zoom < 0 || zoom > 20) {
-    return NextResponse.json({ ok: false, error: "invalid-tile-zoom" }, { status: 400 });
+    return jsonError(400, "invalid-tile-zoom");
   }
 
-  const env = await getMapTileRouteEnv();
-  const apiKey = typeof env?.STADIA_MAPS_API_KEY === "string" ? env.STADIA_MAPS_API_KEY.trim() : "";
+  const env = await readCloudflareEnv<MapTileRouteEnv>();
+  const apiKey = readServerSecret(env, "STADIA_MAPS_API_KEY")?.trim() ?? "";
 
   const retinaSuffix = yMatch[2] ?? "";
   if (apiKey) {
@@ -54,10 +55,7 @@ export async function GET(
   );
 
   if (!fallback.ok || !fallback.body) {
-    return NextResponse.json(
-      { ok: false, error: "tile-fetch-failed" },
-      { status: fallback.status },
-    );
+    return jsonError(fallback.status, "tile-fetch-failed");
   }
 
   return tileResponse(fallback);
@@ -71,14 +69,4 @@ function tileResponse(response: Response) {
     },
     status: response.status,
   });
-}
-
-async function getMapTileRouteEnv(): Promise<MapTileRouteEnv | undefined> {
-  try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const context = await getCloudflareContext({ async: true });
-    return context?.env as MapTileRouteEnv | undefined;
-  } catch {
-    return { STADIA_MAPS_API_KEY: process.env.STADIA_MAPS_API_KEY };
-  }
 }

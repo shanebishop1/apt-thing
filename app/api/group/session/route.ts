@@ -8,10 +8,11 @@ import {
   readGroupInviteCodes,
 } from "@/lib/api-auth";
 import { createGroupIdentity, findSearchGroup, parseInviteInput } from "@/lib/listings";
+import { jsonError, readJsonObject } from "@/lib/route-support";
 
 /** Exchanges a user-entered invite code and display name for an HTTP-only group session. */
 export async function POST(request: NextRequest) {
-  const body = await readJson(request);
+  const body = await readJsonObject(request);
   const codes = await readGroupInviteCodes();
   if (codes.size === 0) return authFailure("group-auth-unconfigured").response;
 
@@ -25,9 +26,7 @@ export async function POST(request: NextRequest) {
     groupId,
     typeof body.displayName === "string" ? body.displayName : "",
   );
-  if (!identity) {
-    return NextResponse.json({ ok: false, error: "display-name-required" }, { status: 400 });
-  }
+  if (!identity) return jsonError(400, "display-name-required");
 
   const response = NextResponse.json({
     ok: true,
@@ -53,15 +52,4 @@ export async function DELETE(request: NextRequest) {
   const response = NextResponse.json({ ok: true });
   response.cookies.set(groupSessionCookie(request, "", 0));
   return response;
-}
-
-async function readJson(request: NextRequest): Promise<Record<string, unknown>> {
-  try {
-    const parsed = (await request.json()) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
 }

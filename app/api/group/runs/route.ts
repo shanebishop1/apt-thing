@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeGroupRequest } from "@/lib/api-auth";
+import {
+  d1BindingMissingResponse,
+  isD1Database,
+  jsonError,
+  readCloudflareEnv,
+} from "@/lib/route-support";
 import { readPersistedRunHistory } from "@/lib/run-history-store";
-import type { D1DatabaseLike } from "@/lib/shared-listing-store";
 
 type AppRouteEnv = Partial<Record<"DB", unknown>>;
 
@@ -9,29 +14,13 @@ export async function GET(request: NextRequest) {
   const auth = await authorizeGroupRequest(request, { displayName: "Run History API" });
   if (!auth.ok) return auth.response;
 
-  const env = await getAppRouteEnv();
-  if (!isD1Database(env?.DB)) {
-    return NextResponse.json({ ok: false, error: "d1-binding-missing" }, { status: 503 });
-  }
+  const env = await readCloudflareEnv<AppRouteEnv>();
+  if (!isD1Database(env?.DB)) return d1BindingMissingResponse();
 
   try {
     const history = await readPersistedRunHistory(env.DB, auth.identity.groupId);
     return NextResponse.json({ ok: true, history });
   } catch {
-    return NextResponse.json({ ok: false, error: "run-history-read-failed" }, { status: 500 });
+    return jsonError(500, "run-history-read-failed");
   }
-}
-
-async function getAppRouteEnv(): Promise<AppRouteEnv | undefined> {
-  try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const context = await getCloudflareContext({ async: true });
-    return context?.env as AppRouteEnv | undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function isD1Database(value: unknown): value is D1DatabaseLike {
-  return Boolean(value && typeof value === "object" && "prepare" in value);
 }

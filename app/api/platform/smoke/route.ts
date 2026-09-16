@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeGroupRequest } from "@/lib/api-auth";
+import { readCloudflareEnv } from "@/lib/route-support";
 
 type BindingState = "bound" | "missing";
 type ContextStatus = "available" | "unavailable";
@@ -30,22 +31,11 @@ export function buildPlatformSmokePayload(
   };
 }
 
-async function getPlatformSmokeEnv(): Promise<PlatformSmokeEnv | undefined> {
-  try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const context = await getCloudflareContext({ async: true });
-
-    return context?.env as PlatformSmokeEnv | undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export async function GET(request: NextRequest) {
   const auth = await authorizeGroupRequest(request, { displayName: "Platform Smoke API" });
   if (!auth.ok) return auth.response;
 
-  const env = await getPlatformSmokeEnv();
+  const env = await readCloudflareEnv<PlatformSmokeEnv>();
 
   return NextResponse.json(buildPlatformSmokePayload(env));
 }
