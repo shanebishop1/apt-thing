@@ -287,7 +287,6 @@ const streetEasyBatchReviewResult = runStreetEasyBatchFixture({
 });
 
 export const fixtureBatchRun = streetEasyBatchReviewResult.run;
-export const fixtureBatchSkipped = streetEasyBatchReviewResult.skipped;
 
 export const fixtureListings: ListingCandidate[] = [
   ...streetEasyBatchReviewResult.listings,
