@@ -24,9 +24,24 @@ cp .env.example .env
 
 Leave the provider keys blank initially. `.env` is ignored by Git and is read by
 Next.js and Wrangler. Do not put credentials in `wrangler.jsonc`, client code, or
-variables prefixed with `NEXT_PUBLIC_`. Use `.env` rather than `.dev.vars` here:
-the latter is not covered by this repository's checked-in ignore rules, and a
-`.dev.vars` file also takes precedence over Wrangler's `.env` loading.
+variables prefixed with `NEXT_PUBLIC_`. Prefer `.env` for local development. If
+you do create `.dev.vars` (also ignored by Git), Wrangler stops loading `.env`, so
+every local variable must then live in `.dev.vars`.
+
+### Create A Group Invite Code
+
+Invite codes are server-only configuration; none is committed to the repository.
+Generate a random code for the demo group and add it to `.env`:
+
+```sh
+echo "GROUP_INVITE_CODES=nyc-5br-2026=$(openssl rand -hex 16)" >> .env
+```
+
+The value is a comma-separated list of `groupId=inviteCode` pairs. Group ids must
+exist in `searchGroups` in `src/lib/listings.ts` (only `nyc-5br-2026` today), and
+codes shorter than 16 characters are ignored. If no valid entry is configured,
+every protected API route fails closed with HTTP 503 `group-auth-unconfigured`.
+The old `apt-g1` code is public in git history and is never accepted.
 
 ## 2. Add A Local Database Binding
 
@@ -52,7 +67,7 @@ The all-zero ID is a **local-only placeholder**, not a provisioned Cloudflare
 database. Do not deploy it. Do not add `remote: true` or use `--remote` for local
 setup. No login or cloud resource creation is needed.
 
-Apply all four migrations and regenerate binding types:
+Apply all migrations and regenerate binding types:
 
 ```sh
 pnpm exec wrangler d1 migrations apply DB --local
@@ -60,9 +75,17 @@ pnpm cf:types
 ```
 
 Confirm the migration prompt if shown. The first migration creates the demo
-search group; the fourth creates the `app_*` tables used by the shared-list API.
-Applying only the fourth migration is not sufficient. Migrations do not populate
-the shortlist with sample listings.
+search group; the fourth creates the `app_*` tables used by the shared-list API;
+the fifth adds the listing `revision` column used for conflict detection; the
+sixth replaces the retired committed invite code stored in `search_groups` with a
+placeholder. Applying only some migrations is not sufficient. Migrations do not
+populate the shortlist with sample listings.
+
+An existing local database created before these changes only needs the pending
+migrations: `wrangler d1 migrations apply DB --local` adds `revision = 1` to every
+saved listing without touching listing data. If Wrangler reports that 0001 is
+applied but `search_groups` does not exist, the local state is inconsistent;
+move `.wrangler/state/v3/d1` aside and apply all migrations to a fresh database.
 
 Local database files live under `.wrangler/state/`. They survive server restarts
 but are separate from any remote database. Removing that directory loses local
@@ -75,10 +98,18 @@ configuration changes before including them in your own commits.
 pnpm dev --hostname 127.0.0.1
 ```
 
-Open `http://localhost:3000`, enter invite code **`apt-g1`**, and choose a nonempty
-display name. The code and group are defined in `src/lib/listings.ts` and seeded
-by the migrations. There is no invite-code environment variable, registration,
-password, or email setup.
+Open `http://localhost:3000`, enter the invite code you generated in
+`GROUP_INVITE_CODES` (or an invite link ending in `/invite/<code>`), and choose a
+nonempty display name. There is no registration, password, or email setup.
+
+The browser sends the code once to `POST /api/group/session`, which returns an
+HTTP-only, `SameSite=Strict` session cookie scoped to `/api` and valid for 30 days.
+The cookie is signed with the group's invite code, so changing the code in
+`GROUP_INVITE_CODES` revokes every existing session. The browser keeps the
+user-entered code and display name in `localStorage` and silently re-establishes
+an expired session once; if the server rejects the code, the app returns to the
+invite screen. Map tiles authenticate with the same cookie, so tile URLs contain
+no credential.
 
 `next.config.ts` initializes OpenNext's development bridge. With the binding and
 migrations from step 2, Next.js can use the **local D1 emulator**, not live D1.
@@ -91,6 +122,14 @@ an editable manual-review record, not report successful AI extraction. Edit its
 fields, change its status, and add a comment or reaction. Reload to check
 persistence; saving the same URL again should open the existing record.
 
+To see conflict handling, open the app in two browser profiles (separate
+cookies) with different display names. Change a listing's status in one window,
+then, before the 15-second refresh, change the same listing in the other. The
+second change is rejected (HTTP 409 `listing-revision-conflict`), that window
+shows a "Someone else changed that listing first" alert, and it adopts the current
+listing. Rejecting a listing in one window and then editing it in the other returns
+HTTP 404 `listing-not-found`; the listing is not recreated.
+
 Real URLs are fetched by the server even when provider keys are blank. A fetched
 page may contribute metadata, but Gemini extraction without a key reports
 `gemini-api-key-missing`. Failed or blocked source requests also leave records
@@ -101,16 +140,31 @@ for manual review. No paid key is necessary for saving and editing those records
 In another terminal, with the server still running:
 
 ```sh
-curl -sS -H 'X-Invite-Code: apt-g1' http://localhost:3000/api/platform/smoke
-curl -sS -H 'X-Invite-Code: apt-g1' http://localhost:3000/api/group/listings
+export INVITE_CODE='<the code from GROUP_INVITE_CODES>'
+curl -sS -H "X-Invite-Code: $INVITE_CODE" http://localhost:3000/api/platform/smoke
+curl -sS -H "X-Invite-Code: $INVITE_CODE" http://localhost:3000/api/group/listings
+curl -sS -H "X-Invite-Code: $INVITE_CODE" http://localhost:3000/api/group/runs
 ```
 
 The smoke payload should show `contextStatus: "available"` and
 `bindings.db: "bound"`. `appCache: "missing"` is expected. The listings response
 should have `ok: true` and a `snapshot`. A smoke response's `ok: true` alone does
 not prove that a database is bound or migrated; check the binding fields and the
-listings endpoint. Without the invite header, a configured listings API returns 403. The API also accepts the invite code in request bodies or query parameters;
-prefer headers for diagnostics to avoid putting it in URLs.
+listings endpoint.
+
+Protected routes (`/api/group/*`, `/api/platform/*`, and `/api/map/tiles/*`)
+accept either the browser session cookie or the operator `X-Invite-Code` header.
+Invite codes in query strings or JSON bodies are ignored. Responses: no credential
+→ 401 `authentication-required`; expired or tampered session → 401
+`session-invalid`; wrong code → 403 `invalid-invite-code`; nothing configured → 503
+`group-auth-unconfigured`. The group is always the authenticated one; a `groupId`
+query parameter has no effect.
+
+Existing-listing mutations (`PATCH /api/group/listings/<id>`) must include the
+`revision` last read from the snapshot, for example
+`{"mutation":"status","status":"touring","revision":1}`. Missing revisions return
+400 `revision-required`; stale revisions return 409 with the current `listing` and
+`snapshot`.
 
 ### Local Modes
 
@@ -120,7 +174,7 @@ prefer headers for diagnostics to avoid putting it in URLs.
 | Local `DB` binding, migrations, and `pnpm dev` | Usable persistent shortlist backed by emulated D1. No cloud database access.                        |
 | `pnpm cf:preview`                              | Builds OpenNext output and runs `wrangler dev`, normally on port 8787, with local bindings.         |
 | Tests and fixture helpers                      | Use controlled data and mock/in-memory stores; they are not the browser app's persistence fallback. |
-| Run history tab                                | Displays a fixture contract, not a live query of recorded runs.                                     |
+| Runs tab                                       | Reads persisted `daily_loop_*` rows from D1 via `/api/group/runs`; empty until a run executes.       |
 
 Stop the Next.js server before switching to `pnpm cf:preview`. This previews the
 Worker runtime and wrapper in `src/worker.ts`; `next dev` does not exercise Cron
@@ -167,11 +221,15 @@ against disposable local data, not a real group's database.
 ```sh
 curl -sS -X POST http://localhost:3000/api/platform/daily-loop \
   -H 'Content-Type: application/json' \
-  -H 'X-Invite-Code: apt-g1' \
+  -H "X-Invite-Code: $INVITE_CODE" \
   -d '{"mode":"fixture","cadence":"manual","trigger":"fixture"}'
 ```
 
 Inspect `sourceCoverage`, `observability`, and `persistence` in the response.
+With D1 bound, `persistence.d1.rowsWritten` is nonzero and the run now appears in
+the Runs tab (use its refresh button) and in `GET /api/group/runs`, labeled
+**Fixture mode**, with its status, source failures, skip counts, and briefing.
+Provider metadata from fixture runs is shown as simulated AI attempts.
 Missing KV and disabled R2 are not evidence of a live storage failure. The
 `live-safe` name does not mean free: that mode can call RealtyAPI and Gemini.
 Its secondary source is not a live Zillow crawler. Automated scheduling is
@@ -185,12 +243,18 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm check:client-secrets
 ```
 
-`pnpm check` runs those five steps in order. Tests use fixtures/mocks and do not
-require provider keys or a cloud account. GitHub Actions runs formatting, lint,
-typechecking, and tests on pushes to `main` and pull requests, not deployment.
-These checks do not prove live provider access or cloud bindings.
+`pnpm check` runs those six steps in order. Tests use fixtures, mocks, and an
+in-memory `node:sqlite` database that applies the real migrations (for listing
+race, two-client, and run-history coverage); they do not require provider keys or
+a cloud account. `check:client-secrets` scans `.next/static` for the retired
+invite code, `GROUP_INVITE_CODES` values from the environment, `.env.local`, or
+`.dev.vars`, and provider key values; after `pnpm cf:build`, run
+`node scripts/check-client-secrets.mjs --open-next` to scan the Worker assets too.
+GitHub Actions runs all of these checks on pushes to `main` and pull requests,
+without deploying. They do not prove live provider access or cloud bindings.
 
 For Worker packaging and a local runtime check:
 
@@ -209,12 +273,12 @@ for local development. The repository's default config has `workers_dev: false`,
 `preview_urls: false`, no routes, no resource bindings, an empty cron list, and
 `DAILY_LOOP_ENABLED: "false"`. Deploying it unchanged is not a usable hosted app.
 
-**Security first:** the invite code is public and bundled with the app. Display
-names are not verified identities. Before sharing private listings or adding
-paid credentials, restrict access with an independent authentication perimeter
-covering both the UI and every API route. Changing the hardcoded code alone does
-not provide secure authentication. Public deployment as-is is suitable only for
-non-sensitive prototype data, without paid provider access.
+**Security first:** API and map-tile access requires the server-only invite code
+(or a session derived from it), but the static UI shell is public, the code is
+shared by the whole group, display names are not verified identities, and invite
+attempts are not rate limited. Use a long random code, share it privately, and
+rotate it if it leaks. Consider an additional perimeter (for example Cloudflare
+Access) before adding paid provider credentials.
 
 1. Choose your own Worker name in `wrangler.jsonc`, retain `main: "src/worker.ts"`
    and the existing assets/compatibility settings, and set `vars.APP_ENV` to
@@ -242,13 +306,23 @@ pnpm cf:deploy:dry
    `workers_dev: true` to use your account's workers.dev subdomain. Alternatively,
    configure your own route/custom domain and access protection; no project
    domain is provided. `preview_urls` can remain false.
-6. Deploy:
+6. Set the invite code secret before deploying, or every protected route returns 503:
+
+```sh
+pnpm exec wrangler secret put GROUP_INVITE_CODES
+```
+
+   Enter `nyc-5br-2026=<random code>` at the prompt. To rotate, run the same
+   command with a new code; all existing browser sessions are revoked and members
+   re-enter the new code.
+
+7. Deploy:
 
 ```sh
 pnpm cf:deploy
 ```
 
-7. After access protection is in place, add only the optional secrets you need,
+8. Add only the optional provider secrets you need,
    using the interactive prompts rather than shell command arguments:
 
 ```sh
@@ -290,11 +364,15 @@ Disabling the Cron schedule is not a substitute for securing those endpoints.
 | Unsupported-engine warning            | Use Node 22.15.1 and pnpm 10.13.1.                                                                               |
 | `d1-binding-missing` / HTTP 503       | Add `DB`, restart the server, and check the smoke binding fields. `APP_ENV` does not create a binding.           |
 | `no such table` or foreign-key errors | Apply all migrations to the same local or remote database used by the server.                                    |
-| HTTP 403 / invalid invite             | Use `apt-g1`, a nonempty display name, and the correct request header/body.                                      |
+| HTTP 401 `authentication-required`    | Sign in through the UI (session cookie) or send `X-Invite-Code`; codes in query strings or bodies are ignored.  |
+| HTTP 403 / invalid invite             | Use the code configured in `GROUP_INVITE_CODES` and a nonempty display name. `apt-g1` is retired.                |
+| HTTP 503 `group-auth-unconfigured`    | Set `GROUP_INVITE_CODES` (`.env` locally, `wrangler secret put` when deployed) with a known group id and a code of 16+ characters, then restart. |
+| HTTP 409 `listing-revision-conflict`  | Someone changed the listing first. Reload or use the returned snapshot, then reapply the change with the new `revision`. |
+| HTTP 400 `revision-required`          | Include the listing's current `revision` in `PATCH /api/group/listings/<id>` bodies.                             |
 | Empty shortlist after signing in      | A fresh database has no listings; an unavailable API can also leave the UI empty. Inspect `/api/group/listings`. |
 | Extraction needs manual review        | Check the reported source/provider error. Saving a fallback record does not mean extraction succeeded.           |
 | Blank or incomplete map               | Check tile requests, external network access, and whether the listing has usable coordinates.                    |
-| History does not change after a run   | The UI history is fixture-backed, not connected to persisted run history.                                        |
+| Run missing from the Runs tab         | Check the run response's `persistence.d1` (a missing binding writes nothing), then use the Runs refresh button.  |
 | Deployed Worker has no reachable URL  | Check `workers_dev` or your route/domain configuration; both public URL mechanisms are off by default.           |
 
 ## References
