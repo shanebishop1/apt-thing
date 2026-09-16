@@ -341,9 +341,8 @@ relying on the deployment.
 
 The manually maintained shortlist needs D1, but does not require KV, R2, Queues,
 or Workflows. `APP_CACHE` is an optional KV cache/config binding, not authoritative
-listing storage. R2 storage is intentionally disabled. Queue fan-out code is a
-simulation; the Worker does not export a queue consumer, so adding queue bindings
-alone does not enable a working queue pipeline.
+listing storage. R2 storage is intentionally disabled. The Worker does not export
+a queue consumer, so adding queue bindings alone does not enable a queue pipeline.
 
 Scheduled discovery is a separate, opt-in operational step. The Worker exports
 `DailySourceAgentLoopWorkflow`; its expected binding name is

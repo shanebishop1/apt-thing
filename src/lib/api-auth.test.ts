@@ -14,7 +14,6 @@ import {
   GET as dailyLoopGET,
   POST as dailyLoopPOST,
 } from "../../app/api/platform/daily-loop/route";
-import { GET as proofGET } from "../../app/api/platform/proof/route";
 import { GET as smokeGET } from "../../app/api/platform/smoke/route";
 import { TEST_GROUP_INVITE_CODES, TEST_INVITE_CODE } from "../test-support/group-auth";
 import { createSqliteD1, type SqliteD1 } from "../test-support/sqlite-d1";
@@ -54,7 +53,6 @@ const protectedRoutes: Array<{ name: string; method: string; path: string; handl
   },
   { name: "runs GET", method: "GET", path: "/api/group/runs", handler: runsGET },
   { name: "smoke GET", method: "GET", path: "/api/platform/smoke", handler: smokeGET },
-  { name: "proof GET", method: "GET", path: "/api/platform/proof", handler: proofGET },
   {
     name: "daily-loop GET",
     method: "GET",

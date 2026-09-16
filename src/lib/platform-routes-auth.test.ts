@@ -1,8 +1,7 @@
 import { TEST_INVITE_CODE } from "../test-support/group-auth";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { GET as smokeGET } from "../../app/api/platform/smoke/route";
-import { GET as proofGET } from "../../app/api/platform/proof/route";
+import { buildPlatformSmokePayload, GET as smokeGET } from "../../app/api/platform/smoke/route";
 import { GET as tileGET } from "../../app/api/map/tiles/[z]/[x]/[y]/route";
 
 describe("platform API route authorization", () => {
@@ -19,14 +18,6 @@ describe("platform API route authorization", () => {
     expect(body).toEqual({ ok: false, error: "authentication-required" });
   });
 
-  it("rejects platform proof without the group code before provider proof work", async () => {
-    const response = await proofGET(new NextRequest("http://localhost/api/platform/proof"));
-    const body = (await response.json()) as Record<string, unknown>;
-
-    expect(response.status).toBe(401);
-    expect(body).toEqual({ ok: false, error: "authentication-required" });
-  });
-
   it("accepts platform smoke with the group code", async () => {
     const response = await smokeGET(
       new NextRequest("http://localhost/api/platform/smoke", {
@@ -37,6 +28,41 @@ describe("platform API route authorization", () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ ok: true, runtime: "cloudflare-workers" });
+  });
+
+  it("reports binding state for available and unavailable Cloudflare contexts", () => {
+    expect(buildPlatformSmokePayload()).toMatchObject({
+      ok: true,
+      runtime: "cloudflare-workers",
+      contextStatus: "unavailable",
+      appEnv: "unknown",
+      bindings: {
+        db: "missing",
+        appCache: "missing",
+        assets: "missing",
+      },
+      rawArtifacts: { storage: "disabled" },
+    });
+
+    expect(
+      buildPlatformSmokePayload({
+        APP_ENV: "local",
+        DB: {},
+        APP_CACHE: {},
+        ASSETS: {},
+      }),
+    ).toMatchObject({
+      ok: true,
+      runtime: "cloudflare-workers",
+      contextStatus: "available",
+      appEnv: "local",
+      bindings: {
+        db: "bound",
+        appCache: "bound",
+        assets: "bound",
+      },
+      rawArtifacts: { storage: "disabled" },
+    });
   });
 
   it("rejects map tile proxy requests without the group code", async () => {

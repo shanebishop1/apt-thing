@@ -36,6 +36,7 @@ describe("fixture extraction pipeline", () => {
         realtyApiListingId: "5062766",
         locationCandidates: ["Williamsburg", "Brooklyn", "NYC and NJ"],
         pagesScanned: [1, 2],
+        nycGeoSearch: { status: "success" },
       },
     });
     expect(result.listing).toMatchObject({
@@ -154,6 +155,11 @@ describe("fixture extraction pipeline", () => {
       "confirmed-match",
       "review-needed",
     ]);
+    expect(
+      result.extractionJobs.every(
+        (job) => job.runId === result.run.id && job.intakeKind === "batch-search",
+      ),
+    ).toBe(true);
     expect(result.extractionJobs[0]!.providerAttempts[0]).toMatchObject({
       provider: "google-direct",
       model: "gemini-3.5-flash",
@@ -243,6 +249,9 @@ describe("fixture extraction pipeline", () => {
       bathrooms: 3,
     });
     expect(result.output.triage.bucket).toBe("review-needed");
+    expect(result.output.normalizedListing.fitFlags).toEqual(
+      expect.arrayContaining(["manual_review_needed"]),
+    );
     expect(result.output.normalizedListing.concerns).toContain(
       "Zillow structured provider not proven; manual/provider fixture requires review.",
     );
@@ -333,9 +342,17 @@ describe("fixture extraction pipeline", () => {
     expect(result.output.normalizedListing.fitFlags).toEqual(
       expect.arrayContaining(["manual_review_needed"]),
     );
+    expect(result.output.normalizedListing.concerns).toContain(
+      "Fallback source requires manual verification before relying on extracted fields.",
+    );
     expect(result.extractionJob).toMatchObject({
       status: "manual-needed",
       triageStatus: "partial",
+    });
+    expect(result.extractionJob.providerAttempts[0]).toMatchObject({
+      status: "failed",
+      schemaValidation: "failed",
+      failureCode: "fallback-provider-not-implemented",
     });
   });
 });
