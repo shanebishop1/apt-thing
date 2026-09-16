@@ -2,10 +2,10 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Pencil, X } from "lucide-react";
-import type { GroupActionRecord } from "../../lib/agent-contracts";
-import type { InviteIdentity, ListingCandidate, ReviewStatus } from "../../lib/listings";
-import type { FieldProvenance } from "../../lib/listings";
-import type { ListingGroupActions as ListingGroupActionsState } from "../../lib/saved-list-storage";
+import type { GroupActionRecord } from "@/lib/agent-contracts";
+import type { InviteIdentity, ListingCandidate, ReviewStatus } from "@/lib/listings";
+import type { FieldProvenance } from "@/lib/listings";
+import type { ListingGroupActions as ListingGroupActionsState } from "@/lib/group-actions";
 import { Fact, formatLabel, formatListingAddedAge, formatMoney } from "./listing-presentation";
 import { ListingFieldDialog } from "./ListingFieldDialog";
 import { ListingGroupActions, ReactionScoreBadge } from "./ListingGroupActions";
@@ -220,7 +220,7 @@ export function ListingEditor({
               {lastFieldProvenance?.actorDisplayName ??
                 identity?.displayName ??
                 "No active reviewer"}{" "}
-              · {lastFieldProvenance?.field ?? "fixture seed"}
+              · {lastFieldProvenance?.field ?? "no edits yet"}
             </p>
           </div>
           <div className="source-details">

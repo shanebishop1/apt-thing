@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, type FormEvent, type ToggleEvent } from "react";
-import type { GroupActionRecord } from "../../lib/agent-contracts";
-import type { InviteIdentity, ListingCandidate } from "../../lib/listings";
-import type { ListingGroupActions as ListingGroupActionsState } from "../../lib/saved-list-storage";
+import type { GroupActionRecord } from "@/lib/agent-contracts";
+import type { InviteIdentity, ListingCandidate } from "@/lib/listings";
+import type { ListingGroupActions as ListingGroupActionsState } from "@/lib/group-actions";
 import { formatLabel } from "./listing-presentation";
 
 export type ListingGroupActionsProps = {
@@ -88,7 +88,7 @@ export type GroupActionSummaryProps = {
 export function GroupActionSummary({ actions }: GroupActionSummaryProps) {
   if (!actions) {
     return (
-      <p className="empty-state">Group actions load after a valid invite opens this record.</p>
+      <p className="empty-state">Open this listing with a valid invite to see group activity.</p>
     );
   }
 

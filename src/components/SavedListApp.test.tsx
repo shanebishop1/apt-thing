@@ -5,8 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SharedListingSnapshot } from "./saved-list/shared-listings-client";
 import { SavedListApp } from "./SavedListApp";
-import { defaultSearchGroup, type ListingCandidate } from "../lib/listings";
-import { fixtureListings } from "../lib/fixtures";
+import { defaultSearchGroup, type ListingCandidate } from "@/lib/listings";
+import { fixtureListings } from "@/lib/fixtures";
 
 vi.mock("leaflet", () => {
   const chain = () => ({
@@ -329,7 +329,7 @@ describe("SavedListApp identity and shared listing behavior", () => {
     expect(
       screen
         .getAllByRole("status")
-        .some((node) => node.textContent?.includes("extracted and saved")),
+        .some((node) => node.textContent?.includes("added to the shared list")),
     ).toBe(true);
     const postCall = fetchMock.mock.calls.find(
       ([input, init]) =>

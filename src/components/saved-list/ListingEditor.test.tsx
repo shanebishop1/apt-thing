@@ -3,9 +3,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ListingGroupActions } from "../../lib/saved-list-storage";
-import { createGroupIdentity, defaultSearchGroup } from "../../lib/listings";
-import { fixtureListings } from "../../lib/fixtures";
+import type { ListingGroupActions } from "@/lib/group-actions";
+import { createGroupIdentity, defaultSearchGroup } from "@/lib/listings";
+import { fixtureListings } from "@/lib/fixtures";
 import { ListingEditor } from "./ListingEditor";
 
 vi.mock("leaflet", () => {

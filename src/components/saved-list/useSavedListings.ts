@@ -1,18 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { GroupActionRecord, SeenRejectedMemoryRecord } from "../../lib/agent-contracts";
+import type { GroupActionRecord } from "@/lib/agent-contracts";
+import { createListingGroupActions } from "@/lib/group-actions";
 import {
-  createListingGroupActions,
   createSelectedListingStorageKey,
-  findSelectedListing,
   normalizeInviteIdentityInput,
-  readGroupActions,
-  readSeenRejectedMemory,
   readStoredInviteIdentity,
   writeStoredInviteIdentity,
-} from "../../lib/saved-list-storage";
-import type { FieldProvenance, ListingCandidate, ReviewStatus } from "../../lib/listings";
+} from "@/lib/invite-identity-storage";
+import type { FieldProvenance, ListingCandidate, ReviewStatus } from "@/lib/listings";
 import {
   createSharedListing,
   establishGroupSession,
@@ -26,6 +23,8 @@ import {
 import { useIdentityRequestCoordinator } from "./useIdentityRequestCoordinator";
 import {
   defaultIdentityForm,
+  describeRequestError,
+  findSelectedListing,
   invalidIdentityMessage,
   normalizeSharedSnapshot,
   numericFields,
@@ -33,14 +32,11 @@ import {
 } from "./saved-list-state";
 import { useSharedSnapshotPolling } from "./useSharedSnapshotPolling";
 
-export { sharedSnapshotPollMs, type IdentityFormState } from "./saved-list-state";
-
 export function useSavedListings() {
   const [identityForm, setIdentityForm] = useState<IdentityFormState>(defaultIdentityForm);
   const [identity, setIdentity] = useState<GroupSession>();
   const [listings, setListings] = useState<ListingCandidate[]>([]);
   const [groupActions, setGroupActions] = useState<GroupActionRecord[]>([]);
-  const [, setSeenRejectedMemory] = useState<SeenRejectedMemoryRecord[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [url, setUrl] = useState("");
   const [commentText, setCommentText] = useState("");
@@ -125,9 +121,7 @@ export function useSavedListings() {
           resetIdentity(invalidIdentityMessage);
           return;
         }
-        setMessage(
-          `Could not reach the shared list service (${error instanceof Error ? error.message : "network-error"}). Try again.`,
-        );
+        setMessage(describeRequestError(error, "Could not reach the shared list."));
       },
     );
   }
@@ -137,10 +131,9 @@ export function useSavedListings() {
     }
   }
   function hydrateGroupState(activeIdentity: GroupSession) {
-    const storage = window.localStorage;
-    setGroupActions(readGroupActions(storage, activeIdentity.groupId));
-    setSeenRejectedMemory(readSeenRejectedMemory(storage, activeIdentity.groupId));
-    setSelectedId(storage.getItem(createSelectedListingStorageKey(activeIdentity.groupId)) ?? "");
+    setSelectedId(
+      window.localStorage.getItem(createSelectedListingStorageKey(activeIdentity.groupId)) ?? "",
+    );
   }
   function resetIdentity(nextMessage: string) {
     activateIdentity(undefined);
@@ -150,7 +143,6 @@ export function useSavedListings() {
     setListingNotice("");
     setListings([]);
     setGroupActions([]);
-    setSeenRejectedMemory([]);
     setSelectedId("");
     setMessage(nextMessage);
   }
@@ -159,7 +151,7 @@ export function useSavedListings() {
       resetIdentity(invalidIdentityMessage);
       return;
     }
-    setMessage(error instanceof Error ? error.message : fallbackMessage);
+    setMessage(describeRequestError(error, fallbackMessage));
   }
   function refreshSharedSnapshot(
     activeIdentity: GroupSession,
@@ -178,7 +170,7 @@ export function useSavedListings() {
           ) {
             return;
           }
-          showRequestError(error, "Could not load shared D1 listing state.");
+          showRequestError(error, "Could not load the shared list.");
         },
       },
     );
@@ -197,8 +189,8 @@ export function useSavedListings() {
             result.result?.kind === "duplicate"
               ? "Duplicate listing found. Opening the existing shared record."
               : result.result?.extraction?.ok === false
-                ? `Listing saved to D1; extraction needs manual review (${result.result.extraction.failureCode ?? "unknown"}).`
-                : "Listing extracted and saved to shared D1 state.",
+                ? `Listing added to the shared list, but its details need a manual review (${result.result.extraction.failureCode ?? "unknown reason"}).`
+                : "Listing details read and added to the shared list.",
           );
         },
         onError: (error) => showRequestError(error, "Unable to save this listing right now."),
@@ -304,7 +296,6 @@ export function useSavedListings() {
     listingsRef.current = normalizedSnapshot.listings;
     setListings(normalizedSnapshot.listings);
     setGroupActions(normalizedSnapshot.actions);
-    setSeenRejectedMemory(normalizedSnapshot.memory);
     setSelectedId(
       (currentId) => findSelectedListing(normalizedSnapshot.listings, currentId)?.id ?? "",
     );

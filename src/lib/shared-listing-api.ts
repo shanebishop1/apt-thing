@@ -9,7 +9,7 @@ import {
   type ListingCandidate,
   type ReviewStatus,
 } from "./listings";
-import { appendGroupAction, upsertRejectedMemory } from "./saved-list-storage";
+import { appendGroupAction, upsertRejectedMemory } from "./group-actions";
 import {
   appendSharedGroupAction,
   deleteSavedListingAtRevision,

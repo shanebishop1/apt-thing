@@ -1,15 +1,15 @@
 "use client";
 
 import type { FormEvent } from "react";
-import type { GroupActionRecord } from "../../lib/agent-contracts";
-import { createMapReviewModel, type MapReviewCandidate } from "../../lib/map-review";
-import type { ListingGroupActions } from "../../lib/saved-list-storage";
+import type { GroupActionRecord } from "@/lib/agent-contracts";
+import { createMapReviewModel, type MapReviewCandidate } from "@/lib/map-review";
+import type { ListingGroupActions } from "@/lib/group-actions";
 import type {
   FieldProvenance,
   InviteIdentity,
   ListingCandidate,
   ReviewStatus,
-} from "../../lib/listings";
+} from "@/lib/listings";
 import { Fact, formatLabel, formatListingAddedAge, formatMoney } from "./listing-presentation";
 import { ListingEditor } from "./ListingEditor";
 import { LeafletListingMap } from "./map/LeafletListingMap";
@@ -180,7 +180,7 @@ function MapDetail({
               ))}
             </ul>
           ) : (
-            <p>Subway context pending for this fixture.</p>
+            <p>Nearby subway stops have not been looked up for this listing yet.</p>
           )}
         </section>
       </div>
