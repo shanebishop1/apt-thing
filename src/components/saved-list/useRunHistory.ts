@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RunHistoryState } from "./RunHistoryPanel";
-import { getIdentityKey } from "./saved-list-state";
+import { describeRequestError, getIdentityKey } from "./saved-list-state";
 import { loadRunHistory, type GroupSession } from "./shared-listings-client";
 
 export function useRunHistory(identity: GroupSession | undefined, active: boolean) {
@@ -29,7 +29,7 @@ export function useRunHistory(identity: GroupSession | undefined, active: boolea
         if (controller.signal.aborted) return;
         setState((current) => ({
           status: "error",
-          error: error instanceof Error ? error.message : "run-history-load-failed",
+          error: describeRequestError(error, "Could not load this group's run history."),
           history: current.history,
         }));
       },

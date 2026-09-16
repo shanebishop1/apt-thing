@@ -3,8 +3,9 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { briefingRunHistoryFixture } from "../../lib/agent-contract-fixtures";
+import { briefingRunHistoryFixture } from "@/lib/agent-contract-fixtures";
 import { RunHistoryPanel } from "./RunHistoryPanel";
+import { describeRequestError } from "./saved-list-state";
 
 afterEach(cleanup);
 
@@ -20,16 +21,24 @@ describe("RunHistoryPanel", () => {
     expect(screen.queryByLabelText("Agent runs table")).toBeNull();
   });
 
-  it("shows load errors with a retry action", async () => {
+  it("shows load errors in plain language with a retry action", async () => {
     const onRefresh = vi.fn();
     render(
       <RunHistoryPanel
-        state={{ status: "error", error: "d1-binding-missing" }}
+        state={{
+          status: "error",
+          error: describeRequestError(
+            new Error("d1-binding-missing"),
+            "Could not load this group's run history.",
+          ),
+        }}
         onRefresh={onRefresh}
       />,
     );
 
-    expect(screen.getByRole("alert").textContent).toContain("d1-binding-missing");
+    const alertText = screen.getByRole("alert").textContent ?? "";
+    expect(alertText).toContain("The shared database is not set up on the server yet.");
+    expect(alertText).not.toContain("d1-binding-missing");
     await userEvent.setup().click(screen.getByRole("button", { name: "Retry" }));
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });

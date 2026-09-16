@@ -2,7 +2,7 @@
 
 import { useState, type ToggleEvent } from "react";
 import { RefreshCw } from "lucide-react";
-import type { PersistedRunHistory } from "../../lib/run-history-store";
+import type { PersistedRunHistory } from "@/lib/run-history-store";
 import { formatLabel } from "./listing-presentation";
 import { createRunHistoryPanelModel } from "./run-history-model";
 
@@ -50,7 +50,7 @@ export function RunHistoryPanel({
 
       {state.status === "error" ? (
         <div className="run-history-notice" role="alert">
-          <p>Could not load run history from D1 ({state.error}).</p>
+          <p>{state.error}</p>
           <button type="button" onClick={onRefresh}>
             Retry
           </button>
@@ -67,8 +67,8 @@ export function RunHistoryPanel({
         <div className="run-history-notice run-history-empty" role="status">
           <strong>No runs recorded yet</strong>
           <p>
-            Runs appear here after a manual or scheduled daily loop run is saved to this
-            group&apos;s D1 database.
+            Runs appear here once a manual or scheduled daily search run is saved to this
+            group&apos;s shared list.
           </p>
         </div>
       ) : null}
@@ -247,8 +247,8 @@ export function RunHistoryPanel({
                   ) : (
                     <>
                       <p>
-                        These are D1 storage keys for evidence metadata rows retained by the run.
-                        They are not openable files yet because there is no artifact viewer route.
+                        These are references to the evidence the run kept. They are not openable
+                        files yet because there is no viewer for them.
                       </p>
                       <div className="artifact-pointer-grid">
                         {run.artifactPointers.map((artifact) => (
