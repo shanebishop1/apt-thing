@@ -134,6 +134,49 @@ describe("platform API route authorization", () => {
     );
   });
 
+  it("returns 502 when both tile upstreams throw instead of responding", async () => {
+    vi.stubEnv("STADIA_MAPS_API_KEY", "server-only-test-key");
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("network failure"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await tileGET(
+      new NextRequest("http://localhost/api/map/tiles/13/2412/3077.png", {
+        headers: { "X-Invite-Code": TEST_INVITE_CODE },
+      }),
+      { params: Promise.resolve({ z: "13", x: "2412", y: "3077.png" }) },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ ok: false, error: "tile-fetch-failed" });
+  });
+
+  it("falls back to CARTO tiles when the Stadia request throws", async () => {
+    vi.stubEnv("STADIA_MAPS_API_KEY", "server-only-test-key");
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("network failure"))
+      .mockResolvedValueOnce(
+        new Response("fallback-tile", {
+          headers: { "content-type": "image/png" },
+          status: 200,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await tileGET(
+      new NextRequest("http://localhost/api/map/tiles/13/2412/3077.png", {
+        headers: { "X-Invite-Code": TEST_INVITE_CODE },
+      }),
+      { params: Promise.resolve({ z: "13", x: "2412", y: "3077.png" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      "https://basemaps.cartocdn.com/rastertiles/voyager/13/2412/3077.png",
+    );
+  });
+
   it("uses non-retina CARTO fallback tiles for retina requests", async () => {
     vi.stubEnv("STADIA_MAPS_API_KEY", "server-only-test-key");
     const fetchMock = vi

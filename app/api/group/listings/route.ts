@@ -51,6 +51,8 @@ export async function POST(request: NextRequest) {
     const snapshot = await readSharedListingSnapshot(env.DB, identity.groupId);
     return NextResponse.json({ ok: true, result, snapshot });
   } catch (error) {
-    return jsonError(400, error instanceof Error ? error.message : "create-listing-failed");
+    // normalizeUrl throws a TypeError carrying user-readable URL feedback; everything else
+    // (D1, provider, or programmer errors) collapses to a stable code instead of leaking details.
+    return jsonError(400, error instanceof TypeError ? error.message : "create-listing-failed");
   }
 }

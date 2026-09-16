@@ -564,6 +564,25 @@ export const REVIEW_STATUSES: ReviewStatus[] = [
   "rejected",
 ];
 
+const EDITABLE_LISTING_FIELDS: FieldProvenance["field"][] = [
+  "title",
+  "address",
+  "neighborhood",
+  "rent",
+  "bedrooms",
+  "bathrooms",
+  "availableAt",
+];
+
+export function isReviewStatus(value: unknown): value is ReviewStatus {
+  return REVIEW_STATUSES.some((status) => status === value);
+}
+
+/** Guards the listing fields a group member is allowed to edit by hand. */
+export function isEditableListingField(value: unknown): value is FieldProvenance["field"] {
+  return EDITABLE_LISTING_FIELDS.some((field) => field === value);
+}
+
 export const searchGroups: SearchGroup[] = [
   {
     id: "nyc-5br-2026",

@@ -10,10 +10,7 @@ import {
 import { GET as runsGET } from "../../app/api/group/runs/route";
 import { DELETE as sessionDELETE, POST as sessionPOST } from "../../app/api/group/session/route";
 import { GET as tileGET } from "../../app/api/map/tiles/[z]/[x]/[y]/route";
-import {
-  GET as dailyLoopGET,
-  POST as dailyLoopPOST,
-} from "../../app/api/platform/daily-loop/route";
+import { POST as dailyLoopPOST } from "../../app/api/platform/daily-loop/route";
 import { GET as smokeGET } from "../../app/api/platform/smoke/route";
 import { TEST_GROUP_INVITE_CODES, TEST_INVITE_CODE } from "../test-support/group-auth";
 import { createSqliteD1, type SqliteD1 } from "../test-support/sqlite-d1";
@@ -53,12 +50,6 @@ const protectedRoutes: Array<{ name: string; method: string; path: string; handl
   },
   { name: "runs GET", method: "GET", path: "/api/group/runs", handler: runsGET },
   { name: "smoke GET", method: "GET", path: "/api/platform/smoke", handler: smokeGET },
-  {
-    name: "daily-loop GET",
-    method: "GET",
-    path: "/api/platform/daily-loop",
-    handler: dailyLoopGET,
-  },
   {
     name: "daily-loop POST",
     method: "POST",

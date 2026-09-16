@@ -2,7 +2,7 @@ import { TEST_INVITE_CODE } from "../test-support/group-auth";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { GET } from "../../app/api/platform/daily-loop/route";
+import { POST as dailyLoopPOST } from "../../app/api/platform/daily-loop/route";
 import {
   createDailyLoopCronPayload,
   createDailyLoopProviderFailureAnalyzer,
@@ -1022,8 +1022,9 @@ describe("runDailySourceAgentLoop", () => {
   it("serves cron-compatible route payloads for daily trigger requests", async () => {
     const previousGeminiKey = process.env.GEMINI_API_KEY;
     process.env.GEMINI_API_KEY = "";
-    const response = await GET(
+    const response = await dailyLoopPOST(
       new NextRequest("http://localhost/api/platform/daily-loop?cadence=daily&trigger=cron", {
+        method: "POST",
         headers: { "X-Invite-Code": TEST_INVITE_CODE },
       }),
     );
@@ -1031,13 +1032,9 @@ describe("runDailySourceAgentLoop", () => {
     const body = (await response.json()) as Record<string, any>;
 
     expect(body.ok).toBe(true);
+    expect(body.route).toBe("/api/platform/daily-loop");
     expect(body.contract).toBe("daily-source-loop-v1");
     expect(body.historyContract).toBe("briefing-run-history-v1");
-    expect(body.cron).toMatchObject({
-      cadence: "daily",
-      cronCompatible: true,
-      scheduledRoute: "/api/platform/daily-loop?cadence=daily&trigger=cron",
-    });
     expect(body.run).toMatchObject({ cadence: "daily", trigger: "cron" });
     expect(body.operatorEvidence).toMatchObject({
       runId: body.run.id,
@@ -1053,8 +1050,10 @@ describe("runDailySourceAgentLoop", () => {
   });
 
   it("rejects daily-loop route requests without an invite code", async () => {
-    const response = await GET(
-      new NextRequest("http://localhost/api/platform/daily-loop?cadence=daily&trigger=cron"),
+    const response = await dailyLoopPOST(
+      new NextRequest("http://localhost/api/platform/daily-loop?cadence=daily&trigger=cron", {
+        method: "POST",
+      }),
     );
     const body = (await response.json()) as Record<string, unknown>;
 

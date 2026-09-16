@@ -1,7 +1,7 @@
 import { TEST_INVITE_CODE } from "../test-support/group-auth";
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { GET } from "../../app/api/group/listings/route";
+import { GET, POST } from "../../app/api/group/listings/route";
 import { defaultSearchGroup } from "./listings";
 import type { D1DatabaseLike } from "./shared-listing-store";
 
@@ -62,6 +62,28 @@ describe("GET /api/group/listings authorization", () => {
 
     expect(response.status).toBe(401);
     expect(payload).toEqual({ ok: false, error: "authentication-required" });
+  });
+});
+
+describe("POST /api/group/listings validation", () => {
+  it("returns the user-readable URL feedback and never reaches D1", async () => {
+    const db = createEmptyD1();
+    mockState.env = { DB: db };
+
+    const response = await POST(
+      new NextRequest("http://localhost/api/group/listings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Invite-Code": TEST_INVITE_CODE },
+        body: JSON.stringify({ url: "not-a-listing-url" }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: "Enter a valid apartment listing URL, including http:// or https://.",
+    });
+    expect(db.prepare).not.toHaveBeenCalled();
   });
 });
 

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeGroupRequest } from "@/lib/api-auth";
 import {
-  createDailyLoopCronPayload,
   runDailySourceAgentLoop,
   type DailyLoopEnv,
   type DailyLoopMode,
@@ -11,41 +10,6 @@ import { type Cadence } from "@/lib/listings";
 import { readCloudflareEnv, readJsonObject, readServerSecret } from "@/lib/route-support";
 
 type DailyLoopRouteEnv = DailyLoopEnv & Partial<Record<"APP_ENV", string>>;
-
-export async function GET(request: NextRequest) {
-  const env = await readCloudflareEnv<DailyLoopRouteEnv>();
-  const searchParams = new URL(request.url).searchParams;
-  const cadence = normalizeCadence(searchParams.get("cadence")) ?? "manual";
-  const trigger =
-    normalizeTrigger(searchParams.get("trigger")) ?? (cadence === "daily" ? "cron" : "manual");
-  const requestedMode = normalizeMode(searchParams.get("mode"));
-  const mode: DailyLoopMode = requestedMode ?? "fixture";
-  const auth = await authorizeGroupRequest(request, { displayName: "Daily Loop API" });
-  if (!auth.ok) return auth.response;
-
-  const result = await runDailySourceAgentLoop({
-    mode,
-    cadence,
-    trigger,
-    identity: auth.identity,
-    env: dailyLoopEnv(env),
-  });
-
-  return NextResponse.json({
-    ok: result.ok,
-    contract: result.contract,
-    route: "/api/platform/daily-loop",
-    cron: createDailyLoopCronPayload(cadence),
-    run: result.run,
-    sourceCoverage: result.sourceCoverage,
-    briefing: result.briefing,
-    observability: result.observability,
-    operatorEvidence: result.operatorEvidence,
-    persistence: result.persistence.outcome,
-    historyContract: result.history.contract,
-    history: result.history,
-  });
-}
 
 export async function POST(request: NextRequest) {
   const env = await readCloudflareEnv<DailyLoopRouteEnv>();
@@ -64,8 +28,6 @@ export async function POST(request: NextRequest) {
     cadence,
     trigger,
     identity: auth.identity,
-    failStreetEasy: body.failStreetEasy === true,
-    failSecondary: body.failSecondary === true,
     env: dailyLoopEnv(env),
   });
 

@@ -36,7 +36,7 @@ export async function GET(
     );
     tileUrl.searchParams.set("api_key", apiKey);
 
-    const upstream = await fetch(tileUrl, {
+    const upstream = await fetchTile(tileUrl, {
       headers: {
         accept: "image/png,image/*;q=0.8,*/*;q=0.5",
         origin: request.nextUrl.origin,
@@ -44,21 +44,30 @@ export async function GET(
       },
     });
 
-    if (upstream.ok && upstream.body) {
+    if (upstream?.ok && upstream.body) {
       return tileResponse(upstream);
     }
   }
 
-  const fallback = await fetch(
+  const fallback = await fetchTile(
     `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${yMatch[1]}.png`,
     { headers: { accept: "image/png,image/*;q=0.8,*/*;q=0.5" } },
   );
 
-  if (!fallback.ok || !fallback.body) {
-    return jsonError(fallback.status, "tile-fetch-failed");
+  if (!fallback?.ok || !fallback.body) {
+    return jsonError(fallback?.status ?? 502, "tile-fetch-failed");
   }
 
   return tileResponse(fallback);
+}
+
+/** Upstream tile providers can throw (DNS, TLS, abort); a thrown error is just a missed tile. */
+async function fetchTile(url: URL | string, init: RequestInit): Promise<Response | undefined> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    return undefined;
+  }
 }
 
 function tileResponse(response: Response) {

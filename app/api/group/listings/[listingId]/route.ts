@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeGroupRequest } from "@/lib/api-auth";
-import { REVIEW_STATUSES, type FieldProvenance } from "@/lib/listings";
+import { isEditableListingField, isReviewStatus } from "@/lib/listings";
 import {
   d1BindingMissingResponse,
   isD1Database,
@@ -37,12 +37,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    if (body.mutation === "status" && REVIEW_STATUSES.includes(body.status as never)) {
+    if (body.mutation === "status" && isReviewStatus(body.status)) {
       const snapshot = await mutateSharedListingStatus({
         db: env.DB,
         identity,
         listingId,
-        status: body.status as never,
+        status: body.status,
         expectedRevision,
       });
       return NextResponse.json({ ok: true, snapshot });
@@ -62,7 +62,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ ok: true, snapshot });
     }
 
-    if (body.mutation === "field" && isEditableField(body.field)) {
+    if (body.mutation === "field" && isEditableListingField(body.field)) {
       const snapshot = await mutateSharedListingField({
         db: env.DB,
         identity,
@@ -126,19 +126,7 @@ async function mutationErrorResponse(
     );
   }
 
-  return jsonError(400, error instanceof Error ? error.message : fallback);
-}
-
-function isEditableField(value: unknown): value is FieldProvenance["field"] {
-  return (
-    value === "title" ||
-    value === "address" ||
-    value === "neighborhood" ||
-    value === "rent" ||
-    value === "bedrooms" ||
-    value === "bathrooms" ||
-    value === "availableAt"
-  );
+  return jsonError(400, fallback);
 }
 
 function normalizeActionType(value: unknown) {
