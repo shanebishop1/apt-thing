@@ -126,7 +126,7 @@ async function mutationErrorResponse(
     );
   }
 
-  return jsonError(400, fallback);
+  return jsonError(500, fallback);
 }
 
 function normalizeActionType(value: unknown) {

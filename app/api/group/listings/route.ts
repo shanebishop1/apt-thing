@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     // normalizeUrl throws a TypeError carrying user-readable URL feedback; everything else
     // (D1, provider, or programmer errors) collapses to a stable code instead of leaking details.
-    return jsonError(400, error instanceof TypeError ? error.message : "create-listing-failed");
+    if (error instanceof TypeError) return jsonError(400, error.message);
+    return jsonError(500, "create-listing-failed");
   }
 }
