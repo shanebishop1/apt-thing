@@ -25,7 +25,23 @@ export type SharedListingsApiResponse =
       snapshot: SharedListingSnapshot;
       result?: CreateSharedListingResult;
     }
-  | { ok: false; error?: string };
+  | { ok: false; error?: string; snapshot?: SharedListingSnapshot; listing?: ListingCandidate };
+
+/** A rejected shared-listing request, carrying the server's current snapshot when it sent one. */
+export class SharedListingRequestError extends Error {
+  constructor(
+    readonly code: string,
+    readonly status: number,
+    readonly snapshot?: SharedListingSnapshot,
+  ) {
+    super(code);
+    this.name = "SharedListingRequestError";
+  }
+
+  get isStaleListing() {
+    return this.code === "listing-revision-conflict" || this.code === "listing-not-found";
+  }
+}
 
 type RequestOptions = {
   signal?: AbortSignal;
@@ -135,7 +151,11 @@ async function readSharedListingsResponse(
 ): Promise<Extract<SharedListingsApiResponse, { ok: true }>> {
   const payload = (await response.json()) as SharedListingsApiResponse;
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.ok ? fallback : (payload.error ?? fallback));
+    throw new SharedListingRequestError(
+      payload.ok ? fallback : (payload.error ?? fallback),
+      response.status,
+      payload.ok ? undefined : payload.snapshot,
+    );
   }
   return payload;
 }

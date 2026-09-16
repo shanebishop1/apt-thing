@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireGroupCode } from "@/lib/api-auth";
 import { REVIEW_STATUSES, type FieldProvenance } from "@/lib/listings";
 import {
+  ListingMutationError,
   appendSharedAction,
   mutateSharedListingReviewDecision,
   mutateSharedListingField,
   mutateSharedListingStatus,
   parseApiIdentity,
+  parseExpectedRevision,
 } from "@/lib/shared-listing-api";
-import type { D1DatabaseLike } from "@/lib/shared-listing-store";
+import { readSharedListingSnapshot, type D1DatabaseLike } from "@/lib/shared-listing-store";
 
 type AppRouteEnv = Partial<Record<"DB", unknown>>;
 type RouteContext = { params: Promise<{ listingId: string }> };
@@ -28,6 +30,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   const { listingId } = await context.params;
+  const expectedRevision = parseExpectedRevision(body.revision);
+  if (expectedRevision === undefined) {
+    return NextResponse.json({ ok: false, error: "revision-required" }, { status: 400 });
+  }
 
   try {
     if (body.mutation === "status" && REVIEW_STATUSES.includes(body.status as never)) {
@@ -36,6 +42,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         identity,
         listingId,
         status: body.status as never,
+        expectedRevision,
       });
       return NextResponse.json({ ok: true, snapshot });
     }
@@ -49,6 +56,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         identity,
         listingId,
         decision: body.decision,
+        expectedRevision,
       });
       return NextResponse.json({ ok: true, snapshot });
     }
@@ -60,16 +68,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         listingId,
         field: body.field,
         value: typeof body.value === "number" ? body.value : String(body.value ?? ""),
+        expectedRevision,
       });
       return NextResponse.json({ ok: true, snapshot });
     }
 
     return NextResponse.json({ ok: false, error: "unsupported-mutation" }, { status: 400 });
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "listing-mutation-failed" },
-      { status: error instanceof Error && error.message === "listing-not-found" ? 404 : 400 },
-    );
+    return mutationErrorResponse(env.DB, identity.groupId, error, "listing-mutation-failed");
   }
 }
 
@@ -102,11 +108,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
     return NextResponse.json({ ok: true, snapshot });
   } catch (error) {
+    return mutationErrorResponse(env.DB, identity.groupId, error, "listing-action-failed");
+  }
+}
+
+async function mutationErrorResponse(
+  db: D1DatabaseLike,
+  groupId: string,
+  error: unknown,
+  fallback: string,
+) {
+  if (error instanceof ListingMutationError) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "listing-action-failed" },
-      { status: error instanceof Error && error.message === "listing-not-found" ? 404 : 400 },
+      {
+        ok: false,
+        error: error.code,
+        ...(error.current ? { listing: error.current } : {}),
+        snapshot: await readSharedListingSnapshot(db, groupId),
+      },
+      { status: error.status },
     );
   }
+
+  return NextResponse.json(
+    { ok: false, error: error instanceof Error ? error.message : fallback },
+    { status: 400 },
+  );
 }
 
 async function getAppRouteEnv(): Promise<AppRouteEnv | undefined> {

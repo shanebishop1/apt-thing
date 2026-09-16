@@ -119,9 +119,92 @@ describe("SavedListApp identity and shared listing behavior", () => {
     expect(JSON.parse((patchCall[1] as RequestInit).body as string)).toEqual({
       mutation: "status",
       status: "interested",
+      revision: 1,
       inviteCode: "apt-g1",
       displayName: "Ari",
     });
+  });
+
+  it("reports a stale status change as a conflict and adopts the server's current listing", async () => {
+    const user = userEvent.setup();
+    const listing = buildListing("conflict-listing", "Contested apartment");
+    const current = {
+      ...listing,
+      reviewStatus: "touring" as const,
+      revision: 2,
+      display: { ...listing.display, reviewStatus: "touring" as const },
+    };
+    const patchBodies: Array<Record<string, unknown>> = [];
+
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("FeatureServer")) {
+        return jsonResponse({ type: "FeatureCollection", features: [] });
+      }
+
+      if (init?.method === "PATCH") {
+        patchBodies.push(JSON.parse(init.body as string) as Record<string, unknown>);
+        return patchBodies.length === 1
+          ? jsonResponse(
+              {
+                ok: false,
+                error: "listing-revision-conflict",
+                listing: current,
+                snapshot: snapshot([current]),
+              },
+              409,
+            )
+          : jsonResponse({ ok: true, snapshot: snapshot([{ ...current, revision: 3 }]) });
+      }
+
+      return jsonResponse({ ok: true, snapshot: snapshot([listing]) });
+    });
+
+    render(<SavedListApp />);
+    await submitIdentity(user, "Ari");
+    await screen.findByRole("heading", { name: listing.title });
+    await user.click(screen.getByRole("button", { name: `Selected ${listing.title}` }));
+    const statusButton = () =>
+      screen.getByRole("button", { name: `Change review status for ${listing.title}` });
+
+    await user.click(statusButton());
+    await user.click(screen.getByRole("option", { name: "interested" }));
+
+    expect(await screen.findByText(/Someone else changed that listing first/)).toBeTruthy();
+    expect(screen.queryByText("Status updated to interested.")).toBeNull();
+    expect(statusButton().textContent).toContain("touring");
+
+    await user.click(statusButton());
+    await user.click(screen.getByRole("option", { name: "interested" }));
+
+    await waitFor(() => expect(patchBodies).toHaveLength(2));
+    expect(patchBodies.map((body) => body.revision)).toEqual([1, 2]);
+  });
+
+  it("reports a listing removed by someone else without claiming success", async () => {
+    const user = userEvent.setup();
+    const listing = buildListing("removed-listing", "Removed apartment");
+
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("FeatureServer")) {
+        return jsonResponse({ type: "FeatureCollection", features: [] });
+      }
+      if (init?.method === "PATCH") {
+        return jsonResponse({ ok: false, error: "listing-not-found", snapshot: snapshot([]) }, 404);
+      }
+      return jsonResponse({ ok: true, snapshot: snapshot([listing]) });
+    });
+
+    render(<SavedListApp />);
+    await submitIdentity(user, "Ari");
+    await screen.findByRole("heading", { name: listing.title });
+    await user.click(screen.getByRole("button", { name: `Selected ${listing.title}` }));
+    await user.click(
+      screen.getByRole("button", { name: `Change review status for ${listing.title}` }),
+    );
+    await user.click(screen.getByRole("option", { name: "interested" }));
+
+    expect(await screen.findByText(/That listing was removed by someone else/)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: listing.title })).toBeNull();
   });
 
   it("ignores an older identity response after switching display names", async () => {
@@ -252,6 +335,7 @@ function buildListing(id: string, title: string): ListingCandidate {
     id,
     title,
     groupId: defaultSearchGroup.id,
+    revision: 1,
     reviewStatus: "new",
     triageBucket: "confirmed-match",
     display: { ...listing.display, title, reviewStatus: "new", triageBucket: "confirmed-match" },
@@ -268,8 +352,8 @@ function snapshot(listings: ListingCandidate[]): SharedListingSnapshot {
   };
 }
 
-function jsonResponse(body: unknown): Response {
-  return { ok: true, json: async () => body } as Response;
+function jsonResponse(body: unknown, status = 200): Response {
+  return { ok: status < 400, status, json: async () => body } as Response;
 }
 
 function deferred<T>() {

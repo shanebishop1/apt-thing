@@ -37,8 +37,14 @@ export type D1DatabaseLike = {
 
 type ListingRow = {
   listing_json: string;
+  revision: number;
   updated_at: string;
 };
+
+export type ConditionalWriteResult =
+  | { ok: true; listing: ListingCandidate }
+  | { ok: false; reason: "not-found" }
+  | { ok: false; reason: "conflict"; current: ListingCandidate };
 
 type ActionRow = {
   action_json: string;
@@ -55,7 +61,7 @@ export async function readSharedListingSnapshot(
   const [listingRows, actionRows, memoryRows] = await Promise.all([
     db
       .prepare(
-        "SELECT listing_json, updated_at FROM app_saved_listings WHERE group_id = ? ORDER BY updated_at DESC",
+        "SELECT listing_json, revision, updated_at FROM app_saved_listings WHERE group_id = ? ORDER BY updated_at DESC",
       )
       .bind(groupId)
       .all<ListingRow>(),
@@ -73,7 +79,7 @@ export async function readSharedListingSnapshot(
       .all<MemoryRow>(),
   ]);
   const listings = (listingRows.results ?? [])
-    .map((row) => parseJson<ListingCandidate>(row.listing_json))
+    .map(parseListingRow)
     .filter((listing): listing is ListingCandidate =>
       Boolean(listing && listing.groupId === groupId),
     );
@@ -102,43 +108,101 @@ export async function findListingByDuplicateKey(
 ): Promise<ListingCandidate | undefined> {
   const row = await db
     .prepare(
-      "SELECT listing_json FROM app_saved_listings WHERE group_id = ? AND group_scoped_duplicate_key = ? LIMIT 1",
+      "SELECT listing_json, revision FROM app_saved_listings WHERE group_id = ? AND group_scoped_duplicate_key = ? LIMIT 1",
     )
     .bind(groupId, groupScopedDuplicateKey)
-    .first<{ listing_json: string }>();
+    .first<Omit<ListingRow, "updated_at">>();
 
-  return row ? parseJson<ListingCandidate>(row.listing_json) : undefined;
+  return row ? parseListingRow(row) : undefined;
 }
 
-export async function upsertSavedListing(
+/**
+ * Creation path only: a plain INSERT that never overwrites an existing row. A concurrent
+ * create of the same URL loses the unique-index race and resolves to the stored duplicate.
+ */
+export async function insertSavedListing(
   db: D1DatabaseLike,
   listing: ListingCandidate,
-): Promise<ListingCandidate> {
-  await db
+): Promise<{ kind: "created" | "duplicate"; listing: ListingCandidate }> {
+  try {
+    await db
+      .prepare(
+        [
+          "INSERT INTO app_saved_listings",
+          "(id, group_id, url, duplicate_key, group_scoped_duplicate_key, listing_json, created_at, updated_at, revision)",
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+        ].join(" "),
+      )
+      .bind(
+        listing.id,
+        listing.groupId,
+        listing.url,
+        listing.duplicateKey,
+        listing.groupScopedDuplicateKey,
+        serializeListing(listing),
+        listing.createdAt,
+        listing.updatedAt,
+      )
+      .run();
+  } catch (error) {
+    const existing =
+      (await readSavedListing(db, listing.groupId, listing.id)) ??
+      (await findListingByDuplicateKey(db, listing.groupId, listing.groupScopedDuplicateKey));
+    if (existing) return { kind: "duplicate", listing: existing };
+    throw error;
+  }
+
+  return { kind: "created", listing: { ...listing, revision: 1 } };
+}
+
+export async function updateSavedListingAtRevision(
+  db: D1DatabaseLike,
+  listing: ListingCandidate,
+  expectedRevision: number,
+): Promise<ConditionalWriteResult> {
+  const result = await db
     .prepare(
       [
-        "INSERT INTO app_saved_listings",
-        "(id, group_id, url, duplicate_key, group_scoped_duplicate_key, listing_json, created_at, updated_at)",
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        "ON CONFLICT(id) DO UPDATE SET",
-        "url = excluded.url, duplicate_key = excluded.duplicate_key,",
-        "group_scoped_duplicate_key = excluded.group_scoped_duplicate_key,",
-        "listing_json = excluded.listing_json, updated_at = excluded.updated_at",
+        "UPDATE app_saved_listings SET",
+        "url = ?, duplicate_key = ?, group_scoped_duplicate_key = ?, listing_json = ?, updated_at = ?,",
+        "revision = revision + 1",
+        "WHERE id = ? AND group_id = ? AND revision = ?",
       ].join(" "),
     )
     .bind(
-      listing.id,
-      listing.groupId,
       listing.url,
       listing.duplicateKey,
       listing.groupScopedDuplicateKey,
-      JSON.stringify(listing),
-      listing.createdAt,
+      serializeListing(listing),
       listing.updatedAt,
+      listing.id,
+      listing.groupId,
+      expectedRevision,
     )
     .run();
 
-  return listing;
+  if (readChanges(result) === 1) {
+    return { ok: true, listing: { ...listing, revision: expectedRevision + 1 } };
+  }
+  return explainFailedConditionalWrite(db, listing.groupId, listing.id);
+}
+
+export async function deleteSavedListingAtRevision(
+  db: D1DatabaseLike,
+  groupId: string,
+  listingId: string,
+  expectedRevision: number,
+): Promise<ConditionalWriteResult> {
+  const current = await readSavedListing(db, groupId, listingId);
+  if (!current) return { ok: false, reason: "not-found" };
+
+  const result = await db
+    .prepare("DELETE FROM app_saved_listings WHERE id = ? AND group_id = ? AND revision = ?")
+    .bind(listingId, groupId, expectedRevision)
+    .run();
+
+  if (readChanges(result) === 1) return { ok: true, listing: current };
+  return explainFailedConditionalWrite(db, groupId, listingId);
 }
 
 export async function readSavedListing(
@@ -147,22 +211,22 @@ export async function readSavedListing(
   listingId: string,
 ): Promise<ListingCandidate | undefined> {
   const row = await db
-    .prepare("SELECT listing_json FROM app_saved_listings WHERE group_id = ? AND id = ? LIMIT 1")
+    .prepare(
+      "SELECT listing_json, revision FROM app_saved_listings WHERE group_id = ? AND id = ? LIMIT 1",
+    )
     .bind(groupId, listingId)
-    .first<{ listing_json: string }>();
+    .first<Omit<ListingRow, "updated_at">>();
 
-  return row ? parseJson<ListingCandidate>(row.listing_json) : undefined;
+  return row ? parseListingRow(row) : undefined;
 }
 
-export async function deleteSavedListing(
+async function explainFailedConditionalWrite(
   db: D1DatabaseLike,
   groupId: string,
   listingId: string,
-): Promise<void> {
-  await db
-    .prepare("DELETE FROM app_saved_listings WHERE group_id = ? AND id = ?")
-    .bind(groupId, listingId)
-    .run();
+): Promise<ConditionalWriteResult> {
+  const current = await readSavedListing(db, groupId, listingId);
+  return current ? { ok: false, reason: "conflict", current } : { ok: false, reason: "not-found" };
 }
 
 export async function appendSharedGroupAction(
@@ -250,6 +314,26 @@ export async function recordExtractionJob(
     .run();
 
   return job;
+}
+
+function parseListingRow(
+  row: Pick<ListingRow, "listing_json" | "revision">,
+): ListingCandidate | undefined {
+  const listing = parseJson<ListingCandidate>(row.listing_json);
+  return listing ? { ...listing, revision: Number(row.revision) } : undefined;
+}
+
+function serializeListing(listing: ListingCandidate): string {
+  const { revision: _revision, ...stored } = listing;
+  return JSON.stringify(stored);
+}
+
+function readChanges(result: unknown): number {
+  if (result && typeof result === "object") {
+    const meta = (result as { meta?: { changes?: unknown } }).meta;
+    if (typeof meta?.changes === "number") return meta.changes;
+  }
+  return 0;
 }
 
 function parseJson<T>(value: string): T | undefined {

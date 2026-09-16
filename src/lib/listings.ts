@@ -375,6 +375,8 @@ export type ListingCandidate = {
   display: SavedListDisplayFields;
   createdAt: string;
   updatedAt: string;
+  /** D1 optimistic-concurrency revision; present on listings read from shared storage. */
+  revision?: number;
 };
 
 export type SavedListDisplayFields = {

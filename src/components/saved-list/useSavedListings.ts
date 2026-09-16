@@ -22,6 +22,7 @@ import {
   loadSharedSnapshot,
   patchSharedListing,
   postSharedAction,
+  SharedListingRequestError,
   type SharedListingSnapshot,
 } from "./shared-listings-client";
 import { useIdentityRequestCoordinator } from "./useIdentityRequestCoordinator";
@@ -49,6 +50,7 @@ export function useSavedListings() {
   const [apiBusy, setApiBusy] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const createRequestIdRef = useRef(0);
+  const listingsRef = useRef<ListingCandidate[]>([]);
   const coordinator = useIdentityRequestCoordinator();
 
   const selectedListing = identity ? findSelectedListing(listings, selectedId) : undefined;
@@ -109,6 +111,7 @@ export function useSavedListings() {
   function resetIdentity(nextMessage: string) {
     activateIdentity(undefined);
     setIdentity(undefined);
+    listingsRef.current = [];
     setListings([]);
     setGroupActions([]);
     setSeenRejectedMemory([]);
@@ -170,15 +173,43 @@ export function useSavedListings() {
       "mutation",
       (signal) =>
         kind === "patch"
-          ? patchSharedListing(activeIdentity, listingId, payload, { signal })
+          ? patchSharedListing(
+              activeIdentity,
+              listingId,
+              // Read the revision when the queued request runs, so a mutation queued behind
+              // another one for the same listing uses the revision that mutation produced.
+              { ...payload, revision: findObservedRevision(listingId) },
+              { signal },
+            )
           : postSharedAction(activeIdentity, listingId, payload, { signal }),
       {
         onSuccess: (snapshot) => {
           applySharedSnapshot(snapshot);
           setMessage(successMessage);
         },
-        onError: (error) => showRequestError(error, errorMessage),
+        onError: (error) => {
+          if (error instanceof SharedListingRequestError && error.isStaleListing) {
+            recoverStaleListing(activeIdentity, error);
+            return;
+          }
+          showRequestError(error, errorMessage);
+        },
       },
+    );
+  }
+  function findObservedRevision(listingId: string) {
+    return listingsRef.current.find((listing) => listing.id === listingId)?.revision;
+  }
+  function recoverStaleListing(activeIdentity: InviteIdentity, error: SharedListingRequestError) {
+    if (error.snapshot) {
+      applySharedSnapshot(error.snapshot);
+    } else {
+      void refreshSharedSnapshot(activeIdentity, { silent: true });
+    }
+    setMessage(
+      error.code === "listing-not-found"
+        ? "That listing was removed by someone else, so your change was not saved. The list has been refreshed."
+        : "Someone else changed that listing first, so your change was not saved. Showing the latest version; reapply your change if it is still needed.",
     );
   }
   function requireIdentity(errorMessage: string): InviteIdentity | undefined {
@@ -222,6 +253,7 @@ export function useSavedListings() {
   }
   function applySharedSnapshot(snapshot: SharedListingSnapshot) {
     const normalizedSnapshot = normalizeSharedSnapshot(snapshot);
+    listingsRef.current = normalizedSnapshot.listings;
     setListings(normalizedSnapshot.listings);
     setGroupActions(normalizedSnapshot.actions);
     setSeenRejectedMemory(normalizedSnapshot.memory);
@@ -252,6 +284,7 @@ export function useSavedListings() {
       setIdentity(resolution.identity);
 
       if (groupChanged) {
+        listingsRef.current = [];
         setListings([]);
         hydrateGroupState(resolution.identity);
       }
