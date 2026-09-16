@@ -421,25 +421,23 @@ export function createBriefingRunHistoryFixture(
     bundle.listingCandidates.rejectedDowngraded,
   ].map((listing) => toCandidateSummary(listing, bundle));
   const rawArtifactPointers = rawPointersForRun(bundle, run.id);
-  const sourceCoverage = sourceBriefing.sourceCoverage.map(
-    (coverage): SourceCoverageSummary => ({
-      source: coverage.source,
-      status: coverage.status,
-      checkedCount: coverage.checkedCount,
-      candidateCount:
-        coverage.source === "streeteasy"
-          ? candidateSummaries.filter((candidate) => candidate.source === "streeteasy").length
-          : 0,
-      failureCode: coverage.failureCode,
-      failureMessage: coverage.failureCode
-        ? "Fixture source failed without blocking other sources."
-        : undefined,
-      rawArtifactPointers:
-        coverage.status === "failed"
-          ? rawArtifactPointers.filter((pointer) => pointer.key.includes("source-failures"))
-          : rawArtifactPointers.filter((pointer) => !pointer.key.includes("source-failures")),
-    }),
-  );
+  const sourceCoverage = sourceBriefing.sourceCoverage.map((coverage): SourceCoverageSummary => ({
+    source: coverage.source,
+    status: coverage.status,
+    checkedCount: coverage.checkedCount,
+    candidateCount:
+      coverage.source === "streeteasy"
+        ? candidateSummaries.filter((candidate) => candidate.source === "streeteasy").length
+        : 0,
+    failureCode: coverage.failureCode,
+    failureMessage: coverage.failureCode
+      ? "Fixture source failed without blocking other sources."
+      : undefined,
+    rawArtifactPointers:
+      coverage.status === "failed"
+        ? rawArtifactPointers.filter((pointer) => pointer.key.includes("source-failures"))
+        : rawArtifactPointers.filter((pointer) => !pointer.key.includes("source-failures")),
+  }));
   const latestRun: BriefingRunHistoryRun = {
     runId: run.id,
     cadence: run.cadence,

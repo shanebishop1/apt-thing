@@ -209,46 +209,42 @@ export function createDailyLoopSourceEvidence({
   now: string;
 }): SourceEvidenceRecord[] {
   const listingEvidence = listings.flatMap((listing) =>
-    listing.evidence.map(
-      (item, index): SourceEvidenceRecord => ({
-        id: stableId(`${runId}:${listing.id}:evidence:${index}`),
-        contract: "source-evidence-v1",
-        groupId,
-        listingId: listing.id,
-        runId,
-        sourceUrl: item.sourceUrl || listing.url,
-        claim: item.claim,
-        quote: item.quote,
-        pointer: rawArtifactPointers.find((pointer) => pointer.key.includes(listing.id)) ?? {
-          owner: "d1",
-          key: `daily_loop_candidates:${listing.id}:evidence:${index}`,
-          contentType: "application/json",
-          groupScoped: true,
-        },
-        capturedAt: now,
-      }),
-    ),
+    listing.evidence.map((item, index): SourceEvidenceRecord => ({
+      id: stableId(`${runId}:${listing.id}:evidence:${index}`),
+      contract: "source-evidence-v1",
+      groupId,
+      listingId: listing.id,
+      runId,
+      sourceUrl: item.sourceUrl || listing.url,
+      claim: item.claim,
+      quote: item.quote,
+      pointer: rawArtifactPointers.find((pointer) => pointer.key.includes(listing.id)) ?? {
+        owner: "d1",
+        key: `daily_loop_candidates:${listing.id}:evidence:${index}`,
+        contentType: "application/json",
+        groupScoped: true,
+      },
+      capturedAt: now,
+    })),
   );
   const failureEvidence = coverage
     .filter((item) => item.status === "failed")
-    .map(
-      (item): SourceEvidenceRecord => ({
-        id: stableId(`${runId}:${item.source}:failure`),
-        contract: "source-evidence-v1",
-        groupId,
-        runId,
-        sourceUrl: `https://fixture.local/${item.source}`,
-        claim: `${item.source} source failure isolated`,
-        quote: item.failureMessage ?? "Source failed without failing the daily loop.",
-        pointer: rawArtifactPointers.find((pointer) => pointer.key.includes("source-failures")) ?? {
-          owner: "d1",
-          key: `${groupId}/${runId}/source-failures/${item.source}.json`,
-          contentType: "application/json",
-          groupScoped: true,
-        },
-        capturedAt: now,
-      }),
-    );
+    .map((item): SourceEvidenceRecord => ({
+      id: stableId(`${runId}:${item.source}:failure`),
+      contract: "source-evidence-v1",
+      groupId,
+      runId,
+      sourceUrl: `https://fixture.local/${item.source}`,
+      claim: `${item.source} source failure isolated`,
+      quote: item.failureMessage ?? "Source failed without failing the daily loop.",
+      pointer: rawArtifactPointers.find((pointer) => pointer.key.includes("source-failures")) ?? {
+        owner: "d1",
+        key: `${groupId}/${runId}/source-failures/${item.source}.json`,
+        contentType: "application/json",
+        groupScoped: true,
+      },
+      capturedAt: now,
+    }));
   return [...listingEvidence, ...failureEvidence];
 }
 
@@ -283,40 +279,36 @@ export function createSeenMemory(
   now: string,
 ): SeenRejectedMemoryRecord[] {
   return [
-    ...listings.map(
-      (listing): SeenRejectedMemoryRecord => ({
-        id: stableId(`${groupId}:${listing.url}:seen`),
-        contract: "seen-rejected-memory-v1",
-        groupId,
-        sourceUrl: listing.url,
-        duplicateKey: createDuplicateKey(listing.url),
-        groupScopedDuplicateKey: createGroupScopedDuplicateKey(groupId, listing.url),
-        memoryState:
-          listing.triageBucket === "rejected"
-            ? "rejected"
-            : listing.triageBucket === "review-needed"
-              ? "downgraded"
-              : "seen",
-        reason:
-          listing.triageBucket === "rejected"
-            ? "Daily loop rejected this candidate."
-            : "Daily loop processed this candidate.",
-        lastSeenAt: now,
-      }),
-    ),
-    ...skipped.map(
-      (item): SeenRejectedMemoryRecord => ({
-        id: stableId(`${groupId}:${item.sourceUrl}:skipped:${item.reason}`),
-        contract: "seen-rejected-memory-v1",
-        groupId,
-        sourceUrl: item.sourceUrl,
-        duplicateKey: createDuplicateKey(item.sourceUrl),
-        groupScopedDuplicateKey: createGroupScopedDuplicateKey(groupId, item.sourceUrl),
-        memoryState: item.reason === "rejected" ? "rejected" : "seen",
-        reason: `Skipped because candidate was already ${item.reason}.`,
-        lastSeenAt: now,
-      }),
-    ),
+    ...listings.map((listing): SeenRejectedMemoryRecord => ({
+      id: stableId(`${groupId}:${listing.url}:seen`),
+      contract: "seen-rejected-memory-v1",
+      groupId,
+      sourceUrl: listing.url,
+      duplicateKey: createDuplicateKey(listing.url),
+      groupScopedDuplicateKey: createGroupScopedDuplicateKey(groupId, listing.url),
+      memoryState:
+        listing.triageBucket === "rejected"
+          ? "rejected"
+          : listing.triageBucket === "review-needed"
+            ? "downgraded"
+            : "seen",
+      reason:
+        listing.triageBucket === "rejected"
+          ? "Daily loop rejected this candidate."
+          : "Daily loop processed this candidate.",
+      lastSeenAt: now,
+    })),
+    ...skipped.map((item): SeenRejectedMemoryRecord => ({
+      id: stableId(`${groupId}:${item.sourceUrl}:skipped:${item.reason}`),
+      contract: "seen-rejected-memory-v1",
+      groupId,
+      sourceUrl: item.sourceUrl,
+      duplicateKey: createDuplicateKey(item.sourceUrl),
+      groupScopedDuplicateKey: createGroupScopedDuplicateKey(groupId, item.sourceUrl),
+      memoryState: item.reason === "rejected" ? "rejected" : "seen",
+      reason: `Skipped because candidate was already ${item.reason}.`,
+      lastSeenAt: now,
+    })),
   ];
 }
 

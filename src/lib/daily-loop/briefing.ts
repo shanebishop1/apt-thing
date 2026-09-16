@@ -107,20 +107,18 @@ export function createDailyLoopHistory({
   const candidateSummaries = listings.map((listing) =>
     toCandidateSummary(listing, sourceEvidence, triageMetadata),
   );
-  const coverage = sourceCoverage.map(
-    (item): SourceCoverageSummary => ({
-      source: item.source,
-      status: item.status,
-      checkedCount: item.checkedCount,
-      candidateCount: item.candidateCount,
-      failureCode: item.failureCode,
-      failureMessage: item.failureMessage,
-      rawArtifactPointers: rawArtifactPointers.filter(
-        (pointer) =>
-          pointer.key.includes(`/${item.source}/`) || pointer.key.includes("source-failures"),
-      ),
-    }),
-  );
+  const coverage = sourceCoverage.map((item): SourceCoverageSummary => ({
+    source: item.source,
+    status: item.status,
+    checkedCount: item.checkedCount,
+    candidateCount: item.candidateCount,
+    failureCode: item.failureCode,
+    failureMessage: item.failureMessage,
+    rawArtifactPointers: rawArtifactPointers.filter(
+      (pointer) =>
+        pointer.key.includes(`/${item.source}/`) || pointer.key.includes("source-failures"),
+    ),
+  }));
   const latestRun: BriefingRunHistoryRun = {
     runId: run.id,
     cadence: run.cadence,
@@ -220,22 +218,18 @@ export function createRawArtifactPointers(
   listings: ListingCandidate[],
 ): EvidenceStoragePointer[] {
   return [
-    ...coverage.map(
-      (item): EvidenceStoragePointer => ({
-        owner: "d1",
-        key: `${groupId}/${runId}/${item.status === "failed" ? "source-failures" : item.source}/coverage.json`,
-        contentType: "application/json",
-        groupScoped: true,
-      }),
-    ),
-    ...listings.map(
-      (listing): EvidenceStoragePointer => ({
-        owner: "d1",
-        key: `${groupId}/${runId}/${listing.source}/${listing.id}/raw-artifact.json`,
-        contentType: "application/json",
-        groupScoped: true,
-      }),
-    ),
+    ...coverage.map((item): EvidenceStoragePointer => ({
+      owner: "d1",
+      key: `${groupId}/${runId}/${item.status === "failed" ? "source-failures" : item.source}/coverage.json`,
+      contentType: "application/json",
+      groupScoped: true,
+    })),
+    ...listings.map((listing): EvidenceStoragePointer => ({
+      owner: "d1",
+      key: `${groupId}/${runId}/${listing.source}/${listing.id}/raw-artifact.json`,
+      contentType: "application/json",
+      groupScoped: true,
+    })),
   ];
 }
 

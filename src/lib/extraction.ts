@@ -634,13 +634,11 @@ function buildNormalizedListing({
 }) {
   const source = classifySource(sourceUrl);
   const imageEvidence = capImageEvidence(
-    (draft.photos ?? []).map(
-      (url, index): ImageEvidence => ({
-        url,
-        role: index === 0 ? "primary" : "supporting",
-        sentToAi: false,
-      }),
-    ),
+    (draft.photos ?? []).map((url, index): ImageEvidence => ({
+      url,
+      role: index === 0 ? "primary" : "supporting",
+      sentToAi: false,
+    })),
   );
   const fitFlags = withManualFlag(
     calculateFitFlags(draft, sourceUrl),
