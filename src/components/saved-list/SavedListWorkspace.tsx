@@ -1,7 +1,6 @@
 "use client";
 
 import { Moon, Settings, Sun } from "lucide-react";
-import { g3cBriefingRunHistoryFixture } from "../../lib/agent-contract-fixtures";
 import type { MapReviewModel } from "../../lib/map-review";
 import { ListingEditor } from "./ListingEditor";
 import { ListingIntake } from "./ListingIntake";
@@ -9,6 +8,7 @@ import { ListingSection, type ListingListGroup } from "./ListingSection";
 import { MapReviewPanel } from "./MapReviewPanel";
 import { RunHistoryPanel } from "./RunHistoryPanel";
 import { InviteIdentityForm } from "./InviteIdentityForm";
+import { useRunHistory } from "./useRunHistory";
 import type { useSavedListings } from "./useSavedListings";
 
 type AppTab = "dashboard" | "map" | "history" | "settings";
@@ -46,6 +46,8 @@ export function SavedListWorkspace({
   onThemeToggle,
   onCloseDetail,
 }: SavedListWorkspaceProps) {
+  const runHistory = useRunHistory(controller.identity, activeTab === "history");
+
   return (
     <>
       <nav className="app-tabs" aria-label="Apartment search workspace sections">
@@ -152,7 +154,9 @@ export function SavedListWorkspace({
         />
       ) : null}
 
-      {activeTab === "history" ? <RunHistoryPanel history={g3cBriefingRunHistoryFixture} /> : null}
+      {activeTab === "history" ? (
+        <RunHistoryPanel state={runHistory.state} onRefresh={runHistory.refresh} />
+      ) : null}
 
       {activeTab === "settings" ? (
         <InviteIdentityForm

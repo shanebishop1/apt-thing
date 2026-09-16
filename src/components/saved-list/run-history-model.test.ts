@@ -1,45 +1,65 @@
 import { describe, expect, it } from "vitest";
 import { g3cBriefingRunHistoryFixture } from "../../lib/agent-contract-fixtures";
+import type { PersistedRunHistoryRun } from "../../lib/run-history-store";
 import { createRunHistoryPanelModel } from "./run-history-model";
 
+const baseRun: PersistedRunHistoryRun = {
+  ...g3cBriefingRunHistoryFixture.latestRun,
+  mode: "live-safe",
+  skipped: { seen: 1, saved: 1, rejected: 0, triaged: 2 },
+  materialChanges: 1,
+  memoryUpdates: 3,
+  briefingSummary: "Two listings need review.",
+};
+
 describe("createRunHistoryPanelModel", () => {
-  it("orders runs newest-first, filters fixture coverage, and derives counts", () => {
-    const baseRun = g3cBriefingRunHistoryFixture.latestRun;
+  it("orders persisted runs newest-first and derives counts without hiding coverage", () => {
     const realCoverage = baseRun.sourceCoverage[0]!;
-    const olderRun = {
+    const olderRun: PersistedRunHistoryRun = {
       ...baseRun,
       runId: "older-run",
+      mode: "fixture",
       startedAt: "2026-06-06T10:00:00.000Z",
-      completedAt: "2026-06-06T10:02:00.000Z",
-      counts: {
-        ...baseRun.counts,
-        candidatesFound: 3,
-        candidatesSkippedSeen: 2,
-        candidatesSkippedTriaged: 1,
-        sourceFailures: 99,
-      },
+      completedAt: undefined,
+      counts: { ...baseRun.counts, candidatesFound: 3, sourceFailures: 99 },
       sourceCoverage: [
         { ...realCoverage, checkedCount: 4, candidateCount: 3 },
-        { ...realCoverage, source: "fixture-secondary-source", checkedCount: 50 },
+        { ...realCoverage, source: "zillow", status: "failed", checkedCount: 0 },
       ],
     };
-    const history = {
-      ...g3cBriefingRunHistoryFixture,
-      latestRun: baseRun,
-      runs: [olderRun, baseRun],
-    };
 
-    const model = createRunHistoryPanelModel(history);
+    const model = createRunHistoryPanelModel({
+      groupId: g3cBriefingRunHistoryFixture.groupId,
+      generatedAt: "2026-09-16T00:00:00.000Z",
+      runs: [olderRun, baseRun],
+    });
     const [latest, older] = model.runs;
 
     expect(model.runs.map((run) => run.runId)).toEqual([baseRun.runId, "older-run"]);
-    expect(latest?.isLatest).toBe(true);
-    expect(older?.checkedOrScrapedCount).toBe(4);
-    expect(older?.skippedCount).toBe(3);
-    expect(older?.apiMatchedCount).toBe(3);
-    expect(older?.counts.sourceFailures).toBe(0);
-    expect(older?.sourceCoverage.some((coverage) => coverage.source.startsWith("fixture-"))).toBe(
-      false,
-    );
+    expect(latest).toMatchObject({
+      isLatest: true,
+      modeLabel: "Live-safe mode",
+      skippedCount: 4,
+      briefingSummary: "Two listings need review.",
+    });
+    expect(older).toMatchObject({
+      isLatest: false,
+      modeLabel: "Fixture mode",
+      checkedOrScrapedCount: 4,
+      apiMatchedCount: 3,
+      completedLabel: "Still running",
+    });
+    expect(older?.counts.sourceFailures).toBe(1);
+    expect(older?.sourceCoverage).toHaveLength(2);
+  });
+
+  it("returns no runs for an empty persisted history", () => {
+    expect(
+      createRunHistoryPanelModel({
+        groupId: "g",
+        generatedAt: "2026-09-16T00:00:00.000Z",
+        runs: [],
+      }).runs,
+    ).toEqual([]);
   });
 });

@@ -655,7 +655,46 @@ label {
 }
 
 .run-history-header {
-  display: block;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-history-refresh {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+  color: var(--bg-ink);
+  cursor: pointer;
+  padding: 0;
+}
+
+.run-history-refresh:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.run-history-notice {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+}
+
+.run-history-notice p {
+  margin: 4px 0 0;
+}
+
+.run-history-notice button {
+  margin-top: 10px;
 }
 
 .run-history-header h2 {

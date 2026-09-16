@@ -1,9 +1,13 @@
 import type {
-  BriefingRunHistoryContract,
   BriefingRunHistoryRun,
   EvidenceStoragePointer,
   SourceCoverageSummary,
 } from "../../lib/agent-contracts";
+import type {
+  PersistedRunHistory,
+  PersistedRunHistoryRun,
+  PersistedRunSkipCounts,
+} from "../../lib/run-history-store";
 import { formatLabel } from "./listing-presentation";
 
 export type RunHistoryArtifactPointer = {
@@ -21,6 +25,7 @@ export type RunHistoryPanelRunModel = {
   trigger: BriefingRunHistoryRun["trigger"];
   status: BriefingRunHistoryRun["status"];
   statusLabel: string;
+  modeLabel: string;
   startedLabel: string;
   completedLabel: string;
   isLatest: boolean;
@@ -29,6 +34,10 @@ export type RunHistoryPanelRunModel = {
   checkedOrScrapedCount: number;
   checkedOrScrapedLabel: string;
   skippedCount: number;
+  skipped: PersistedRunSkipCounts;
+  materialChanges: number;
+  memoryUpdates: number;
+  briefingSummary?: string;
   aiCallCount: number;
   aiOutputLabel: string;
   sourceCoverage: SourceCoverageSummary[];
@@ -43,16 +52,13 @@ export type RunHistoryPanelModel = {
   runs: RunHistoryPanelRunModel[];
 };
 
-export function createRunHistoryPanelModel(
-  history: BriefingRunHistoryContract,
-): RunHistoryPanelModel {
-  const latestRunId = history.latestRun.runId;
-  const runs = [...history.runs]
-    .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
-    .map((run) => {
-      const sourceCoverage = run.sourceCoverage.filter(
-        (coverage) => !isSyntheticFixtureCoverage(coverage),
-      );
+export function createRunHistoryPanelModel(history: PersistedRunHistory): RunHistoryPanelModel {
+  const runs = [...history.runs].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+  const latestRunId = runs[0]?.runId;
+
+  return {
+    runs: runs.map((run) => {
+      const sourceCoverage = run.sourceCoverage;
       const artifactPointers = createRunArtifactPointers(run, sourceCoverage);
       const failures = sourceCoverage.filter((coverage) => coverage.status === "failed");
       const counts = { ...run.counts, sourceFailures: failures.length };
@@ -60,10 +66,8 @@ export function createRunHistoryPanelModel(
         (total, coverage) => total + coverage.checkedCount,
         0,
       );
-      const aiCallCount = run.providerMetadata.length;
-      const skippedCount = run.counts.candidatesSkippedSeen + run.counts.candidatesSkippedTriaged;
-      const checkedOrScrapedLabel =
-        checkedCount > 0 ? String(checkedCount) : "Not separately recorded";
+      const skippedCount =
+        run.skipped.seen + run.skipped.saved + run.skipped.rejected + run.skipped.triaged;
 
       return {
         runId: run.runId,
@@ -72,15 +76,20 @@ export function createRunHistoryPanelModel(
         trigger: run.trigger,
         status: run.status,
         statusLabel: formatLabel(run.status),
+        modeLabel: run.mode === "fixture" ? "Fixture mode" : "Live-safe mode",
         startedLabel: formatDateTimeLabel(run.startedAt),
         completedLabel: run.completedAt ? formatDateTimeLabel(run.completedAt) : "Still running",
         isLatest: run.runId === latestRunId,
         counts,
         apiMatchedCount: counts.candidatesFound,
         checkedOrScrapedCount: checkedCount,
-        checkedOrScrapedLabel,
+        checkedOrScrapedLabel: checkedCount > 0 ? String(checkedCount) : "None recorded",
         skippedCount,
-        aiCallCount,
+        skipped: run.skipped,
+        materialChanges: run.materialChanges,
+        memoryUpdates: run.memoryUpdates,
+        briefingSummary: run.briefingSummary,
+        aiCallCount: run.providerMetadata.length,
         aiOutputLabel: `${counts.confirmedMatches} yes / ${counts.reviewNeeded} review / ${counts.rejected} no`,
         sourceCoverage,
         failures,
@@ -98,22 +107,19 @@ export function createRunHistoryPanelModel(
         artifactPointers,
         candidateSummaries: run.candidateSummaries,
       } satisfies RunHistoryPanelRunModel;
-    });
-
-  return {
-    runs,
+    }),
   };
 }
 
-function createRunHistoryHeading(run: BriefingRunHistoryRun): string {
+function createRunHistoryHeading(run: PersistedRunHistoryRun): string {
   if (run.cadence === "manual") {
-    return "Manual import catch-up";
+    return "Manual run";
   }
   if (run.cadence === "hourly") {
-    return "Hourly-ready smoke run";
+    return "Hourly run";
   }
 
-  return "Daily scheduled search";
+  return run.trigger === "cron" ? "Daily scheduled search" : "Daily search";
 }
 
 function createRunArtifactPointers(
@@ -121,10 +127,10 @@ function createRunArtifactPointers(
   sourceCoverage: SourceCoverageSummary[],
 ): RunHistoryArtifactPointer[] {
   const pointers = uniquePointers([
-    ...run.rawArtifactPointers.filter((pointer) => !isSyntheticFixturePointer(pointer)),
+    ...run.rawArtifactPointers,
     ...sourceCoverage.flatMap((coverage) => coverage.rawArtifactPointers),
     ...run.candidateSummaries.flatMap((candidate) => candidate.evidenceSummary.rawArtifactPointers),
-  ]).filter((pointer) => !isSyntheticFixturePointer(pointer));
+  ]);
 
   return pointers.map((pointer, index) => {
     const id = `artifact-${slugify(run.runId)}-${index}`;
@@ -147,16 +153,6 @@ function uniquePointers(pointers: EvidenceStoragePointer[]): EvidenceStoragePoin
   }
 
   return [...byKey.values()];
-}
-
-function isSyntheticFixtureCoverage(coverage: SourceCoverageSummary): boolean {
-  return (
-    coverage.source.startsWith("fixture-") || coverage.failureCode?.startsWith("fixture-") === true
-  );
-}
-
-function isSyntheticFixturePointer(pointer: EvidenceStoragePointer): boolean {
-  return pointer.key.includes("source-failure") || pointer.key.includes("fixture-");
 }
 
 function slugify(value: string): string {

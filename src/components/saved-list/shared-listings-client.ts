@@ -1,5 +1,6 @@
 import type { GroupActionRecord, SeenRejectedMemoryRecord } from "../../lib/agent-contracts";
 import type { InviteIdentity, ListingCandidate } from "../../lib/listings";
+import type { PersistedRunHistory } from "../../lib/run-history-store";
 
 export type SharedListingSnapshot = {
   groupId: string;
@@ -46,6 +47,28 @@ export async function loadSharedSnapshot(
   );
   const payload = await readSharedListingsResponse(response, "snapshot-load-failed");
   return payload.snapshot;
+}
+
+export async function loadRunHistory(
+  identity: InviteIdentity,
+  options: RequestOptions = {},
+): Promise<PersistedRunHistory> {
+  const response = await fetch("/api/group/runs", {
+    headers: {
+      "X-Invite-Code": identity.inviteCode,
+      "X-Display-Name": identity.displayName,
+    },
+    signal: options.signal,
+  });
+  const payload = (await response.json()) as
+    | { ok: true; history: PersistedRunHistory }
+    | { ok: false; error?: string };
+  if (!response.ok || !payload.ok) {
+    throw new Error(
+      payload.ok ? "run-history-load-failed" : (payload.error ?? "run-history-load-failed"),
+    );
+  }
+  return payload.history;
 }
 
 export async function createSharedListing(
