@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { InviteIdentity } from "../../lib/listings";
+import type { InviteIdentity } from "@/lib/listings";
 import { getIdentityKey } from "./saved-list-state";
 
 type RequestKind = "load" | "mutation";
@@ -11,7 +11,7 @@ type RequestContext = {
   cancelled: boolean;
 };
 
-export type RequestHandlers<T> = {
+type RequestHandlers<T> = {
   onSuccess: (result: T) => void;
   onError?: (error: unknown) => void;
   onFinally?: () => void;

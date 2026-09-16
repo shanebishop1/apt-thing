@@ -3,7 +3,7 @@
 import { render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { describe, expect, it } from "vitest";
-import type { InviteIdentity } from "../../lib/listings";
+import type { InviteIdentity } from "@/lib/listings";
 import { useIdentityRequestCoordinator } from "./useIdentityRequestCoordinator";
 
 const identity: InviteIdentity & { inviteCode: string } = {

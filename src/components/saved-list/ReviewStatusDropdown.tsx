@@ -8,8 +8,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { ChevronDown } from "lucide-react";
-import type { ListingCandidate, ReviewStatus } from "../../lib/listings";
-import { REVIEW_STATUSES } from "../../lib/listings";
+import type { ListingCandidate, ReviewStatus } from "@/lib/listings";
+import { REVIEW_STATUSES } from "@/lib/listings";
 import { formatLabel } from "./listing-presentation";
 
 const selectableReviewStatuses: Exclude<ReviewStatus, "review">[] = REVIEW_STATUSES.filter(

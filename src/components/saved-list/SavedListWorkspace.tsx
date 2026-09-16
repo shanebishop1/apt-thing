@@ -1,7 +1,7 @@
 "use client";
 
 import { Moon, Settings, Sun } from "lucide-react";
-import type { MapReviewModel } from "../../lib/map-review";
+import type { MapReviewModel } from "@/lib/map-review";
 import { ListingEditor } from "./ListingEditor";
 import { ListingIntake } from "./ListingIntake";
 import { ListingSection, type ListingListGroup } from "./ListingSection";

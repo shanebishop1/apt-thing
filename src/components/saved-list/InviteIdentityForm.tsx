@@ -1,8 +1,8 @@
 "use client";
 
 import type { FormEvent } from "react";
-import type { InviteIdentity } from "../../lib/listings";
-import type { IdentityFormState } from "./useSavedListings";
+import type { InviteIdentity } from "@/lib/listings";
+import type { IdentityFormState } from "./saved-list-state";
 
 type InviteIdentityFormProps = {
   mode: "gate" | "settings";

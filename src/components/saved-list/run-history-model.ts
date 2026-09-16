@@ -2,12 +2,12 @@ import type {
   BriefingRunHistoryRun,
   EvidenceStoragePointer,
   SourceCoverageSummary,
-} from "../../lib/agent-contracts";
+} from "@/lib/agent-contracts";
 import type {
   PersistedRunHistory,
   PersistedRunHistoryRun,
   PersistedRunSkipCounts,
-} from "../../lib/run-history-store";
+} from "@/lib/run-history-store";
 import { formatLabel } from "./listing-presentation";
 
 export type RunHistoryArtifactPointer = {

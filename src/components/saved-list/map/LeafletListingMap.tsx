@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import type { LayerGroup, Map as LeafletMap, Marker } from "leaflet";
-import type { InviteIdentity, ListingCandidate } from "../../../lib/listings";
-import { createMapReviewModel } from "../../../lib/map-review";
+import type { InviteIdentity, ListingCandidate } from "@/lib/listings";
+import { createMapReviewModel } from "@/lib/map-review";
 import {
   addMtaSubwayOverlay,
   syncLeafletMap,

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ListingCandidate } from "../../lib/listings";
+import type { ListingCandidate } from "@/lib/listings";
 import { formatAverageRent, formatLabel } from "./listing-presentation";
 
 export type ListingListGroup = {

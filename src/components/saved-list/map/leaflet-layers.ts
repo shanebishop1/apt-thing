@@ -6,7 +6,7 @@ import type {
   Marker,
 } from "leaflet";
 import { formatMoney } from "../listing-presentation";
-import { createMapReviewModel, type MapReviewCandidate } from "../../../lib/map-review";
+import { createMapReviewModel, type MapReviewCandidate } from "@/lib/map-review";
 import type { GroceryStoreLocation } from "./geographic-data";
 import { groceryStoreLocations } from "./geographic-data";
 

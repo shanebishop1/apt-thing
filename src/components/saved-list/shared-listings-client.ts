@@ -1,6 +1,6 @@
-import type { GroupActionRecord, SeenRejectedMemoryRecord } from "../../lib/agent-contracts";
-import type { InviteIdentity, ListingCandidate } from "../../lib/listings";
-import type { PersistedRunHistory } from "../../lib/run-history-store";
+import type { GroupActionRecord, SeenRejectedMemoryRecord } from "@/lib/agent-contracts";
+import type { InviteIdentity, ListingCandidate } from "@/lib/listings";
+import type { PersistedRunHistory } from "@/lib/run-history-store";
 
 export type SharedListingSnapshot = {
   groupId: string;

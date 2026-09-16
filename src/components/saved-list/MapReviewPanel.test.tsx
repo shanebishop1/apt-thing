@@ -3,8 +3,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fixtureListings } from "../../lib/fixtures";
-import { createMapReviewModel } from "../../lib/map-review";
+import { fixtureListings } from "@/lib/fixtures";
+import { createMapReviewModel } from "@/lib/map-review";
 import { MapReviewPanel } from "./MapReviewPanel";
 
 afterEach(cleanup);

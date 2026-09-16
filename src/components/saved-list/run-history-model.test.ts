@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { briefingRunHistoryFixture } from "../../lib/agent-contract-fixtures";
-import type { PersistedRunHistoryRun } from "../../lib/run-history-store";
+import { briefingRunHistoryFixture } from "@/lib/agent-contract-fixtures";
+import type { PersistedRunHistoryRun } from "@/lib/run-history-store";
 import { createRunHistoryPanelModel } from "./run-history-model";
 
 const baseRun: PersistedRunHistoryRun = {

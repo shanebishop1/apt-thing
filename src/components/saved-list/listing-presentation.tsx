@@ -1,6 +1,6 @@
 "use client";
 
-import type { ListingCandidate } from "../../lib/listings";
+import type { ListingCandidate } from "@/lib/listings";
 
 export function Fact({ label, value }: { label: string; value: string }) {
   return (

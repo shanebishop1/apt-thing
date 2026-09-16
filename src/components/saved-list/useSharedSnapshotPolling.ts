@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { InviteIdentity } from "../../lib/listings";
+import type { InviteIdentity } from "@/lib/listings";
 import { getIdentityKey, sharedSnapshotPollMs } from "./saved-list-state";
 
 type RefreshOptions = { silent?: boolean };

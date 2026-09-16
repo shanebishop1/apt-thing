@@ -2,7 +2,7 @@
 
 import { useRef, type FormEvent, type ToggleEvent } from "react";
 import { Plus } from "lucide-react";
-import type { InviteIdentity } from "../../lib/listings";
+import type { InviteIdentity } from "@/lib/listings";
 
 type ListingIntakeProps = {
   identity?: InviteIdentity;
