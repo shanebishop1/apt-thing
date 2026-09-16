@@ -19,9 +19,7 @@
     "cf:preview": "pnpm cf:build && wrangler dev",
     "cf:types": "wrangler types --env-file .env.example",
     "cf:deploy:dry": "pnpm cf:build && wrangler deploy --dry-run",
-    "cf:deploy": "pnpm cf:build && wrangler deploy",
-    "proof:acquisition": "node --experimental-strip-types scripts/proof-acquisition.mjs",
-    "proof:daily-loop": "vitest run src/lib/daily-source-loop.test.ts"
+    "cf:deploy": "pnpm cf:build && wrangler deploy"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.19.11",
