@@ -1,0 +1,35 @@
+{
+  // End-to-end only. The committed wrangler.jsonc stays hibernated with no DB binding; this
+  // copy adds the local D1 binding the Playwright suite runs against. Relative paths resolve
+  // from this file's directory, so they climb one level back to the repository root.
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "apt-thing-e2e",
+  "main": "../src/worker.ts",
+  "compatibility_date": "2026-06-05",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "../.open-next/assets",
+    "binding": "ASSETS",
+  },
+  "vars": {
+    "NEXTJS_ENV": "production",
+    "APP_ENV": "local",
+    "DAILY_LOOP_ENABLED": "false",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "apt-thing-e2e",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../migrations",
+    },
+  ],
+  "triggers": {
+    "crons": [],
+  },
+  "observability": {
+    "enabled": false,
+  },
+}
