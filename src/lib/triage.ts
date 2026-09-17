@@ -1,3 +1,4 @@
+import type { GeminiResponseSchema } from "./gemini-client";
 import {
   GEMINI_PROVIDER_METADATA,
   type AiProviderAttemptMetadata,
@@ -57,16 +58,27 @@ export const FIT_EVIDENCE_RUBRIC = {
 } as const;
 
 export type TriageSource = SourceType | "nybits" | "openigloo" | "public-source";
-export type TriageFactor =
-  | "bedrooms"
-  | "bathrooms"
-  | "rent"
-  | "wholeApartment"
-  | "nycRental"
-  | "moveIn"
-  | "availability"
-  | "sourceIntegrity"
-  | "location";
+
+/** The rubric factors every deterministic check and every Gemini verdict scores. */
+export const TRIAGE_FACTORS = [
+  "bedrooms",
+  "bathrooms",
+  "rent",
+  "wholeApartment",
+  "nycRental",
+  "moveIn",
+  "availability",
+  "sourceIntegrity",
+  "location",
+] as const;
+
+export const TRIAGE_BUCKETS = [
+  "confirmed-match",
+  "review-needed",
+  "rejected",
+] as const satisfies readonly TriageBucket[];
+
+export type TriageFactor = (typeof TRIAGE_FACTORS)[number];
 export type TriageCheckStatus = "pass" | "fail" | "unknown" | "review-needed";
 export type ListingStatus = "active" | "available" | "pending" | "unavailable" | "off-market";
 export type OccupancyType = "whole-apartment" | "room-share" | "individual-room" | "unknown";
@@ -187,6 +199,59 @@ export type GeminiTriageOutput = {
   reasons: string[];
   concerns: string[];
   suggestedAction: string;
+};
+
+/**
+ * The `responseSchema` the direct Gemini fit-triage call must send. Without it the model echoes the
+ * request shape back (`{ schemaVersion, candidate }`, no bucket) or appends prose after the object.
+ * Derived from `GeminiTriageOutput` and `TRIAGE_FACTORS` so the rubric stays the single source of
+ * the factor keys.
+ */
+export const GEMINI_TRIAGE_RESPONSE_SCHEMA: GeminiResponseSchema = {
+  type: "OBJECT",
+  properties: {
+    schemaVersion: { type: "STRING", enum: [AI_TRIAGE_SCHEMA_VERSION] },
+    bucket: { type: "STRING", enum: TRIAGE_BUCKETS },
+    confidence: {
+      type: "OBJECT",
+      properties: {
+        overall: { type: "NUMBER", description: "0 to 1 confidence in the bucket." },
+        factors: {
+          type: "OBJECT",
+          properties: Object.fromEntries(
+            TRIAGE_FACTORS.map((factor) => [factor, { type: "NUMBER" } as GeminiResponseSchema]),
+          ),
+          required: TRIAGE_FACTORS,
+        },
+      },
+      required: ["overall", "factors"],
+    },
+    evidence: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          factor: { type: "STRING", enum: [...TRIAGE_FACTORS, "source", "provider"] },
+          claim: { type: "STRING" },
+          quote: { type: "STRING", description: "Verbatim quote from the supplied listing text." },
+          sourceUrl: { type: "STRING" },
+        },
+        required: ["factor", "claim", "quote", "sourceUrl"],
+      },
+    },
+    reasons: { type: "ARRAY", items: { type: "STRING" } },
+    concerns: { type: "ARRAY", items: { type: "STRING" } },
+    suggestedAction: { type: "STRING" },
+  },
+  required: [
+    "schemaVersion",
+    "bucket",
+    "confidence",
+    "evidence",
+    "reasons",
+    "concerns",
+    "suggestedAction",
+  ],
 };
 
 export type GeminiTriageHandlingResult = {
