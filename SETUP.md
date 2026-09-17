@@ -263,7 +263,7 @@ pnpm check:client-secrets
 ```
 
 `pnpm check` runs those six steps in order. Oxfmt and Oxlint cover `app`, `src`,
-`scripts`, and the root config files, and `typecheck` runs `next typegen` before
+`scripts`, `e2e`, and the root config files, and `typecheck` runs `next typegen` before
 `tsc --noEmit`, so a clean checkout generates Next's types on its first run.
 Tests use fixtures, mocks, and an
 in-memory `node:sqlite` database that applies the real migrations, covering the
@@ -284,6 +284,27 @@ pnpm cf:preview
 
 The dry run builds and bundles without uploading. Preview starts a local server;
 use its printed URL for the same invite, save, reload, and API checks above.
+
+### End-to-end tests
+
+```sh
+pnpm exec playwright install chromium  # once per machine
+pnpm test:e2e                          # pnpm test:e2e:ui for the interactive runner
+```
+
+These are not part of `pnpm check`; they are a separate suite that drives a real
+browser against a real `next dev` server on `http://127.0.0.1:3111`. The server is
+started by Playwright with `APT_WRANGLER_CONFIG=e2e/wrangler.e2e.jsonc`, which is a
+copy of the committed Wrangler config plus a local `DB` binding, so requests reach
+the D1 emulator instead of a mock. Its data lives in `.wrangler/e2e-state`, separate
+from the `.wrangler/state` a normal `wrangler dev` uses, and `e2e/reset-database.mjs`
+deletes and re-migrates that directory before every run so each suite starts empty.
+Provider keys are blank for this server, so pasted links become manual-review
+records; that is what the specs assert against. `e2e/.dev.vars` holds the dummy
+invite code the suite signs in with — it is a fixture, not a secret. A failing run
+leaves an HTML report in `playwright-report/`; open it with
+`pnpm exec playwright show-report`. GitHub Actions runs the same suite in a second
+`e2e` job after the checks job and uploads that report when it fails.
 
 ## 6. Optional Cloudflare Deployment
 
