@@ -12,7 +12,8 @@ the group's decisions in one place.
 - Save listing URLs with duplicate detection, and keep an editable manual-review
   record when extraction fails.
 - Extract details through RealtyAPI for StreetEasy links, or source-page fetching
-  plus Gemini for everything else.
+  plus Gemini for everything else. Both StreetEasy paths read the same provider
+  record, so a pasted link arrives with coordinates and a map pin.
 - Review rent, rooms, photos, floor plans, evidence, and per-field edit provenance.
 - Track interest and touring status, approve or reject candidates, and leave
   comments and reactions.
@@ -20,8 +21,11 @@ the group's decisions in one place.
   a visible conflict instead of silently overwriting, and a rejected listing is
   never recreated by a delayed update.
 - Review persisted source-loop runs in the Runs tab: status, source coverage and
-  failures, skip counts, triage buckets, and the generated briefing.
-- Compare listings on a Leaflet map with neighborhood, subway, and grocery context.
+  failures, AI attempts and how many of them failed, skip counts, triage buckets,
+  and the generated briefing.
+- Compare listings on a Leaflet map with neighborhood and grocery context, plus the
+  nearest subway stations and their walking times, computed from listing coordinates
+  against a committed MTA station dataset.
 - Use list and map views on desktop or mobile, in light or dark theme.
 
 ## Screenshots
@@ -77,9 +81,9 @@ Gemini, whose output is not a guarantee of accuracy.
 | `src/lib/`          | Auth, route plumbing, extraction, triage, D1 stores, agent contracts.      |
 | `src/lib/daily-loop/` | Source loop parts: sources, candidates, briefing, persistence, analyzer. |
 | `src/lib/utils/`    | Small shared helpers for ids, JSON, records, text, and concurrency.        |
-| `src/test-support/` | Test helpers, including an in-memory SQLite stand-in for D1.               |
+| `src/test-support/` | Test-only helpers and fixtures: an in-memory D1 stand-in, agent contracts. |
 | `migrations/`       | D1 schema, applied with Wrangler.                                          |
-| `scripts/`          | Client-asset secret scan and the RealtyAPI proof script.                   |
+| `scripts/`          | Client-asset secret scan, RealtyAPI proof, MTA station dataset builder.    |
 
 ## Run It Locally
 

@@ -201,13 +201,18 @@ the app itself is running locally; consult their current terms and pricing.
 
 For StreetEasy URLs, a configured RealtyAPI key takes the provider path first.
 That path searches for an exact URL match and can make multiple paid requests;
-it does not require Gemini when successful. Without RealtyAPI, the app attempts
-the source-page/Gemini path, which may be blocked. Other URLs use source-page
-fetching and Gemini. There is no login automation or CAPTCHA bypass.
+it does not require Gemini when successful. Pasted links and the source loop read
+the same provider record, so a pasted StreetEasy listing saves the provider's
+coordinates and gets a map pin. Without RealtyAPI, the app attempts the
+source-page/Gemini path, which may be blocked. Other URLs use source-page fetching
+and Gemini. There is no login automation or CAPTCHA bypass.
 
-The map and remote photos still require internet access without these keys.
-Verify provider results against the original listing; coordinates, extracted
-facts, availability, and visual evidence can be missing or incorrect.
+Map tiles, the subway route overlay, and remote photos still require internet
+access without these keys; the nearest-station list is computed locally from the
+committed MTA dataset in `src/lib/nyc-subway-stations.ts`, but only for listings
+that have coordinates. Verify provider results against the original listing;
+coordinates, extracted facts, availability, and visual evidence can be missing or
+incorrect.
 
 To check RealtyAPI access on its own, run `pnpm proof:streeteasy` with
 `REALTYAPI_KEY` exported in your shell or set in `.env.local`, which is the only
@@ -238,7 +243,9 @@ Inspect `sourceCoverage`, `observability`, and `persistence` in the response.
 With D1 bound, `persistence.d1.rowsWritten` is nonzero and the run now appears in
 the Runs tab (use its refresh button) and in `GET /api/group/runs`, labeled
 **Fixture mode**, with its status, source failures, skip counts, and briefing.
-Provider metadata from fixture runs is shown as simulated AI attempts.
+Provider metadata from fixture runs is shown as simulated AI attempts. The tab
+also reports how many attempts failed, so a run that fell back to deterministic
+triage is visible rather than reading as a clean set of AI calls.
 Missing KV and disabled R2 are not evidence of a live storage failure. The
 `live-safe` name does not mean free: that mode can call RealtyAPI and Gemini.
 Its secondary source is not a live Zillow crawler. Automated scheduling is
@@ -383,7 +390,7 @@ Disabling the Cron schedule is not a substitute for securing those endpoints.
 | HTTP 400 `revision-required`          | Include the listing's current `revision` in `PATCH /api/group/listings/<id>` bodies.                             |
 | Empty shortlist after signing in      | A fresh database has no listings; an unavailable API can also leave the UI empty. Inspect `/api/group/listings`. |
 | Extraction needs manual review        | Check the reported source/provider error. Saving a fallback record does not mean extraction succeeded.           |
-| Blank or incomplete map               | Check tile requests, external network access, and whether the listing has usable coordinates. `tile-fetch-failed` (502 when the fallback returned no status) means both Stadia and OpenStreetMap refused the tile. |
+| Blank or incomplete map               | Check tile requests, external network access, and whether the listing has usable coordinates; a listing saved without them gets no pin and no subway context. `tile-fetch-failed` (502 when the fallback returned no status) means both Stadia and OpenStreetMap refused the tile. |
 | Run missing from the Runs tab         | Check the run response's `persistence.d1` (a missing binding writes nothing), then use the Runs refresh button.  |
 | Deployed Worker has no reachable URL  | Check `workers_dev` or your route/domain configuration; both public URL mechanisms are off by default.           |
 
