@@ -1,10 +1,10 @@
 import type { SeenRejectedMemoryRecord, SourceCoverageSummary } from "../agent-contracts";
 import {
   extractSingleLinkFixture,
-  runStreetEasyBatchFixtureWithGeminiAnalysis,
-  type GeminiFixtureAnalyzer,
-  type StreetEasyBatchFixture,
-  type StreetEasySearchResultFixture,
+  runStreetEasyBatchWithGeminiAnalysis,
+  type GeminiTriageAnalyzer,
+  type StreetEasyBatchInput,
+  type StreetEasySearchResult,
 } from "../extraction";
 import { zillowManualFixture } from "../fixtures";
 import {
@@ -39,12 +39,12 @@ import {
   type SourceRunSuccess,
 } from "./types";
 
-/** The loop's sources: the StreetEasy fixture/live-safe run and the manual Zillow fixture. */
+/** The loop's sources: the StreetEasy batch (fixture or live-safe) and the manual Zillow fixture. */
 
 export async function runStreetEasySource({
   runId,
   identity,
-  fixture,
+  batch,
   mode,
   env,
   now,
@@ -56,14 +56,14 @@ export async function runStreetEasySource({
 }: {
   runId: string;
   identity: InviteIdentity;
-  fixture: StreetEasyBatchFixture;
+  batch: StreetEasyBatchInput;
   mode: DailyLoopMode;
   env?: DailyLoopEnv;
   now: string;
   concurrencyLimit: number;
   existingStates: Map<string, ExistingCandidateState>;
   fail?: boolean;
-  analyzer?: GeminiFixtureAnalyzer;
+  analyzer?: GeminiTriageAnalyzer;
   fetchImpl?: typeof fetch;
 }): Promise<SourceRunResult> {
   if (fail) {
@@ -73,16 +73,15 @@ export async function runStreetEasySource({
   const liveMetadata = await maybeCollectStreetEasyLiveSafeMetadata({
     mode,
     ...(env !== undefined ? { env } : {}),
-    fixture,
+    batch,
     ...(fetchImpl !== undefined ? { fetchImpl } : {}),
   });
-  const sourceFixture =
-    liveMetadata.normalizedFixture ??
-    (mode === "live-safe" ? { ...fixture, results: [] } : fixture);
+  const sourceBatch =
+    liveMetadata.normalizedBatch ?? (mode === "live-safe" ? { ...batch, results: [] } : batch);
   const skipped: DailyLoopSkippedCandidate[] = [];
   const statesForExtraction: GroupScopedListingState[] = [];
 
-  for (const result of sourceFixture.results) {
+  for (const result of sourceBatch.results) {
     const state = existingStates.get(
       createGroupScopedDuplicateKey(identity.groupId, result.sourceUrl),
     );
@@ -120,9 +119,9 @@ export async function runStreetEasySource({
     );
   }
 
-  const result = await runStreetEasyBatchFixtureWithGeminiAnalysis({
+  const result = await runStreetEasyBatchWithGeminiAnalysis({
     identity,
-    fixture: sourceFixture,
+    batch: sourceBatch,
     priorStates: statesForExtraction,
     concurrencyLimit,
     ...(analyzer !== undefined ? { analyzer } : {}),
@@ -131,7 +130,7 @@ export async function runStreetEasySource({
     ...result.skipped.map((item) => ({
       source: "streeteasy" as const,
       sourceUrl:
-        sourceFixture.results.find((candidate) => candidate.listingId === item.listingId)
+        sourceBatch.results.find((candidate) => candidate.listingId === item.listingId)
           ?.sourceUrl ?? "https://streeteasy.com/",
       listingId: item.listingId,
       reason: item.reason,
@@ -144,22 +143,22 @@ export async function runStreetEasySource({
     sourceKey: "streeteasy",
     status: result.run.status === "success" ? "success" : "partial",
     classification: liveMetadata.liveAttempted ? liveMetadata.classification : "success",
-    checkedCount: sourceFixture.results.length,
+    checkedCount: sourceBatch.results.length,
     candidateCount: result.listings.length,
     rawArtifactPointers: [],
     queryMetadata: {
       mode,
       endpoint: "search/rent",
-      query: sourceFixture.query,
-      pageRange: [...new Set(sourceFixture.results.map((item) => item.page))],
+      query: sourceBatch.query,
+      pageRange: [...new Set(sourceBatch.results.map((item) => item.page))],
       liveSafe: liveMetadata,
     },
     pageMetadata: {
-      pages: [...new Set(sourceFixture.results.map((item) => item.page))],
+      pages: [...new Set(sourceBatch.results.map((item) => item.page))],
       staleOrOffMarketHandled: true,
       noMatchHandling: "empty pages do not fail other sources",
     },
-    detailRetryMetadata: sourceFixture.results.map(
+    detailRetryMetadata: sourceBatch.results.map(
       (item) =>
         liveMetadata.detailMetadataByListing[item.listingId] ?? {
           listingId: item.listingId,
@@ -337,18 +336,18 @@ type StreetEasyLiveSafeMetadata = {
   queryAttempts: number;
   detailMetadataByListing: Record<string, DailyLoopDetailRetryMetadata>;
   failureCode?: string;
-  normalizedFixture?: StreetEasyBatchFixture;
+  normalizedBatch?: StreetEasyBatchInput;
 };
 
 async function maybeCollectStreetEasyLiveSafeMetadata({
   mode,
   env,
-  fixture,
+  batch,
   fetchImpl = fetch,
 }: {
   mode: DailyLoopMode;
   env?: DailyLoopEnv;
-  fixture: StreetEasyBatchFixture;
+  batch: StreetEasyBatchInput;
   fetchImpl?: typeof fetch;
 }): Promise<StreetEasyLiveSafeMetadata> {
   if (mode !== "live-safe") {
@@ -378,13 +377,13 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
   ).replace(/\/$/, "");
   const detailMetadataByListing: Record<string, DailyLoopDetailRetryMetadata> = {};
   try {
-    const liveResults: StreetEasySearchResultFixture[] = [];
+    const liveResults: StreetEasySearchResult[] = [];
     let queryAttempts = 0;
-    for (const area of fixture.query.areas) {
+    for (const area of batch.query.areas) {
       for (let page = 1; page <= 3; page += 1) {
         queryAttempts += 1;
         const searchResponse = await fetchImpl(
-          buildRealtyApiUrl(baseUrl, "/search/rent", { ...fixture.query, areas: [area], page }),
+          buildRealtyApiUrl(baseUrl, "/search/rent", { ...batch.query, areas: [area], page }),
           { headers: { "x-realtyapi-key": apiKey } },
         );
         const searchPayload = await safeJson(searchResponse);
@@ -398,11 +397,11 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
             failureCode: `streeteasy-live-safe-search-http-${searchResponse.status}`,
           };
         }
-        liveResults.push(...normalizeStreetEasySearchPayload(searchPayload, fixture));
+        liveResults.push(...normalizeStreetEasySearchPayload(searchPayload, batch));
       }
     }
     const plausibleLiveResults = uniqueStreetEasyResults(liveResults)
-      .filter((result) => isPlausibleStreetEasySearchResult(result, fixture))
+      .filter((result) => isPlausibleStreetEasySearchResult(result, batch))
       .slice(0, 24);
     const detailPayloads: Record<string, unknown> = {};
     for (const listing of plausibleLiveResults) {
@@ -454,12 +453,8 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
         };
       }
     }
-    const normalizedFixture = mergeStreetEasyDetails(
-      plausibleLiveResults,
-      detailPayloads,
-      fixture,
-    ) ?? {
-      ...fixture,
+    const normalizedBatch = mergeStreetEasyDetails(plausibleLiveResults, detailPayloads, batch) ?? {
+      ...batch,
       results: [],
     };
     const hasDetailFailures = Object.values(detailMetadataByListing).some(
@@ -468,17 +463,17 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
     return withDefined<StreetEasyLiveSafeMetadata>({
       liveAttempted: true,
       classification:
-        normalizedFixture.results.length > 0 && !hasDetailFailures ? "success" : "partial",
+        normalizedBatch.results.length > 0 && !hasDetailFailures ? "success" : "partial",
       missingKey: false,
       queryAttempts,
       detailMetadataByListing,
       failureCode:
-        normalizedFixture.results.length === 0
+        normalizedBatch.results.length === 0
           ? "streeteasy-live-safe-no-eligible-results"
           : hasDetailFailures
             ? "streeteasy-live-safe-detail-partial"
             : undefined,
-      normalizedFixture,
+      normalizedBatch,
     });
   } catch {
     return {

@@ -1,7 +1,7 @@
 import type {
-  StreetEasyBatchFixture,
-  StreetEasyDetailsFixture,
-  StreetEasySearchResultFixture,
+  StreetEasyBatchInput,
+  StreetEasyListingDetails,
+  StreetEasySearchResult,
 } from "../extraction";
 import type { ListingDraft } from "../listings";
 import {
@@ -22,7 +22,7 @@ import { uniqueStrings } from "../utils/text";
 export function buildRealtyApiUrl(
   baseUrl: string,
   endpoint: "/search/rent" | "/rental_detailsbyid",
-  params: StreetEasyBatchFixture["query"] | { buildingid: string },
+  params: StreetEasyBatchInput["query"] | { buildingid: string },
 ) {
   const url = new URL(`${baseUrl}${endpoint}`);
   if ("buildingid" in params) {
@@ -36,7 +36,7 @@ export function buildRealtyApiUrl(
   return url.toString();
 }
 
-export function uniqueStreetEasyResults(results: StreetEasySearchResultFixture[]) {
+export function uniqueStreetEasyResults(results: StreetEasySearchResult[]) {
   const seen = new Set<string>();
   return results.filter((result) => {
     if (seen.has(result.listingId)) return false;
@@ -46,8 +46,8 @@ export function uniqueStreetEasyResults(results: StreetEasySearchResultFixture[]
 }
 
 export function isPlausibleStreetEasySearchResult(
-  result: StreetEasySearchResultFixture,
-  fallback: StreetEasyBatchFixture,
+  result: StreetEasySearchResult,
+  fallback: StreetEasyBatchInput,
 ) {
   const details = result.details;
   const address = details.address?.trim();
@@ -61,8 +61,8 @@ export function isPlausibleStreetEasySearchResult(
 
 export function normalizeStreetEasySearchPayload(
   payload: unknown,
-  fallback: StreetEasyBatchFixture,
-): StreetEasySearchResultFixture[] {
+  fallback: StreetEasyBatchInput,
+): StreetEasySearchResult[] {
   const records = Array.isArray(payload)
     ? payload
     : isRecord(payload) && Array.isArray(payload.results)
@@ -103,10 +103,10 @@ function realtyApiListingNodes(searchResults: Record<string, unknown>) {
 }
 
 export function mergeStreetEasyDetails(
-  searchResults: StreetEasySearchResultFixture[],
+  searchResults: StreetEasySearchResult[],
   detailPayloads: Record<string, unknown>,
-  fallback: StreetEasyBatchFixture,
-): StreetEasyBatchFixture | undefined {
+  fallback: StreetEasyBatchInput,
+): StreetEasyBatchInput | undefined {
   if (searchResults.length === 0) return undefined;
   const results = searchResults.map((result, index) => {
     const detailRecord = firstRecord(detailPayloads[result.listingId]);
@@ -195,10 +195,10 @@ function normalizeStreetEasyDetails(
   record: Record<string, unknown>,
   listingId: string,
   sourceUrl: string,
-): StreetEasyDetailsFixture {
+): StreetEasyListingDetails {
   const draft = realtyApiRecordToListingDraft(record);
 
-  return withDefined<StreetEasyDetailsFixture>({
+  return withDefined<StreetEasyListingDetails>({
     ...draft,
     title: draft.title ?? "StreetEasy listing",
     address: draft.address ?? "Unknown address",

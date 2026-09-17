@@ -46,7 +46,7 @@ import {
 import { mapWithBoundedConcurrency, normalizeConcurrencyLimit } from "./utils/concurrency";
 import { withDefined } from "./utils/records";
 
-export type StreetEasyDetailsFixture = ListingDraft & {
+export type StreetEasyListingDetails = ListingDraft & {
   listingId: string;
   sourceUrl: string;
   urlPath: string;
@@ -56,22 +56,22 @@ export type StreetEasyDetailsFixture = ListingDraft & {
   status?: string;
 };
 
-export type StreetEasySearchResultFixture = {
+export type StreetEasySearchResult = {
   listingId: string;
   sourceUrl: string;
   urlPath: string;
   page: number;
   location: string;
-  details: StreetEasyDetailsFixture;
+  details: StreetEasyListingDetails;
 };
 
-export type StreetEasyPastedExtractionFixture = {
+export type StreetEasyUrlResolutionInput = {
   kind: "streeteasy-realtyapi-url-resolution-fixture";
   sourceUrl: string;
   query: RealtyApiSearchQuery;
   locationCandidates: string[];
   pagesScanned: number[];
-  searchResults: StreetEasySearchResultFixture[];
+  searchResults: StreetEasySearchResult[];
 };
 
 export type ManualProviderFixture = ListingDraft & {
@@ -86,12 +86,12 @@ export type ManualProviderFixture = ListingDraft & {
   extractionFailureCode?: string;
 };
 
-export type SingleLinkExtractionFixture = StreetEasyPastedExtractionFixture | ManualProviderFixture;
+export type SingleLinkExtractionFixture = StreetEasyUrlResolutionInput | ManualProviderFixture;
 
-export type StreetEasyBatchFixture = {
+export type StreetEasyBatchInput = {
   kind: "streeteasy-batch-fixture";
   query: RealtyApiSearchQuery;
-  results: StreetEasySearchResultFixture[];
+  results: StreetEasySearchResult[];
 };
 
 export type SingleLinkExtractionResult = {
@@ -109,31 +109,31 @@ export type StreetEasyBatchResult = {
 };
 
 type StreetEasyBatchExtractionRecord = {
-  sourceResult: StreetEasySearchResultFixture;
+  sourceResult: StreetEasySearchResult;
   listing: ListingCandidate;
   extractionJob: ExtractionJob;
   output: AiExtractionOutput;
 };
 
-type GeminiFixtureAnalysisInput = {
+type GeminiTriageAnalysisInput = {
   listing: ListingCandidate;
   extractionJob: ExtractionJob;
   output: AiExtractionOutput;
-  fixtureResult: StreetEasySearchResultFixture;
+  sourceResult: StreetEasySearchResult;
   concurrencyLimit: number;
   concurrencySlot: number;
   runId: string;
 };
 
-export type GeminiFixtureAnalysisResult = {
+export type GeminiTriageAnalysisResult = {
   status: ExtractionStatus;
   triage: AgentTriage;
   providerMetadata: AiProviderAttemptMetadata;
 };
 
-export type GeminiFixtureAnalyzer = (
-  input: GeminiFixtureAnalysisInput,
-) => Promise<GeminiFixtureAnalysisResult> | GeminiFixtureAnalysisResult;
+export type GeminiTriageAnalyzer = (
+  input: GeminiTriageAnalysisInput,
+) => Promise<GeminiTriageAnalysisResult> | GeminiTriageAnalysisResult;
 
 type StreetEasyBatchGeminiAnalysisStatus = {
   listingId: string;
@@ -168,10 +168,10 @@ export function extractSingleLinkFixture({
   concurrencySlot?: number;
 }): SingleLinkExtractionResult {
   if (fixture.kind === "streeteasy-realtyapi-url-resolution-fixture") {
-    return extractStreetEasyFixture({
+    return extractStreetEasyListing({
       rawUrl,
       identity,
-      fixture,
+      resolution: fixture,
       concurrencyLimit,
       concurrencySlot,
     });
@@ -186,25 +186,25 @@ export function extractSingleLinkFixture({
   });
 }
 
-export async function runStreetEasyBatchFixtureWithGeminiAnalysis({
+export async function runStreetEasyBatchWithGeminiAnalysis({
   identity,
-  fixture,
+  batch,
   priorStates = [],
   concurrencyLimit = 2,
-  analyzer = analyzeStreetEasyFixtureWithMockGemini,
+  analyzer = analyzeStreetEasyBatchWithMockGemini,
 }: {
   identity: InviteIdentity;
-  fixture: StreetEasyBatchFixture;
+  batch: StreetEasyBatchInput;
   priorStates?: GroupScopedListingState[];
   concurrencyLimit?: number;
-  analyzer?: GeminiFixtureAnalyzer;
+  analyzer?: GeminiTriageAnalyzer;
 }): Promise<StreetEasyBatchGeminiAnalysisResult> {
   const normalizedConcurrencyLimit = normalizeConcurrencyLimit(concurrencyLimit);
-  const run = createStreetEasyBatchRun(identity.groupId, fixture.query, "manual");
+  const run = createStreetEasyBatchRun(identity.groupId, batch.query, "manual");
   const skipped: StreetEasyBatchResult["skipped"] = [];
   const records: StreetEasyBatchExtractionRecord[] = [];
 
-  for (const result of fixture.results) {
+  for (const result of batch.results) {
     const state = priorStates.find(
       (candidateState) =>
         candidateState.groupScopedDuplicateKey ===
@@ -222,13 +222,13 @@ export async function runStreetEasyBatchFixtureWithGeminiAnalysis({
     }
 
     const concurrencySlot = (records.length % normalizedConcurrencyLimit) + 1;
-    const extraction = extractStreetEasyFixture({
+    const extraction = extractStreetEasyListing({
       rawUrl: result.sourceUrl,
       identity,
-      fixture: {
+      resolution: {
         kind: "streeteasy-realtyapi-url-resolution-fixture",
         sourceUrl: result.sourceUrl,
-        query: fixture.query,
+        query: batch.query,
         locationCandidates: [result.location],
         pagesScanned: [result.page],
         searchResults: [result],
@@ -256,11 +256,11 @@ export async function runStreetEasyBatchFixtureWithGeminiAnalysis({
         listing: record.listing,
         extractionJob: record.extractionJob,
         output: record.output,
-        fixtureResult: record.sourceResult,
+        sourceResult: record.sourceResult,
         concurrencyLimit: normalizedConcurrencyLimit,
         concurrencySlot,
         runId: run.id,
-      } satisfies GeminiFixtureAnalysisInput;
+      } satisfies GeminiTriageAnalysisInput;
 
       try {
         return await analyzer(analysisInput);
@@ -271,7 +271,7 @@ export async function runStreetEasyBatchFixtureWithGeminiAnalysis({
   );
 
   const analyzedRecords = records.map((record, index) =>
-    applyGeminiFixtureAnalysis(record, analysis.results[index]!),
+    applyGeminiTriageAnalysis(record, analysis.results[index]!),
   );
   const listings = analyzedRecords.map((record) => record.listing);
   const extractionJobs = analyzedRecords.map((record) => record.extractionJob);
@@ -282,7 +282,7 @@ export async function runStreetEasyBatchFixtureWithGeminiAnalysis({
       ...run,
       status: "success",
       counts: {
-        candidatesFound: fixture.results.length,
+        candidatesFound: batch.results.length,
         candidatesSkippedSeen: skipped.filter((item) => item.reason === "seen").length,
         candidatesSkippedTriaged: skipped.filter((item) => item.reason === "triaged").length,
         candidatesAnalyzed: listings.length,
@@ -309,9 +309,9 @@ export async function runStreetEasyBatchFixtureWithGeminiAnalysis({
   };
 }
 
-async function analyzeStreetEasyFixtureWithMockGemini(
-  input: GeminiFixtureAnalysisInput,
-): Promise<GeminiFixtureAnalysisResult> {
+async function analyzeStreetEasyBatchWithMockGemini(
+  input: GeminiTriageAnalysisInput,
+): Promise<GeminiTriageAnalysisResult> {
   await Promise.resolve();
 
   return {
@@ -326,9 +326,9 @@ async function analyzeStreetEasyFixtureWithMockGemini(
 }
 
 function providerExceptionAnalysis(
-  input: GeminiFixtureAnalysisInput,
+  input: GeminiTriageAnalysisInput,
   error: unknown,
-): GeminiFixtureAnalysisResult {
+): GeminiTriageAnalysisResult {
   const failureCode =
     error instanceof Error && error.message ? error.message : "gemini-provider-failed";
 
@@ -350,6 +350,10 @@ function providerExceptionAnalysis(
   };
 }
 
+/**
+ * Fixture-only sibling of runStreetEasyBatchWithGeminiAnalysis: no analyzer, deterministic
+ * triage only. Live runs go through the Gemini variant, so this one keeps the fixture name.
+ */
 export function runStreetEasyBatchFixture({
   identity,
   fixture,
@@ -357,7 +361,7 @@ export function runStreetEasyBatchFixture({
   concurrencyLimit = 2,
 }: {
   identity: InviteIdentity;
-  fixture: StreetEasyBatchFixture;
+  fixture: StreetEasyBatchInput;
   priorStates?: GroupScopedListingState[];
   concurrencyLimit?: number;
 }): StreetEasyBatchResult {
@@ -383,10 +387,10 @@ export function runStreetEasyBatchFixture({
       continue;
     }
 
-    const extraction = extractStreetEasyFixture({
+    const extraction = extractStreetEasyListing({
       rawUrl: result.sourceUrl,
       identity,
-      fixture: {
+      resolution: {
         kind: "streeteasy-realtyapi-url-resolution-fixture",
         sourceUrl: result.sourceUrl,
         query: fixture.query,
@@ -425,10 +429,10 @@ export function runStreetEasyBatchFixture({
   };
 }
 
-function extractStreetEasyFixture({
+function extractStreetEasyListing({
   rawUrl,
   identity,
-  fixture,
+  resolution,
   concurrencyLimit,
   concurrencySlot,
   intakeKind = "pasted-url",
@@ -436,7 +440,7 @@ function extractStreetEasyFixture({
 }: {
   rawUrl: string;
   identity: InviteIdentity;
-  fixture: StreetEasyPastedExtractionFixture;
+  resolution: StreetEasyUrlResolutionInput;
   concurrencyLimit: number;
   concurrencySlot: number;
   intakeKind?: "pasted-url" | "batch-search";
@@ -444,7 +448,7 @@ function extractStreetEasyFixture({
 }): SingleLinkExtractionResult {
   const normalizedUrl = normalizeUrl(rawUrl);
   const parsedUrlPath = new URL(normalizedUrl).pathname.toLowerCase();
-  const match = fixture.searchResults.find(
+  const match = resolution.searchResults.find(
     (result) => result.urlPath.toLowerCase() === parsedUrlPath,
   );
 
@@ -517,7 +521,7 @@ function extractStreetEasyFixture({
   const resolutionJob = createStreetEasyUrlResolutionJob(
     identity.groupId,
     normalizedUrl,
-    fixture.query,
+    resolution.query,
   );
 
   return {
@@ -540,12 +544,12 @@ function extractStreetEasyFixture({
         realtyApiListingId: details.listingId,
         exactUrlPathMatch: true,
         matchedUrlPath: match.urlPath,
-        locationCandidates: fixture.locationCandidates,
-        pagesScanned: fixture.pagesScanned,
+        locationCandidates: resolution.locationCandidates,
+        pagesScanned: resolution.pagesScanned,
         nycGeoSearch: {
           status: "success",
           strategy: "infer-location-candidates-from-streeteasy-url-slug",
-          locationCandidates: fixture.locationCandidates,
+          locationCandidates: resolution.locationCandidates,
         },
       },
       updatedAt: new Date().toISOString(),
@@ -1091,9 +1095,9 @@ function stableId(value: string): string {
   return `extraction-${createDuplicateKey(`https://fixture.local/${encodeURIComponent(value)}`).replace(/[^a-z0-9]+/g, "-")}`;
 }
 
-function applyGeminiFixtureAnalysis(
+function applyGeminiTriageAnalysis(
   record: StreetEasyBatchExtractionRecord,
-  analysis: GeminiFixtureAnalysisResult,
+  analysis: GeminiTriageAnalysisResult,
 ): StreetEasyBatchExtractionRecord {
   const handled = handleGeminiTriageOutput({
     candidate: createTriageCandidateFromListing(

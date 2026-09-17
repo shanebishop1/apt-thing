@@ -102,10 +102,10 @@ export async function runDailySourceAgentLoop(
       }),
     ].flatMap((error) => error ?? []),
   );
-  const fixture = options.streeteasyFixture ?? streetEasyBatchFixture;
+  const batch = options.streeteasyBatch ?? streetEasyBatchFixture;
   const preexistingStates = buildExistingStates({
     groupId: identity.groupId,
-    fixture,
+    batch,
     existingListings: options.existingListings ?? [],
     seenMemory: options.seenMemory ?? [],
     priorStates: options.priorStates ?? [],
@@ -122,7 +122,7 @@ export async function runDailySourceAgentLoop(
   const streetEasyResult = await runStreetEasySource({
     runId,
     identity,
-    fixture,
+    batch,
     mode,
     ...envOption,
     now,

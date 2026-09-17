@@ -1,8 +1,8 @@
 import {
   runStreetEasyBatchFixture,
   type ManualProviderFixture,
-  type StreetEasyBatchFixture,
-  type StreetEasyPastedExtractionFixture,
+  type StreetEasyBatchInput,
+  type StreetEasyUrlResolutionInput,
 } from "./extraction";
 import type { ListingCandidate } from "./listings";
 import {
@@ -64,7 +64,7 @@ const streetEasyPhotoUrls = [
   "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80",
 ];
 
-export const streetEasyPastedFixture: StreetEasyPastedExtractionFixture = {
+export const streetEasyPastedFixture: StreetEasyUrlResolutionInput = {
   kind: "streeteasy-realtyapi-url-resolution-fixture",
   sourceUrl: "https://streeteasy.com/building/152-manhattan-avenue-brooklyn/4b",
   query: {
@@ -114,7 +114,7 @@ const batchPhotoUrls = [
   "https://images.unsplash.com/photo-1560448205-4d9b3e6bb6db?auto=format&fit=crop&w=1200&q=80",
 ];
 
-export const streetEasyBatchFixture: StreetEasyBatchFixture = {
+export const streetEasyBatchFixture: StreetEasyBatchInput = {
   kind: "streeteasy-batch-fixture",
   query: {
     endpoint: "search/rent",

@@ -296,7 +296,7 @@ describe("runDailySourceAgentLoop", () => {
     const staleListing = (
       await runDailySourceAgentLoop({
         identity,
-        streeteasyFixture: changedFixture,
+        streeteasyBatch: changedFixture,
         failSecondary: true,
         now: "2026-06-07T17:00:00.000Z",
       })
@@ -305,7 +305,7 @@ describe("runDailySourceAgentLoop", () => {
 
     const result = await runDailySourceAgentLoop({
       identity,
-      streeteasyFixture: changedFixture,
+      streeteasyBatch: changedFixture,
       existingListings: [staleListing],
       failSecondary: true,
       now: "2026-06-07T18:00:00.000Z",
@@ -467,7 +467,7 @@ describe("runDailySourceAgentLoop", () => {
     try {
       const result = await runDailySourceAgentLoop({
         identity,
-        streeteasyFixture: { ...streetEasyBatchFixture, results: [savedResult, rejectedResult] },
+        streeteasyBatch: { ...streetEasyBatchFixture, results: [savedResult, rejectedResult] },
         failSecondary: true,
         env: { DB: db },
         now: "2026-09-17T12:00:00.000Z",
@@ -545,7 +545,7 @@ describe("runDailySourceAgentLoop", () => {
     try {
       const firstRun = await runDailySourceAgentLoop({
         identity,
-        streeteasyFixture: fixture,
+        streeteasyBatch: fixture,
         failSecondary: true,
         env: { DB: db },
         now: "2026-09-17T12:00:00.000Z",
@@ -559,7 +559,7 @@ describe("runDailySourceAgentLoop", () => {
 
       const secondRun = await runDailySourceAgentLoop({
         identity,
-        streeteasyFixture: changedFixture,
+        streeteasyBatch: changedFixture,
         existingListings: [savedListing],
         failSecondary: true,
         env: { DB: db },

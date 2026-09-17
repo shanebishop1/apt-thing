@@ -5,10 +5,7 @@ import {
   defaultSearchGroup,
   MAX_IMAGES_PER_LISTING,
 } from "./listings";
-import {
-  extractSingleLinkFixture,
-  runStreetEasyBatchFixtureWithGeminiAnalysis,
-} from "./extraction";
+import { extractSingleLinkFixture, runStreetEasyBatchWithGeminiAnalysis } from "./extraction";
 import {
   nonFirstClassApartmentFixture,
   streetEasyBatchFixture,
@@ -65,7 +62,7 @@ describe("fixture extraction pipeline", () => {
     );
   });
 
-  it("processes StreetEasy batch fixtures through bounded async Gemini fixture analysis", async () => {
+  it("processes StreetEasy batch fixtures through bounded async Gemini triage analysis", async () => {
     const seen = createGroupScopedListingState(
       defaultSearchGroup.id,
       streetEasyBatchFixture.results[0]!.sourceUrl,
@@ -78,9 +75,9 @@ describe("fixture extraction pipeline", () => {
     );
     const analyzerCalls: string[] = [];
 
-    const result = await runStreetEasyBatchFixtureWithGeminiAnalysis({
+    const result = await runStreetEasyBatchWithGeminiAnalysis({
       identity,
-      fixture: streetEasyBatchFixture,
+      batch: streetEasyBatchFixture,
       priorStates: [seen, triaged],
       concurrencyLimit: 2,
       analyzer: async (input) => {
@@ -172,9 +169,9 @@ describe("fixture extraction pipeline", () => {
   });
 
   it("rejects malformed Gemini analyzer output before persistence on the extraction path", async () => {
-    const result = await runStreetEasyBatchFixtureWithGeminiAnalysis({
+    const result = await runStreetEasyBatchWithGeminiAnalysis({
       identity,
-      fixture: {
+      batch: {
         ...streetEasyBatchFixture,
         results: [streetEasyBatchFixture.results[2]!],
       },
