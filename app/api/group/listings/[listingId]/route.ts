@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeGroupRequest } from "@/lib/api-auth";
+import type { GroupActionRecord } from "@/lib/agent-contracts";
 import { isEditableListingField, isReviewStatus } from "@/lib/listings";
 import {
   d1BindingMissingResponse,
@@ -17,6 +18,7 @@ import {
   parseExpectedRevision,
 } from "@/lib/shared-listing-api";
 import { readSharedListingSnapshot, type D1DatabaseLike } from "@/lib/shared-listing-store";
+import { withDefined } from "@/lib/utils/records";
 
 type AppRouteEnv = Partial<Record<"DB", unknown>>;
 type RouteContext = { params: Promise<{ listingId: string }> };
@@ -95,12 +97,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
       db: env.DB,
       identity,
       listingId,
-      action: {
+      action: withDefined<
+        Pick<GroupActionRecord, "actionType" | "commentBody" | "reaction" | "sourceUrl">
+      >({
         actionType: normalizeActionType(body.actionType),
         commentBody: typeof body.commentBody === "string" ? body.commentBody : undefined,
         reaction: normalizeReaction(body.reaction),
         sourceUrl: typeof body.sourceUrl === "string" ? body.sourceUrl : undefined,
-      },
+      }),
     });
     return NextResponse.json({ ok: true, snapshot });
   } catch (error) {

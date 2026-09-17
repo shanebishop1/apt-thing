@@ -1,5 +1,6 @@
 import type { GroupActionRecord, SeenRejectedMemoryRecord } from "./agent-contracts";
 import type { InviteIdentity, ListingCandidate } from "./listings";
+import { withDefined } from "./utils/records";
 
 export type ListingGroupActions = {
   comments: GroupActionRecord[];
@@ -44,7 +45,7 @@ export function appendGroupAction(
   }
 
   const createdAt = new Date().toISOString();
-  const actionRecord: GroupActionRecord = {
+  const actionRecord = withDefined<GroupActionRecord>({
     id: createGroupActionId(
       identity.groupId,
       listing.id,
@@ -69,7 +70,7 @@ export function appendGroupAction(
     provenance: createActionProvenance(action.actionType, listing),
     feedback: action.feedback,
     createdAt,
-  };
+  });
 
   const remainingActions =
     action.actionType === "reaction"

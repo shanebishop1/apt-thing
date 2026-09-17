@@ -9,6 +9,7 @@ import type {
   TriageBucket,
   TriageStatus,
 } from "./listings";
+import { withDefined } from "./utils/records";
 
 export type EvidenceStoragePointer = {
   owner: "d1" | "r2";
@@ -411,7 +412,7 @@ export function evidencePointerToSourceEvidenceRecord({
   claim: string;
   quote: string;
 }): SourceEvidenceRecord {
-  return {
+  return withDefined<SourceEvidenceRecord>({
     id: `source-evidence-${pointer.id}`,
     contract: "source-evidence-v1",
     groupId: pointer.groupId,
@@ -427,7 +428,7 @@ export function evidencePointerToSourceEvidenceRecord({
       groupScoped: true,
     },
     capturedAt: pointer.capturedAt,
-  };
+  });
 }
 
 function validateSeenRejectedMemory(

@@ -1,4 +1,5 @@
 import { INVITE_IDENTITY_STORAGE_KEY, parseInviteInput } from "./listings";
+import { withDefined } from "./utils/records";
 
 /** Version prefix for the browser-local keys this module owns. */
 const inviteIdentityStorageVersion = "v1";
@@ -57,7 +58,7 @@ export function readStoredInviteIdentity(storage: StorageLike): StoredInviteIden
       return undefined;
     }
 
-    return {
+    return withDefined<StoredInviteIdentity>({
       version: inviteIdentityStorageVersion,
       inviteCode: parsedIdentity.inviteCode,
       displayName: parsedIdentity.displayName,
@@ -68,7 +69,7 @@ export function readStoredInviteIdentity(storage: StorageLike): StoredInviteIden
         typeof parsedIdentity.updatedAt === "string"
           ? parsedIdentity.updatedAt
           : new Date(0).toISOString(),
-    };
+    });
   } catch {
     return undefined;
   }
@@ -78,7 +79,7 @@ export function writeStoredInviteIdentity(
   storage: StorageLike,
   input: { inviteCode: string; displayName: string; groupId?: string },
 ): StoredInviteIdentity {
-  const storedIdentity: StoredInviteIdentity = {
+  const storedIdentity = withDefined<StoredInviteIdentity>({
     version: inviteIdentityStorageVersion,
     inviteCode: input.inviteCode.trim(),
     displayName: input.displayName.trim(),
@@ -86,7 +87,7 @@ export function writeStoredInviteIdentity(
     persistedIn: "localStorage",
     storageKey: INVITE_IDENTITY_STORAGE_KEY,
     updatedAt: new Date().toISOString(),
-  };
+  });
 
   storage.setItem(INVITE_IDENTITY_STORAGE_KEY, JSON.stringify(storedIdentity));
   return storedIdentity;

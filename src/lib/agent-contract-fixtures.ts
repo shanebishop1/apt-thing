@@ -32,6 +32,7 @@ import {
   type AiProviderAttemptMetadata,
   type ListingCandidate,
 } from "./listings";
+import { withDefined } from "./utils/records";
 
 /**
  * Deterministic fixture inputs assembled from the extraction pipeline so tests can
@@ -331,7 +332,7 @@ const runSummary: AgentRunLogRecord = {
       startedAt: generatedAt,
       completedAt: generatedAt,
     },
-    {
+    withDefined<AgentRunLogRecord["units"][number]>({
       id: "run-unit-confirmed-match-fixture",
       source: "streeteasy",
       sourceUrl: confirmedMatch.url,
@@ -341,7 +342,7 @@ const runSummary: AgentRunLogRecord = {
       maxRetries: 1,
       startedAt: generatedAt,
       completedAt: generatedAt,
-    },
+    }),
     sourceFailureUnit,
   ],
 };
@@ -421,24 +422,26 @@ export function createBriefingRunHistoryFixture(
     bundle.listingCandidates.rejectedDowngraded,
   ].map((listing) => toCandidateSummary(listing, bundle));
   const rawArtifactPointers = rawPointersForRun(bundle, run.id);
-  const sourceCoverage = sourceBriefing.sourceCoverage.map((coverage): SourceCoverageSummary => ({
-    source: coverage.source,
-    status: coverage.status,
-    checkedCount: coverage.checkedCount,
-    candidateCount:
-      coverage.source === "streeteasy"
-        ? candidateSummaries.filter((candidate) => candidate.source === "streeteasy").length
-        : 0,
-    failureCode: coverage.failureCode,
-    failureMessage: coverage.failureCode
-      ? "Fixture source failed without blocking other sources."
-      : undefined,
-    rawArtifactPointers:
-      coverage.status === "failed"
-        ? rawArtifactPointers.filter((pointer) => pointer.key.includes("source-failures"))
-        : rawArtifactPointers.filter((pointer) => !pointer.key.includes("source-failures")),
-  }));
-  const latestRun: BriefingRunHistoryRun = {
+  const sourceCoverage = sourceBriefing.sourceCoverage.map((coverage) =>
+    withDefined<SourceCoverageSummary>({
+      source: coverage.source,
+      status: coverage.status,
+      checkedCount: coverage.checkedCount,
+      candidateCount:
+        coverage.source === "streeteasy"
+          ? candidateSummaries.filter((candidate) => candidate.source === "streeteasy").length
+          : 0,
+      failureCode: coverage.failureCode,
+      failureMessage: coverage.failureCode
+        ? "Fixture source failed without blocking other sources."
+        : undefined,
+      rawArtifactPointers:
+        coverage.status === "failed"
+          ? rawArtifactPointers.filter((pointer) => pointer.key.includes("source-failures"))
+          : rawArtifactPointers.filter((pointer) => !pointer.key.includes("source-failures")),
+    }),
+  );
+  const latestRun = withDefined<BriefingRunHistoryRun>({
     runId: run.id,
     cadence: run.cadence,
     trigger: run.trigger,
@@ -462,7 +465,7 @@ export function createBriefingRunHistoryFixture(
     candidateSummaries,
     providerMetadata: [briefingProviderMetadata()],
     rawArtifactPointers,
-  };
+  });
   const latestBriefing: LatestBriefingSummary = {
     id: sourceBriefing.id,
     runId: run.id,
@@ -526,7 +529,7 @@ function toCandidateSummary(
     (record) => record.listingId === listing.id || record.sourceUrl === listing.url,
   );
 
-  return {
+  return withDefined<BriefingCandidateSummary>({
     listingId: listing.id,
     sourceUrl: listing.url,
     source: listing.source,
@@ -555,7 +558,7 @@ function toCandidateSummary(
         : listing.triageBucket === "review-needed"
           ? "Review uncertainty before promoting to current matches."
           : "Keep rejected in memory so it is not repeatedly reviewed.",
-  };
+  });
 }
 
 function createFeedbackSummaries(

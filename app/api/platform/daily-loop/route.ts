@@ -8,6 +8,7 @@ import {
 } from "@/lib/daily-source-loop";
 import { type Cadence } from "@/lib/listings";
 import { readCloudflareEnv, readJsonObject, readServerSecret } from "@/lib/route-support";
+import { withDefined } from "@/lib/utils/records";
 
 type DailyLoopRouteEnv = DailyLoopEnv & Partial<Record<"APP_ENV", string>>;
 
@@ -47,13 +48,13 @@ export async function POST(request: NextRequest) {
 }
 
 function dailyLoopEnv(env: DailyLoopRouteEnv | undefined): DailyLoopEnv {
-  return {
+  return withDefined<DailyLoopEnv>({
     GEMINI_API_KEY: readServerSecret(env, "GEMINI_API_KEY"),
     REALTYAPI_KEY: readServerSecret(env, "REALTYAPI_KEY"),
     REALTYAPI_BASE_URL: readServerSecret(env, "REALTYAPI_BASE_URL"),
     DB: env?.DB,
     APP_CACHE: env?.APP_CACHE,
-  };
+  });
 }
 
 function normalizeCadence(value: unknown): Cadence | undefined {

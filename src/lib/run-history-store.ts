@@ -9,6 +9,7 @@ import type {
 import type { Cadence, ListingCandidate, RunStatus } from "./listings";
 import type { D1DatabaseLike } from "./shared-listing-store";
 import { parseJson } from "./utils/json";
+import { withDefined } from "./utils/records";
 
 const RUN_HISTORY_LIMIT = 25;
 
@@ -124,17 +125,19 @@ export async function readPersistedRunHistory(
   return {
     groupId,
     generatedAt: now,
-    runs: runRows.map((row) =>
-      assembleRun(row, {
+    runs: runRows.map((row) => {
+      const briefing = briefingRows.find((candidate) => candidate.run_id === row.id);
+
+      return assembleRun(row, {
         sources: sourceRows.filter((source) => source.run_id === row.id),
         candidates: candidateRows.filter((candidate) => candidate.run_id === row.id),
         statuses: statusRows.filter((status) => status.run_id === row.id),
         memoryUpdates: Number(
           memoryRows.find((memory) => memory.last_run_id === row.id)?.total ?? 0,
         ),
-        briefing: briefingRows.find((briefing) => briefing.run_id === row.id),
-      }),
-    ),
+        ...(briefing !== undefined ? { briefing } : {}),
+      });
+    }),
   };
 }
 
@@ -164,7 +167,7 @@ function assembleRun(
     related.candidates.filter((candidate) => candidate.triage_bucket === bucket).length;
   const sourceCoverage = related.sources.map(toSourceCoverage);
 
-  return {
+  return withDefined<PersistedRunHistoryRun>({
     runId: row.id,
     cadence: row.cadence,
     trigger: row.trigger,
@@ -195,7 +198,7 @@ function assembleRun(
     providerMetadata: briefingRun?.providerMetadata ?? [],
     rawArtifactPointers: briefingRun?.rawArtifactPointers ?? [],
     briefingSummary: briefingRecord?.summary,
-  };
+  });
 }
 
 function findBriefingRun(
@@ -214,7 +217,7 @@ function toSourceCoverage(row: SourceRow): SourceCoverageSummary {
     ? [{ owner: "d1", key: row.raw_artifact_r2_key, groupScoped: true }]
     : [];
 
-  return {
+  return withDefined<SourceCoverageSummary>({
     source: row.source,
     status: row.status,
     checkedCount: Number(row.checked_count),
@@ -222,5 +225,5 @@ function toSourceCoverage(row: SourceRow): SourceCoverageSummary {
     failureCode: row.failure_code ?? undefined,
     failureMessage: row.failure_message ?? undefined,
     rawArtifactPointers: pointers,
-  };
+  });
 }

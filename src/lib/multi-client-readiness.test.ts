@@ -93,7 +93,7 @@ class Client {
     return new NextRequest(`https://apt.test${path}`, {
       method,
       headers: { "Content-Type": "application/json", Cookie: this.cookie },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   }
 }

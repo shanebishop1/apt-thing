@@ -91,7 +91,7 @@ function request(
   return new NextRequest(`https://apt.test${path}`, {
     method,
     headers: { "Content-Type": "application/json", ...headers },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }
 

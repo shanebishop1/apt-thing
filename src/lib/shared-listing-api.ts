@@ -22,8 +22,10 @@ import {
   upsertSeenRejectedMemoryRecord,
   type ConditionalWriteResult,
   type D1DatabaseLike,
+  type StoredExtractionJob,
 } from "./shared-listing-store";
 import { extractListingFromUrlLive, type SingleLinkExtractionEnv } from "./single-link-extraction";
+import { withDefined } from "./utils/records";
 
 export type SharedApiEnv = SingleLinkExtractionEnv & { DB?: D1DatabaseLike };
 
@@ -64,7 +66,11 @@ export async function createListingFromSharedApi({
     return { kind: "duplicate" as const, listing: existingListing };
   }
 
-  const extraction = await extractListingFromUrlLive({ rawUrl: normalizedUrl, identity, env });
+  const extraction = await extractListingFromUrlLive({
+    rawUrl: normalizedUrl,
+    identity,
+    ...(env !== undefined ? { env } : {}),
+  });
   if (extraction.listing.groupScopedDuplicateKey !== duplicateKey) {
     const canonicalExistingListing = await findListingByDuplicateKey(
       db,
@@ -79,19 +85,22 @@ export async function createListingFromSharedApi({
   if (inserted.kind === "duplicate") {
     return { kind: "duplicate" as const, listing: inserted.listing };
   }
-  await recordExtractionJob(db, {
-    id: `extraction-${extraction.listing.id}-${Date.now()}`,
-    groupId: identity.groupId,
-    listingId: extraction.listing.id,
-    sourceUrl: normalizedUrl,
-    status: extraction.listing.extractionStatus,
-    provider: extraction.extraction.providerCalled ? "google-direct" : undefined,
-    model: extraction.extraction.providerCalled ? "gemini-3.5-flash" : undefined,
-    failureCode: extraction.extraction.failureCode,
-    failureMessage: extraction.extraction.failureMessage,
-    createdAt: extraction.listing.createdAt,
-    updatedAt: extraction.listing.updatedAt,
-  });
+  await recordExtractionJob(
+    db,
+    withDefined<StoredExtractionJob>({
+      id: `extraction-${extraction.listing.id}-${Date.now()}`,
+      groupId: identity.groupId,
+      listingId: extraction.listing.id,
+      sourceUrl: normalizedUrl,
+      status: extraction.listing.extractionStatus,
+      provider: extraction.extraction.providerCalled ? "google-direct" : undefined,
+      model: extraction.extraction.providerCalled ? "gemini-3.5-flash" : undefined,
+      failureCode: extraction.extraction.failureCode,
+      failureMessage: extraction.extraction.failureMessage,
+      createdAt: extraction.listing.createdAt,
+      updatedAt: extraction.listing.updatedAt,
+    }),
+  );
 
   return {
     kind: "created" as const,

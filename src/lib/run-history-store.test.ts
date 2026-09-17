@@ -101,12 +101,13 @@ describe("readPersistedRunHistory", () => {
       runId: "running-run",
       status: "running",
       mode: "live-safe",
-      completedAt: undefined,
       candidateSummaries: [],
       providerMetadata: [],
       sourceCoverage: [],
-      briefingSummary: undefined,
     });
+    // A run still in flight carries no completion or briefing keys at all.
+    expect(history.runs[0]).not.toHaveProperty("completedAt");
+    expect(history.runs[0]).not.toHaveProperty("briefingSummary");
   });
 });
 

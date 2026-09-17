@@ -8,8 +8,9 @@ import {
   readJsonObject,
   readServerSecret,
 } from "@/lib/route-support";
-import { createListingFromSharedApi } from "@/lib/shared-listing-api";
+import { createListingFromSharedApi, type SharedApiEnv } from "@/lib/shared-listing-api";
 import { readSharedListingSnapshot } from "@/lib/shared-listing-store";
+import { withDefined } from "@/lib/utils/records";
 
 type AppRouteEnv = Partial<
   Record<"DB" | "GEMINI_API_KEY" | "REALTYAPI_KEY" | "REALTYAPI_BASE_URL", unknown>
@@ -42,11 +43,11 @@ export async function POST(request: NextRequest) {
       db: env.DB,
       rawUrl,
       identity,
-      env: {
+      env: withDefined<SharedApiEnv>({
         GEMINI_API_KEY: readServerSecret(env, "GEMINI_API_KEY"),
         REALTYAPI_KEY: readServerSecret(env, "REALTYAPI_KEY"),
         REALTYAPI_BASE_URL: readServerSecret(env, "REALTYAPI_BASE_URL"),
-      },
+      }),
     });
     const snapshot = await readSharedListingSnapshot(env.DB, identity.groupId);
     return NextResponse.json({ ok: true, result, snapshot });
