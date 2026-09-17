@@ -10,6 +10,7 @@ import {
   type TriageCandidateInput,
   type TriageResult,
 } from "./triage";
+import { withDefined, type WithUndefined } from "./utils/records";
 
 const baseSourceUrl = "https://streeteasy.com/building/confirmed-five-bed/1";
 
@@ -29,10 +30,14 @@ function evidence(sourceUrl = baseSourceUrl, quote = "5 beds, 2 baths, entire ap
   ];
 }
 
-function candidate(overrides: Partial<TriageCandidateInput> = {}): TriageCandidateInput {
+function candidate(
+  overrides: Partial<WithUndefined<TriageCandidateInput>> = {},
+): TriageCandidateInput {
   const sourceUrl = overrides.sourceUrl ?? baseSourceUrl;
 
-  return {
+  // withDefined drops the overridden-to-undefined keys, so a test spells "this
+  // field is absent" as `field: undefined`.
+  return withDefined<TriageCandidateInput>({
     ownership: {
       groupId: "nyc-5br-2026",
       runId: "run-fit-evidence-fixture",
@@ -55,7 +60,7 @@ function candidate(overrides: Partial<TriageCandidateInput> = {}): TriageCandida
     description: "Full-floor whole apartment with 5 bedrooms and 2 baths.",
     evidence: evidence(sourceUrl),
     ...overrides,
-  };
+  });
 }
 
 describe("fit/evidence triage core", () => {

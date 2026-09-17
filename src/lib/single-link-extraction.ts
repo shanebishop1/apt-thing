@@ -11,7 +11,7 @@ import {
   type ListingEvidence,
 } from "./listings";
 import { safeJson } from "./utils/json";
-import { firstRecord, isRecord, numberField, stringField } from "./utils/records";
+import { firstRecord, isRecord, numberField, stringField, withDefined } from "./utils/records";
 import { titleCase, uniqueStrings } from "./utils/text";
 
 export type SingleLinkExtractionEnv = {
@@ -67,7 +67,7 @@ export async function extractListingFromUrlLive({
     const streetEasyResult = await extractStreetEasyViaRealtyApi({
       rawUrl: initialListing.url,
       identity,
-      env,
+      ...(env !== undefined ? { env } : {}),
       fetchImpl,
     });
 
@@ -95,7 +95,11 @@ export async function extractListingFromUrlLive({
   if (mismatch) {
     return {
       listing: markManualNeeded(
-        createListingFromUrl(rawUrl, identity, { title: sourceUrlTitle(initialListing.url) }),
+        createListingFromUrl(
+          rawUrl,
+          identity,
+          withDefined<ListingDraft>({ title: sourceUrlTitle(initialListing.url) }),
+        ),
         "source-page-content-mismatch",
         mismatch,
       ),
@@ -147,7 +151,7 @@ export async function extractListingFromUrlLive({
         providerCalled: true,
         failureCode: geminiResult.failureCode,
         failureMessage: geminiResult.failureMessage,
-        rawText: geminiResult.rawText,
+        ...(geminiResult.rawText !== undefined ? { rawText: geminiResult.rawText } : {}),
       },
     };
   }
@@ -410,7 +414,7 @@ async function callGeminiForListingExtraction({
       return {
         ok: true,
         rawText,
-        output: {
+        output: withDefined<GeminiListingExtraction>({
           title: parsed.title,
           address: parsed.address,
           neighborhood: normalizeString(parsed.neighborhood),
@@ -425,7 +429,7 @@ async function callGeminiForListingExtraction({
           evidence: normalizeEvidence(parsed.evidence, url),
           concerns: normalizeStringArray(parsed.concerns),
           confidence: normalizeNumber(parsed.confidence) ?? 0,
-        },
+        }),
       };
     } catch (error) {
       failures.push({
@@ -437,13 +441,15 @@ async function callGeminiForListingExtraction({
     }
   }
 
+  const lastFailure = failures.at(-1);
+
   return {
     ok: false,
-    failureCode: failures.at(-1)?.failureCode ?? "gemini-extraction-failed",
+    failureCode: lastFailure?.failureCode ?? "gemini-extraction-failed",
     failureMessage:
       failures.map((failure) => `${failure.failureCode}: ${failure.failureMessage}`).join("\n") ||
       "Gemini extraction failed.",
-    rawText: failures.at(-1)?.rawText,
+    ...(lastFailure?.rawText !== undefined ? { rawText: lastFailure.rawText } : {}),
   };
 }
 
@@ -672,7 +678,7 @@ function extractSourcePageMetadata(html: string, sourceUrl: string): SourcePageM
 
   const cleanedAddress = cleanExtractedAddress(address, title);
 
-  return {
+  return withDefined<SourcePageMetadata>({
     title,
     address: cleanedAddress,
     neighborhood: inferNeighborhood(text),
@@ -689,7 +695,7 @@ function extractSourcePageMetadata(html: string, sourceUrl: string): SourcePageM
         sourceUrl,
       },
     ],
-  };
+  });
 }
 
 function extractJsonLdObjects(html: string): Array<Record<string, any>> {
@@ -783,7 +789,7 @@ function mergeDrafts(
   output: GeminiListingExtraction,
 ): GeminiListingExtraction {
   const title = output.title ?? metadata.title;
-  return {
+  return withDefined<GeminiListingExtraction>({
     title,
     address:
       cleanExtractedAddress(output.address ?? metadata.address, title ?? "") ??
@@ -801,7 +807,7 @@ function mergeDrafts(
     evidence: output.evidence.length ? output.evidence : metadata.evidence,
     concerns: output.concerns,
     confidence: output.confidence,
-  };
+  });
 }
 
 function firstString(values: unknown[]): string | undefined {
@@ -1003,7 +1009,7 @@ function realtyApiRecordToDraft(record: Record<string, unknown>, sourceUrl: stri
   const media = isRecord(record.media) ? record.media : undefined;
   const amenities = details && isRecord(details.amenities) ? details.amenities : undefined;
   const features = details && isRecord(details.features) ? details.features : undefined;
-  return {
+  return withDefined<ListingDraft>({
     title: title ?? address,
     address: normalizedAddress
       ? cleanExtractedAddress(normalizedAddress, title ?? "StreetEasy listing")
@@ -1037,7 +1043,7 @@ function realtyApiRecordToDraft(record: Record<string, unknown>, sourceUrl: stri
       ...stringArrayField(media ?? {}, ["photos"]),
     ]).filter(isLikelyListingPhoto),
     sourceListingId: stringField(record, ["listingId", "listing_id", "id"]),
-  };
+  });
 }
 
 function formatNestedAddress(address: Record<string, unknown>): string | undefined {

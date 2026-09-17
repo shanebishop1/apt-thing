@@ -25,6 +25,8 @@ import {
   type ListingCandidate,
   type ListingDraft,
   type ListingEvidence,
+  type MinimumSavedListRow,
+  type NormalizedListingJson,
   type RealtyApiSearchQuery,
   type SourceType,
   type StreetEasyBatchRun,
@@ -42,6 +44,7 @@ import {
   type TriageSource,
 } from "./triage";
 import { mapWithBoundedConcurrency, normalizeConcurrencyLimit } from "./utils/concurrency";
+import { withDefined } from "./utils/records";
 
 export type StreetEasyDetailsFixture = ListingDraft & {
   listingId: string;
@@ -472,7 +475,7 @@ function extractStreetEasyFixture({
       ? undefined
       : (details.fullBathrooms ?? 0) + (details.halfBathrooms ?? 0) * 0.5;
   const bathrooms = details.bathrooms ?? fallbackBathrooms;
-  const draft: ListingDraft = {
+  const draft = withDefined<ListingDraft>({
     sourceListingId: details.listingId,
     title: details.title,
     address: details.address,
@@ -486,7 +489,7 @@ function extractStreetEasyFixture({
     description: details.description,
     amenities: details.amenities,
     photos: details.photos,
-  };
+  });
   const evidence = [
     sourceEvidence("RealtyAPI search/rent exact urlPath match", match.sourceUrl),
     sourceEvidence("RealtyAPI detail payload", match.sourceUrl),
@@ -524,7 +527,7 @@ function extractStreetEasyFixture({
       listing,
       output,
       intakeKind,
-      runId,
+      ...(runId !== undefined ? { runId } : {}),
       providerMetadata,
     }),
     output,
@@ -565,7 +568,7 @@ function extractManualProviderFixture({
 }): SingleLinkExtractionResult {
   const sourceUrl = normalizeUrl(rawUrl);
   const manualReviewRequired = fixture.manualReviewRequired ?? fixture.status !== "success";
-  const draft: ListingDraft = {
+  const draft = withDefined<ListingDraft>({
     sourceListingId: fixture.sourceListingId,
     title: fixture.title,
     address: fixture.address,
@@ -579,7 +582,7 @@ function extractManualProviderFixture({
     description: fixture.description,
     amenities: fixture.amenities,
     photos: fixture.photos,
-  };
+  });
   const normalized = buildNormalizedListing({
     identity,
     sourceUrl,
@@ -592,8 +595,8 @@ function extractManualProviderFixture({
     normalized,
     intakeKind: "pasted-url",
     runId: "manual-single-link",
-    overrideBucket: fixture.triageBucket,
-    overrideStatus: fixture.triageStatus,
+    ...(fixture.triageBucket !== undefined ? { overrideBucket: fixture.triageBucket } : {}),
+    ...(fixture.triageStatus !== undefined ? { overrideStatus: fixture.triageStatus } : {}),
   });
   const providerMetadata = successfulProviderMetadata(
     normalized.imageEvidence.length,
@@ -643,15 +646,17 @@ function buildNormalizedListing({
   const fitFlags = withManualFlag(
     calculateFitFlags(draft, sourceUrl),
     manualReviewRequired ||
-      !hasMinimumRowFields({
-        url: sourceUrl,
-        title: draft.title,
-        rent: draft.rent,
-        bedrooms: draft.bedrooms,
-      }),
+      !hasMinimumRowFields(
+        withDefined<Partial<MinimumSavedListRow>>({
+          url: sourceUrl,
+          title: draft.title,
+          rent: draft.rent,
+          bedrooms: draft.bedrooms,
+        }),
+      ),
   );
 
-  return {
+  return withDefined<NormalizedListingJson>({
     groupId: identity.groupId,
     source,
     sourceUrl,
@@ -672,7 +677,7 @@ function buildNormalizedListing({
     evidence,
     concerns: [...concerns, ...buildConcerns(draft, manualReviewRequired)],
     fitFlags,
-  };
+  });
 }
 
 function buildListingFromOutput({
@@ -687,25 +692,29 @@ function buildListingFromOutput({
   intakeKind?: "pasted-url" | "batch-search";
 }): ListingCandidate {
   const normalized = output.normalizedListing;
-  const base = createListingFromUrl(rawUrl, identity, {
-    sourceListingId: normalized.sourceListingId,
-    title: normalized.title,
-    address: normalized.address,
-    neighborhood: normalized.neighborhood,
-    borough: normalized.borough,
-    location: normalized.location,
-    rent: normalized.rent,
-    bedrooms: normalized.bedrooms,
-    bathrooms: normalized.bathrooms,
-    availableAt: normalized.availableAt,
-    description: normalized.description,
-    amenities: normalized.amenities,
-    photos: normalized.photos,
-  });
+  const base = createListingFromUrl(
+    rawUrl,
+    identity,
+    withDefined<ListingDraft>({
+      sourceListingId: normalized.sourceListingId,
+      title: normalized.title,
+      address: normalized.address,
+      neighborhood: normalized.neighborhood,
+      borough: normalized.borough,
+      location: normalized.location,
+      rent: normalized.rent,
+      bedrooms: normalized.bedrooms,
+      bathrooms: normalized.bathrooms,
+      availableAt: normalized.availableAt,
+      description: normalized.description,
+      amenities: normalized.amenities,
+      photos: normalized.photos,
+    }),
+  );
   const extractionStatus = output.status;
   const triageStatus = output.triage.status;
   const triageBucket = output.triage.bucket;
-  const nextListing = {
+  const nextListing = withDefined<Omit<ListingCandidate, "display">>({
     ...base,
     providerRoute: getProviderRoute(normalized.source, intakeKind),
     providerRouting: {
@@ -728,7 +737,7 @@ function buildListingFromOutput({
       output.evidencePointers.length > 0 ? output.evidencePointers : base.evidencePointers,
     concerns: normalized.concerns,
     updatedAt: new Date().toISOString(),
-  };
+  });
 
   return {
     ...nextListing,
@@ -768,7 +777,7 @@ function buildExtractionJob({
 }): ExtractionJob {
   const now = new Date().toISOString();
 
-  return {
+  return withDefined<ExtractionJob>({
     id: stableId(`${identity.groupId}:extract:${listing.url}:${runId ?? "single"}`),
     groupId: identity.groupId,
     listingId: listing.id,
@@ -782,7 +791,7 @@ function buildExtractionJob({
     output,
     createdAt: now,
     updatedAt: now,
-  };
+  });
 }
 
 function buildTriage({
@@ -850,7 +859,7 @@ function createTriageCandidateFromNormalized(
 ): TriageCandidateInput {
   const sourceUrl = normalized.sourceUrl;
 
-  return {
+  return withDefined<TriageCandidateInput>({
     ownership: {
       groupId: normalized.groupId,
       runId,
@@ -889,14 +898,14 @@ function createTriageCandidateFromNormalized(
             normalized.bedrooms >= 5,
           )
         : false,
-  };
+  });
 }
 
 function createTriageCandidateFromListing(
   listing: ListingCandidate,
   runId: string,
 ): TriageCandidateInput {
-  return {
+  return withDefined<TriageCandidateInput>({
     ownership: {
       groupId: listing.groupId,
       runId,
@@ -931,7 +940,7 @@ function createTriageCandidateFromListing(
             listing.rent && listing.rent <= 12000 && listing.bedrooms && listing.bedrooms >= 5,
           )
         : false,
-  };
+  });
 }
 
 function toTriageEvidence(evidence: ListingEvidence[], sourceUrl: string): TriageEvidence[] {
@@ -1054,7 +1063,7 @@ function successfulProviderMetadata(
   concurrencySlot: number,
   failureCode?: string,
 ): AiProviderAttemptMetadata {
-  return {
+  return withDefined<AiProviderAttemptMetadata>({
     ...createAiProviderAttemptMetadata("fit-triage", imageCount),
     status: failureCode ? "failed" : "success",
     completedAt: new Date().toISOString(),
@@ -1067,7 +1076,7 @@ function successfulProviderMetadata(
     promptVersion: AI_TRIAGE_SCHEMA_VERSION,
     schemaValidation: failureCode ? "failed" : "passed",
     failureCode,
-  };
+  });
 }
 
 function sourceEvidence(claim: string, sourceUrl: string): ListingEvidence {

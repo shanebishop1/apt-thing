@@ -283,7 +283,7 @@ export type AiProviderAttemptMetadata = {
   failureCode?: string;
 };
 
-type NormalizedListingJson = {
+export type NormalizedListingJson = {
   groupId: string;
   source: SourceType;
   sourceUrl: string;

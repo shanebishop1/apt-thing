@@ -6,6 +6,7 @@ import {
   type TriageBucket,
   type TriageStatus,
 } from "./listings";
+import { withDefined } from "./utils/records";
 
 export const AI_TRIAGE_SCHEMA_VERSION = "fit-evidence-v1" as const;
 
@@ -872,7 +873,13 @@ function passCheck(
   confidence: number,
   evidence?: TriageEvidence,
 ): DeterministicHardConstraintResult {
-  return { factor, status: "pass", confidence, reason, evidence };
+  return withDefined<DeterministicHardConstraintResult>({
+    factor,
+    status: "pass",
+    confidence,
+    reason,
+    evidence,
+  });
 }
 
 function failCheck(
@@ -881,7 +888,13 @@ function failCheck(
   confidence: number,
   evidence?: TriageEvidence,
 ): DeterministicHardConstraintResult {
-  return { factor, status: "fail", confidence, reason, evidence };
+  return withDefined<DeterministicHardConstraintResult>({
+    factor,
+    status: "fail",
+    confidence,
+    reason,
+    evidence,
+  });
 }
 
 function reviewCheck(
@@ -891,14 +904,14 @@ function reviewCheck(
   evidence?: TriageEvidence,
   reviewOnly = false,
 ): DeterministicHardConstraintResult {
-  return {
+  return withDefined<DeterministicHardConstraintResult>({
     factor,
     status: reviewOnly ? "review-needed" : "unknown",
     confidence,
     reason,
     reviewOnly,
     evidence,
-  };
+  });
 }
 
 function buildConfidence(
@@ -994,13 +1007,13 @@ function finalizeProviderMetadata(
   schemaValidation: "passed" | "failed",
   failureCode?: string,
 ): AiProviderAttemptMetadata {
-  return {
+  return withDefined<AiProviderAttemptMetadata>({
     ...metadata,
     status,
     completedAt: metadata.completedAt ?? new Date().toISOString(),
     schemaValidation,
     failureCode,
-  };
+  });
 }
 
 function isBucket(value: unknown): value is TriageBucket {
