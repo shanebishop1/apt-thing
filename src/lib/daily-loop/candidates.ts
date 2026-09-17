@@ -6,7 +6,7 @@ import type {
   SeenRejectedMemoryRecord,
   SourceEvidenceRecord,
 } from "../agent-contracts";
-import type { StreetEasyBatchFixture, StreetEasySearchResultFixture } from "../extraction";
+import type { StreetEasyBatchInput, StreetEasySearchResult } from "../extraction";
 import {
   createDuplicateKey,
   createGroupScopedDuplicateKey,
@@ -28,19 +28,19 @@ import {
 
 export function buildExistingStates({
   groupId,
-  fixture,
+  batch,
   existingListings,
   seenMemory,
   priorStates,
 }: {
   groupId: string;
-  fixture: StreetEasyBatchFixture;
+  batch: StreetEasyBatchInput;
   existingListings: ListingCandidate[];
   seenMemory: SeenRejectedMemoryRecord[];
   priorStates: GroupScopedListingState[];
 }): Map<string, ExistingCandidateState> {
   const states = new Map<string, ExistingCandidateState>();
-  for (const result of fixture.results) {
+  for (const result of batch.results) {
     const state = findExistingState(
       groupId,
       result.sourceUrl,
@@ -82,7 +82,7 @@ export function findExistingState(
 }
 
 export function detectMaterialChange(
-  result: StreetEasySearchResultFixture,
+  result: StreetEasySearchResult,
   existing?: ListingCandidate,
 ): { changed: boolean; reasons: string[] } {
   if (!existing) return { changed: false, reasons: [] };

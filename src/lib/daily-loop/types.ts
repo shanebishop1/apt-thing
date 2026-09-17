@@ -9,7 +9,7 @@ import type {
   SourceCoverageSummary,
   SourceEvidenceRecord,
 } from "../agent-contracts";
-import type { GeminiFixtureAnalyzer, StreetEasyBatchFixture } from "../extraction";
+import type { GeminiTriageAnalyzer, StreetEasyBatchInput } from "../extraction";
 import {
   MAX_IMAGES_PER_LISTING,
   type AiProviderAttemptMetadata,
@@ -155,14 +155,14 @@ export type RunDailySourceAgentLoopOptions = {
   identity?: InviteIdentity;
   env?: DailyLoopEnv;
   now?: string;
-  streeteasyFixture?: StreetEasyBatchFixture;
+  streeteasyBatch?: StreetEasyBatchInput;
   existingListings?: ListingCandidate[];
   seenMemory?: SeenRejectedMemoryRecord[];
   priorStates?: GroupScopedListingState[];
   failStreetEasy?: boolean;
   failSecondary?: boolean;
   concurrencyLimit?: number;
-  analyzer?: GeminiFixtureAnalyzer;
+  analyzer?: GeminiTriageAnalyzer;
   fetchImpl?: typeof fetch;
 };
 

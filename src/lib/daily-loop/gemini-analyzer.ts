@@ -1,4 +1,4 @@
-import type { GeminiFixtureAnalysisResult, GeminiFixtureAnalyzer } from "../extraction";
+import type { GeminiTriageAnalysisResult, GeminiTriageAnalyzer } from "../extraction";
 import {
   GEMINI_LOW_THINKING,
   extractGeminiText,
@@ -30,7 +30,7 @@ const TRIAGE_MODEL = "gemini-3.5-flash";
 
 export function createDailyLoopProviderFailureAnalyzer(
   failureCode = "gemini-fixture-failure",
-): GeminiFixtureAnalyzer {
+): GeminiTriageAnalyzer {
   return (input) => {
     const metadata = {
       ...createAiProviderAttemptMetadata("fit-triage", input.listing.imageEvidence.length),
@@ -63,7 +63,7 @@ export function createDailyLoopProviderFailureAnalyzer(
 export function createGeminiAnalyzerFromEnv(
   env?: DailyLoopEnv,
   fetchImpl: typeof fetch = fetch,
-): GeminiFixtureAnalyzer | undefined {
+): GeminiTriageAnalyzer | undefined {
   const apiKey = env?.GEMINI_API_KEY;
   if (!apiKey) return undefined;
   return async (input) => analyzeWithDirectGemini(input, apiKey, fetchImpl);
@@ -105,7 +105,7 @@ function buildTriageInstructions(sourceUrl: string): string {
   ].join("\n");
 }
 
-function buildTriageRequestBody(input: Parameters<GeminiFixtureAnalyzer>[0]) {
+function buildTriageRequestBody(input: Parameters<GeminiTriageAnalyzer>[0]) {
   return {
     generationConfig: {
       responseMimeType: "application/json",
@@ -140,10 +140,10 @@ function buildTriageRequestBody(input: Parameters<GeminiFixtureAnalyzer>[0]) {
 }
 
 async function analyzeWithDirectGemini(
-  input: Parameters<GeminiFixtureAnalyzer>[0],
+  input: Parameters<GeminiTriageAnalyzer>[0],
   apiKey: string,
   fetchImpl: typeof fetch,
-): Promise<GeminiFixtureAnalysisResult> {
+): Promise<GeminiTriageAnalysisResult> {
   const started = Date.now();
   const imageCount = Math.min(input.listing.imageEvidence.length, MAX_IMAGES_PER_LISTING);
   const baseMetadata = createAiProviderAttemptMetadata("fit-triage", imageCount);
@@ -163,7 +163,7 @@ async function analyzeWithDirectGemini(
     ...(failureCode === undefined ? {} : { failureCode }),
   });
   /** The deterministic verdict stays the fallback whenever Gemini cannot be trusted. */
-  const failed = (failureCode: string): GeminiFixtureAnalysisResult => ({
+  const failed = (failureCode: string): GeminiTriageAnalysisResult => ({
     status: "failed",
     triage: input.output.triage,
     providerMetadata: finalize("failed", failureCode),

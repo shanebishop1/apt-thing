@@ -16,7 +16,7 @@ function createAnalyzerInput() {
 
   return {
     ...extracted,
-    fixtureResult: streetEasyBatchFixture.results[0]!,
+    sourceResult: streetEasyBatchFixture.results[0]!,
     concurrencyLimit: 2,
     concurrencySlot: 1,
     runId: "run-gemini-analyzer-test",
