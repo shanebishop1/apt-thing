@@ -286,8 +286,6 @@ const streetEasyBatchReviewResult = runStreetEasyBatchFixture({
   concurrencyLimit: 2,
 });
 
-export const fixtureBatchRun = streetEasyBatchReviewResult.run;
-
 export const fixtureListings: ListingCandidate[] = [
   ...streetEasyBatchReviewResult.listings,
   updateReviewStatus(streeteasy, "interested"),

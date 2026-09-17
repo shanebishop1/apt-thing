@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { briefingRunHistoryFixture } from "@/lib/agent-contract-fixtures";
+import { briefingRunHistoryFixture } from "@/test-support/agent-contract-fixtures";
 import type { PersistedRunHistoryRun } from "@/lib/run-history-store";
 import { withDefined } from "@/lib/utils/records";
 import { createRunHistoryPanelModel } from "./run-history-model";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createBriefingRunHistoryFixture } from "./agent-contract-fixtures";
+import { createBriefingRunHistoryFixture } from "../test-support/agent-contract-fixtures";
 import { validateBriefingRunHistoryContract } from "./agent-contracts";
 
 describe("briefing run-history contract", () => {

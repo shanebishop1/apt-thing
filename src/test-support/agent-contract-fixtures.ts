@@ -14,13 +14,13 @@ import {
   type SeenRejectedMemoryRecord,
   type SourceCoverageSummary,
   type SourceEvidenceRecord,
-} from "./agent-contracts";
-import { extractSingleLinkFixture, runStreetEasyBatchFixture } from "./extraction";
+} from "../lib/agent-contracts";
+import { extractSingleLinkFixture, runStreetEasyBatchFixture } from "../lib/extraction";
 import {
   nonFirstClassApartmentFixture,
   streetEasyBatchFixture,
   streetEasyPastedFixture,
-} from "./fixtures";
+} from "../lib/fixtures";
 import {
   createDuplicateKey,
   createGroupScopedDuplicateKey,
@@ -31,8 +31,8 @@ import {
   updateReviewStatus,
   type AiProviderAttemptMetadata,
   type ListingCandidate,
-} from "./listings";
-import { withDefined } from "./utils/records";
+} from "../lib/listings";
+import { withDefined } from "../lib/utils/records";
 
 /**
  * Deterministic fixture inputs assembled from the extraction pipeline so tests can

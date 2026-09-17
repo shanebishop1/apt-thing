@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { briefingRunHistoryFixture } from "@/lib/agent-contract-fixtures";
+import { briefingRunHistoryFixture } from "@/test-support/agent-contract-fixtures";
 import { RunHistoryPanel } from "./RunHistoryPanel";
 import { describeRequestError } from "./saved-list-state";
 
