@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import type { GroupActionRecord } from "@/lib/agent-contracts";
-import { createMapReviewModel, type MapReviewCandidate } from "@/lib/map-review";
+import { createMapReviewModel, type MapReviewCandidate, walkingMinutes } from "@/lib/map-review";
 import type { ListingGroupActions } from "@/lib/group-actions";
 import type {
   FieldProvenance,
@@ -175,12 +175,13 @@ function MapDetail({
             <ul>
               {candidate.subway.slice(0, 2).map((subway) => (
                 <li key={`${subway.station}-${subway.routes.join("")}`}>
-                  {subway.station} ({subway.routes.join("/")}) · {subway.distanceMeters}m
+                  {subway.station} ({subway.routes.join("/")}) · {subway.distanceMeters}m · ~
+                  {walkingMinutes(subway.distanceMeters)} min walk
                 </li>
               ))}
             </ul>
           ) : (
-            <p>Nearby subway stops have not been looked up for this listing yet.</p>
+            <p>No coordinates for this listing yet.</p>
           )}
         </section>
       </div>
