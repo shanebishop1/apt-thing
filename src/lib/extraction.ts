@@ -901,7 +901,7 @@ function createTriageCandidateFromNormalized(
   });
 }
 
-function createTriageCandidateFromListing(
+export function createTriageCandidateFromListing(
   listing: ListingCandidate,
   runId: string,
 ): TriageCandidateInput {

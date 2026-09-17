@@ -160,7 +160,7 @@ export function realtyApiRecordToListingDraft(record: Record<string, unknown>): 
     title: normalizeStreetEasyTitle(stringField(record, ["title", "name"]), address),
     address,
     neighborhood: stringField(record, ["neighborhood", "area", "areaName"]),
-    borough: stringField(record, ["borough", "city"]) ?? realtyApiCity(record),
+    borough: normalizeBorough(stringField(record, ["borough", "city"]) ?? realtyApiCity(record)),
     location: realtyApiCoordinates(record),
     rent:
       numberField(record, ["rent", "price", "monthlyRent", "monthly_rent"]) ??
@@ -250,6 +250,27 @@ function streetEasySearchAddress(record: Record<string, unknown>) {
   const street = stringField(record, ["street"]);
   const unit = stringField(record, ["unit"]);
   return street ? [street, unit].filter(Boolean).join(" ") : undefined;
+}
+
+/**
+ * RealtyAPI reports the postal city, so Manhattan listings arrive as "New York". The triage
+ * rubric keys on the five borough names, so map the city spellings onto them.
+ */
+function normalizeBorough(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const key = value.trim().toLowerCase();
+  const boroughs: Record<string, string> = {
+    manhattan: "Manhattan",
+    "new york": "Manhattan",
+    "new york city": "Manhattan",
+    nyc: "Manhattan",
+    brooklyn: "Brooklyn",
+    queens: "Queens",
+    bronx: "Bronx",
+    "the bronx": "Bronx",
+    "staten island": "Staten Island",
+  };
+  return boroughs[key] ?? value.trim();
 }
 
 function realtyApiCity(record: Record<string, unknown>) {

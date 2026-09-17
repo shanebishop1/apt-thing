@@ -567,7 +567,7 @@ describe("runDailySourceAgentLoop", () => {
     expect(result.listings[0]).toMatchObject({
       sourceListingId: "live-nested-1",
       address: "123 Live Nested Street 5A",
-      borough: "NEW YORK",
+      borough: "Manhattan",
       rent: 11000,
       bedrooms: 5,
       bathrooms: 2.5,

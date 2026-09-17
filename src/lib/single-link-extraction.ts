@@ -1,4 +1,6 @@
 import { realtyApiRecordToListingDraft } from "./daily-loop/realtyapi";
+import { createTriageCandidateFromListing } from "./extraction";
+import { assignFitEvidenceTriage } from "./triage";
 import {
   GEMINI_LOW_THINKING,
   extractGeminiText,
@@ -517,17 +519,27 @@ function mergeExtraction(
   output: GeminiListingExtraction,
 ): ListingCandidate {
   const now = new Date().toISOString();
-  const nextListing = {
+  const merged = {
     ...listing,
     ...output,
     title: output.title ?? listing.title,
     address: output.address ?? listing.address,
+    fitFlags: calculateFitFlags(output, listing.url),
+    evidence: output.evidence.length > 0 ? output.evidence : listing.evidence,
+  };
+  // A pasted link always goes to the group for review, but the deterministic fit checks still
+  // run so the review panel can say why (rent ceiling, bedroom count, room share, and so on).
+  const triage = assignFitEvidenceTriage(
+    createTriageCandidateFromListing(merged, "manual-single-link"),
+  );
+  const nextListing = {
+    ...merged,
     extractionStatus: hasUsefulExtraction(output) ? "success" : "partial",
     triageStatus: "success",
     triageBucket: "review-needed",
-    fitFlags: calculateFitFlags(output, listing.url),
-    evidence: output.evidence.length > 0 ? output.evidence : listing.evidence,
-    concerns: output.concerns,
+    concerns: [
+      ...new Set([...output.concerns, ...triage.rejectionReasons, ...triage.downgradeReasons]),
+    ],
     fieldProvenance: createAiFieldProvenance(output, now),
     updatedAt: now,
   } satisfies Omit<ListingCandidate, "display">;
