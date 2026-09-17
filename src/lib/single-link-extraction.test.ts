@@ -113,6 +113,64 @@ describe("single-link live extraction", () => {
     ]);
   });
 
+  it("keeps a building-page address whose head is the title, and invents no bedroom count", async () => {
+    // Shape copied from nybits.com/apartments/11_waverly_pl.html: a building page with no unit
+    // listings, whose only "1BR" text is the site-wide navigation menu.
+    const html = `
+      <html>
+        <head>
+          <title>11 Waverly Place in Central Village, Manhattan</title>
+          <meta name="og:title" content="11 Waverly Place in Central Village, Manhattan" />
+        </head>
+        <body>
+          APARTMENTS Search Rentals STU &middot; 1BR &middot; 2BR BUILDINGS Rental Buildings
+          11 Waverly Place Address 11 Waverly Place, New York, NY 10003
+          Neighborhoods Central Village , Manhattan Rental listings (no current listings)
+          Year built 1929 Structure 12 floors 152 units
+          Building Description 11 Waverly Place is a pre-war mid-rise doorman elevator building.
+        </body>
+      </html>`;
+    const fetchImpl = async (url: string | URL | Request) => {
+      if (String(url).includes("generativelanguage.googleapis.com")) {
+        return Response.json({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      title: "11 Waverly Place",
+                      address: "11 Waverly Place, New York, NY 10003",
+                      borough: "Manhattan",
+                      description: "Pre-war mid-rise doorman elevator building.",
+                      evidence: [],
+                      concerns: [],
+                      confidence: 0.6,
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+        });
+      }
+
+      return new Response(html, { status: 200, headers: { "Content-Type": "text/html" } });
+    };
+
+    const result = await extractListingFromUrlLive({
+      rawUrl: "https://www.nybits.com/apartments/11_waverly_pl.html",
+      identity,
+      env: { GEMINI_API_KEY: "test-key" },
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+
+    expect(result.listing.address).toBe("11 Waverly Place, New York, NY 10003");
+    expect(result.listing.bedrooms).toBeUndefined();
+    expect(result.listing.bathrooms).toBeUndefined();
+    expect(result.listing.fieldProvenance.map((entry) => entry.field)).not.toContain("bedrooms");
+  });
+
   it("keeps failed extraction titles generic instead of URL slugs", async () => {
     const result = await extractListingFromUrlLive({
       rawUrl: "https://www.apartments.com/the-eugene-new-york-ny/rx7cnye/",

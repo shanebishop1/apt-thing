@@ -10,6 +10,12 @@ import {
   type ListingDraft,
   type ListingEvidence,
 } from "./listings";
+import {
+  GEMINI_LOW_THINKING,
+  extractGeminiText,
+  parseGeminiJson,
+  requestGeminiGenerateContent,
+} from "./gemini-client";
 import { safeJson } from "./utils/json";
 import { firstRecord, isRecord, numberField, stringField, withDefined } from "./utils/records";
 import { titleCase, uniqueStrings } from "./utils/text";
@@ -41,10 +47,6 @@ type GeminiListingExtraction = ListingDraft & {
 type SourcePageMetadata = ListingDraft & {
   title?: string;
   evidence: ListingEvidence[];
-};
-
-type GeminiGenerateContentResponse = {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
 };
 
 const extractionPromptVersion = "single-link-url-extraction-v1";
@@ -380,14 +382,12 @@ async function callGeminiForListingExtraction({
   const failures: Array<{ failureCode: string; failureMessage: string; rawText?: string }> = [];
 
   for (const model of extractionModels) {
-    const response = await fetchImpl(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify(buildExtractionRequest(url, pageText)),
-      },
-    );
+    const response = await requestGeminiGenerateContent({
+      apiKey,
+      model,
+      body: buildExtractionRequest(url, pageText),
+      fetchImpl,
+    });
 
     if (!response.ok) {
       failures.push({
@@ -397,48 +397,47 @@ async function callGeminiForListingExtraction({
       continue;
     }
 
-    const body = (await response.json()) as GeminiGenerateContentResponse;
-    const rawText = body.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const rawText = extractGeminiText(await safeJson(response)) ?? "";
+    const parsed = parseGeminiJson(rawText) as Partial<GeminiListingExtraction> | undefined;
 
-    try {
-      const parsed = JSON.parse(rawText) as Partial<GeminiListingExtraction>;
-      if (typeof parsed.title !== "string" || typeof parsed.address !== "string") {
-        failures.push({
-          failureCode: `gemini-${model}-schema-validation-failed`,
-          failureMessage: "Gemini response did not include title and address.",
-          rawText,
-        });
-        continue;
-      }
-
-      return {
-        ok: true,
-        rawText,
-        output: withDefined<GeminiListingExtraction>({
-          title: parsed.title,
-          address: parsed.address,
-          neighborhood: normalizeString(parsed.neighborhood),
-          borough: normalizeString(parsed.borough),
-          rent: normalizeNumber(parsed.rent),
-          bedrooms: normalizeNumber(parsed.bedrooms),
-          bathrooms: normalizeNumber(parsed.bathrooms),
-          availableAt: normalizeString(parsed.availableAt),
-          description: normalizeString(parsed.description),
-          amenities: normalizeStringArray(parsed.amenities),
-          photos: normalizeStringArray(parsed.photos),
-          evidence: normalizeEvidence(parsed.evidence, url),
-          concerns: normalizeStringArray(parsed.concerns),
-          confidence: normalizeNumber(parsed.confidence) ?? 0,
-        }),
-      };
-    } catch (error) {
+    if (parsed === undefined) {
       failures.push({
         failureCode: `gemini-${model}-json-parse-failed`,
-        failureMessage: error instanceof Error ? error.message : "Gemini response was not JSON.",
+        failureMessage: "Gemini response was not JSON.",
         rawText,
       });
       continue;
     }
+
+    if (typeof parsed.title !== "string" || typeof parsed.address !== "string") {
+      failures.push({
+        failureCode: `gemini-${model}-schema-validation-failed`,
+        failureMessage: "Gemini response did not include title and address.",
+        rawText,
+      });
+      continue;
+    }
+
+    return {
+      ok: true,
+      rawText,
+      output: withDefined<GeminiListingExtraction>({
+        title: parsed.title,
+        address: parsed.address,
+        neighborhood: normalizeString(parsed.neighborhood),
+        borough: normalizeString(parsed.borough),
+        rent: normalizeNumber(parsed.rent),
+        bedrooms: normalizeNumber(parsed.bedrooms),
+        bathrooms: normalizeNumber(parsed.bathrooms),
+        availableAt: normalizeString(parsed.availableAt),
+        description: normalizeString(parsed.description),
+        amenities: normalizeStringArray(parsed.amenities),
+        photos: normalizeStringArray(parsed.photos),
+        evidence: normalizeEvidence(parsed.evidence, url),
+        concerns: normalizeStringArray(parsed.concerns),
+        confidence: normalizeNumber(parsed.confidence) ?? 0,
+      }),
+    };
   }
 
   const lastFailure = failures.at(-1);
@@ -477,6 +476,7 @@ function buildExtractionRequest(url: string, pageText: string) {
     ],
     generationConfig: {
       responseMimeType: "application/json",
+      thinkingConfig: GEMINI_LOW_THINKING,
       responseSchema: {
         type: "OBJECT",
         properties: {
@@ -659,11 +659,11 @@ function extractSourcePageMetadata(html: string, sourceUrl: string): SourcePageM
   ]);
   const bedrooms = firstNumber([
     ...jsonLd.flatMap((item) => [item.numberOfRooms, item.bedrooms]),
-    parseNumber(matchFirst(text, /(\d+(?:\.\d+)?)\s*(?:beds?|bedrooms?|br)\b/i)),
+    extractRoomCount(text, "bedrooms"),
   ]);
   const bathrooms = firstNumber([
     ...jsonLd.flatMap((item) => [item.bathroomsTotal, item.bathrooms]),
-    parseNumber(matchFirst(text, /(\d+(?:\.\d+)?)\s*(?:baths?|bathrooms?|ba)\b/i)),
+    extractRoomCount(text, "bathrooms"),
   ]);
   const photos = uniqueStrings([
     ...jsonLd.flatMap((item) => imageUrlsFromValue(item.image)),
@@ -754,22 +754,31 @@ function addressFromJsonLd(value: unknown): string[] {
   ];
 }
 
+/**
+ * Drops the listing title where a page repeats it inside the address, then prefers the last
+ * canonical "number street, city, ST zip" run in what is left.
+ *
+ * A title that is also the head of the address is the street address itself ("11 Waverly Place" in
+ * "11 Waverly Place, New York, NY 10003"), so stripping it there would save a headless
+ * ", New York, NY 10003". Only a duplicated prefix ("Title - Title, City") is removable.
+ */
 function cleanExtractedAddress(address: string | undefined, title: string): string | undefined {
   if (!address) return undefined;
-  let cleaned = address
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (
-    title &&
-    /#[A-Za-z0-9]+/.test(title) &&
-    cleaned.toLowerCase().startsWith(title.toLowerCase()) &&
-    cleaned.includes(",")
-  ) {
-    return cleaned;
-  }
-  const titlePattern = new RegExp(escapeRegExp(title), "gi");
-  cleaned = cleaned.replace(titlePattern, " ").replace(/\s+/g, " ").trim();
+  const normalizedTitle = title.trim();
+  const deduplicated = stripDuplicatedTitlePrefix(
+    address
+      .replace(/&nbsp;/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+    normalizedTitle,
+  );
+  const cleaned =
+    normalizedTitle && !startsWithTitle(deduplicated, normalizedTitle)
+      ? deduplicated
+          .replace(new RegExp(escapeRegExp(normalizedTitle), "gi"), " ")
+          .replace(/\s+/g, " ")
+          .trim()
+      : deduplicated;
 
   const canonicalAddresses = [
     ...cleaned.matchAll(/\d{1,6}\s+[A-Za-z .'-]+,\s*[^,]+,\s*[A-Z]{2}\s*\d{5}/g),
@@ -778,6 +787,16 @@ function cleanExtractedAddress(address: string | undefined, title: string): stri
   if (canonicalAddress) return canonicalAddress.replace(/,\s*NY\s*NY/, ", NY");
 
   return cleaned || undefined;
+}
+
+function startsWithTitle(address: string, title: string): boolean {
+  return address.toLowerCase().startsWith(title.toLowerCase());
+}
+
+function stripDuplicatedTitlePrefix(address: string, title: string): string {
+  if (!title) return address;
+  const escaped = escapeRegExp(title);
+  return address.replace(new RegExp(`^${escaped}\\s*[-|:,]?\\s*(?=${escaped})`, "i"), "").trim();
 }
 
 function escapeRegExp(value: string): string {
@@ -830,8 +849,36 @@ function parseMoney(value?: string): number | undefined {
   return value ? Number(value.replace(/[^\d.]/g, "")) || undefined : undefined;
 }
 
-function parseNumber(value?: string): number | undefined {
-  return value ? Number(value.match(/\d+(?:\.\d+)?/)?.[0]) || undefined : undefined;
+const SPELLED_BEDROOMS = /(\d+(?:\.\d+)?)\s*(?:beds?|bedrooms?)\b/gi;
+const SPELLED_BATHROOMS = /(\d+(?:\.\d+)?)\s*(?:baths?|bathrooms?)\b/gi;
+/** Only the paired form is trusted for abbreviations, e.g. "5BR/2BA" or "5 BR 2 BA". */
+const ABBREVIATED_UNIT_MIX =
+  /(\d+(?:\.\d+)?)\s*(?:br|bd)\b[\s,/|-]{0,3}(\d+(?:\.\d+)?)\s*(?:ba|baths?|bathrooms?)\b/gi;
+
+/**
+ * Reads a room count from page text, but only when the page states one unambiguously.
+ *
+ * Bare abbreviations are site chrome as often as listing facts: nybits.com building pages carry a
+ * global nav reading "STU · 1BR · 2BR", which used to be saved as `bedrooms: 1` on buildings whose
+ * own text lists no unit at all. So a spelled-out count wins, an abbreviation counts only when it
+ * is paired with a bath count, and a page that states several different counts yields nothing.
+ */
+function extractRoomCount(text: string, room: "bedrooms" | "bathrooms"): number | undefined {
+  const spelled = room === "bedrooms" ? SPELLED_BEDROOMS : SPELLED_BATHROOMS;
+  return (
+    singleDistinctMatch(text, spelled, 1) ??
+    singleDistinctMatch(text, ABBREVIATED_UNIT_MIX, room === "bedrooms" ? 1 : 2)
+  );
+}
+
+function singleDistinctMatch(text: string, pattern: RegExp, group: number): number | undefined {
+  const values = new Set<number>();
+  for (const match of text.matchAll(pattern)) {
+    const value = Number(match[group]);
+    if (Number.isFinite(value) && value > 0) values.add(value);
+  }
+
+  return values.size === 1 ? [...values][0] : undefined;
 }
 
 function decodeHtml(value?: string): string | undefined {
