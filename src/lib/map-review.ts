@@ -1,9 +1,16 @@
 import type { ListingCandidate, TriageBucket } from "./listings";
+import { nycSubwayStations, nycSubwayStationsAttribution } from "./nyc-subway-stations";
 import { withDefined } from "./utils/records";
 
 export type MapCoordinates = {
   latitude: number;
   longitude: number;
+};
+
+export type SubwayContext = {
+  station: string;
+  routes: string[];
+  distanceMeters: number;
 };
 
 export type MapContextFixture = {
@@ -14,12 +21,6 @@ export type MapContextFixture = {
     kind: "preferred-manhattan" | "exceptional-fallback" | "outer-borough" | "unknown";
     boroughFallback: string;
   };
-  subway: {
-    station: string;
-    routes: string[];
-    distanceMeters: number;
-    source: string;
-  }[];
   amenities: {
     name: string;
     kind: "grocery" | "park" | "pharmacy" | "laundry" | "other";
@@ -37,7 +38,7 @@ export type MapReviewCandidate = {
   zoneLabel: string;
   zoneKind: MapContextFixture["zone"]["kind"];
   boroughFallback: string;
-  subway: MapContextFixture["subway"];
+  subway: SubwayContext[];
   contextAmenities: MapContextFixture["amenities"];
   evidenceSummary: string;
   concernSummary: string;
@@ -80,6 +81,9 @@ export const nycMapViewport: MapViewport = {
   west: -74.03,
 };
 
+// Hand-geocoded fixtures and demo listings. Real listings carry provider coordinates, so
+// this table only backfills coordinates and zone labels for listings that arrive without
+// them; subway context is always computed from whatever coordinates we end up with.
 const mapContextFixtures: MapContextFixture[] = [
   createContext(
     "42 West 21st Street #5",
@@ -87,25 +91,14 @@ const mapContextFixtures: MapContextFixture[] = [
     -73.9927,
     "Flatiron / Chelsea",
     "preferred-manhattan",
-    [
-      ["23 St", ["F", "M"], 230],
-      ["14 St", ["1", "2", "3"], 520],
-    ],
   ),
-  createContext("100 West 14th Street", 40.7374, -73.9967, "Chelsea", "preferred-manhattan", [
-    ["14 St", ["1", "2", "3"], 180],
-    ["6 Av", ["F", "M", "L"], 320],
-  ]),
+  createContext("100 West 14th Street", 40.7374, -73.9967, "Chelsea", "preferred-manhattan"),
   createContext(
     "152 Manhattan Avenue #4B",
     40.7116,
     -73.9455,
     "Williamsburg",
     "exceptional-fallback",
-    [
-      ["Graham Av", ["L"], 410],
-      ["Lorimer St", ["L"], 690],
-    ],
   ),
   createContext(
     "Zillow manual fixture — 100 West 14th Street",
@@ -113,7 +106,6 @@ const mapContextFixtures: MapContextFixture[] = [
     -73.9967,
     "Chelsea",
     "preferred-manhattan",
-    [["14 St", ["1", "2", "3"], 180]],
   ),
   createContext(
     "NYBits-style fallback fixture",
@@ -121,7 +113,6 @@ const mapContextFixtures: MapContextFixture[] = [
     -74.0021,
     "Hudson Yards / Chelsea",
     "preferred-manhattan",
-    [["34 St-Hudson Yards", ["7"], 360]],
   ),
   createContext(
     "New Chelsea five bed batch candidate",
@@ -129,7 +120,6 @@ const mapContextFixtures: MapContextFixture[] = [
     -74.001,
     "Chelsea",
     "preferred-manhattan",
-    [["23 St", ["C", "E"], 450]],
   ),
   createContext(
     "Review-needed Williamsburg batch candidate",
@@ -137,48 +127,16 @@ const mapContextFixtures: MapContextFixture[] = [
     -73.955,
     "Williamsburg",
     "exceptional-fallback",
-    [["Bedford Av", ["L"], 610]],
   ),
-  createContext("325 East 14 Street", 40.7317, -73.9841, "East Village", "preferred-manhattan", [
-    ["1 Av", ["L"], 220],
-    ["3 Av", ["L"], 520],
-  ]),
-  createContext("205 Avenue A", 40.7301, -73.9834, "East Village", "preferred-manhattan", [
-    ["1 Av", ["L"], 320],
-    ["3 Av", ["L"], 640],
-  ]),
-  createContext("58 2nd Avenue", 40.7254, -73.9901, "East Village", "preferred-manhattan", [
-    ["2 Av", ["F"], 360],
-    ["Bleecker St", ["6"], 610],
-  ]),
-  createContext("54 2nd Avenue", 40.7252, -73.9902, "East Village", "preferred-manhattan", [
-    ["2 Av", ["F"], 340],
-    ["Bleecker St", ["6"], 630],
-  ]),
-  createContext("176 Stanton Street", 40.7209, -73.9845, "Lower East Side", "preferred-manhattan", [
-    ["Delancey St-Essex St", ["F", "M", "J", "Z"], 410],
-    ["2 Av", ["F"], 730],
-  ]),
-  createContext(
-    "171 Attorney Street",
-    40.7193,
-    -73.9843,
-    "Lower East Side",
-    "preferred-manhattan",
-    [["Delancey St-Essex St", ["F", "M", "J", "Z"], 450]],
-  ),
-  createContext("247 Mulberry Street", 40.7234, -73.9954, "Nolita", "preferred-manhattan", [
-    ["Bleecker St", ["6"], 340],
-    ["Broadway-Lafayette St", ["B", "D", "F", "M"], 410],
-  ]),
-  createContext("171 6th Avenue", 40.7258, -74.0046, "Hudson Square", "preferred-manhattan", [
-    ["Spring St", ["C", "E"], 160],
-    ["Houston St", ["1"], 420],
-  ]),
-  createContext("71 Broadway", 40.7075, -74.0126, "Financial District", "preferred-manhattan", [
-    ["Wall St", ["4", "5"], 80],
-    ["Rector St", ["R", "W"], 220],
-  ]),
+  createContext("325 East 14 Street", 40.7317, -73.9841, "East Village", "preferred-manhattan"),
+  createContext("205 Avenue A", 40.7301, -73.9834, "East Village", "preferred-manhattan"),
+  createContext("58 2nd Avenue", 40.7254, -73.9901, "East Village", "preferred-manhattan"),
+  createContext("54 2nd Avenue", 40.7252, -73.9902, "East Village", "preferred-manhattan"),
+  createContext("176 Stanton Street", 40.7209, -73.9845, "Lower East Side", "preferred-manhattan"),
+  createContext("171 Attorney Street", 40.7193, -73.9843, "Lower East Side", "preferred-manhattan"),
+  createContext("247 Mulberry Street", 40.7234, -73.9954, "Nolita", "preferred-manhattan"),
+  createContext("171 6th Avenue", 40.7258, -74.0046, "Hudson Square", "preferred-manhattan"),
+  createContext("71 Broadway", 40.7075, -74.0126, "Financial District", "preferred-manhattan"),
 ];
 
 const contextByTitle = new Map(mapContextFixtures.map((fixture) => [fixture.listingId, fixture]));
@@ -228,7 +186,8 @@ export function createMapReviewModel(
     selected,
     bounds: createBounds(locatedCandidates),
     attribution:
-      "Map data © OpenStreetMap contributors. Subway routes/stations use the public MTA Subway Routes & Stops FeatureServer derived from MTA GTFS feeds.",
+      "Map data © OpenStreetMap contributors. Subway routes/stations use the public MTA Subway Routes & Stops FeatureServer derived from MTA GTFS feeds. " +
+      nycSubwayStationsAttribution,
     viewport: nycMapViewport,
     mobileModes: ["map", "list", "detail"],
   });
@@ -250,7 +209,7 @@ function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
     zoneLabel: fixture.zone.label,
     zoneKind: fixture.zone.kind,
     boroughFallback: fixture.zone.boroughFallback,
-    subway: fixture.subway,
+    subway: coordinates ? findNearestSubwayStations(coordinates) : [],
     contextAmenities: fixture.amenities,
     evidenceSummary: evidence
       ? `${evidence.claim}: ${evidence.quote}`
@@ -299,6 +258,47 @@ function resolveKnownAddressContext(address?: string): MapContextFixture | undef
   )?.[1];
 }
 
+const nearestSubwayStationCount = 3;
+const earthRadiusMeters = 6_371_000;
+const walkingMetersPerMinute = 80;
+
+// Nearest station complexes to a listing, straight-line, nearest first. Distances are
+// rounded to 10 m because the station coordinates are complex centroids, not entrances.
+export function findNearestSubwayStations(
+  coordinates: MapCoordinates,
+  limit: number = nearestSubwayStationCount,
+): SubwayContext[] {
+  return nycSubwayStations
+    .map((station) => ({ station, meters: haversineMeters(coordinates, station) }))
+    .sort((left, right) => left.meters - right.meters)
+    .slice(0, limit)
+    .map(({ station, meters }) => ({
+      station: station.name,
+      routes: [...station.routes],
+      distanceMeters: Math.round(meters / 10) * 10,
+    }));
+}
+
+export function walkingMinutes(distanceMeters: number): number {
+  return Math.max(1, Math.round(distanceMeters / walkingMetersPerMinute));
+}
+
+function haversineMeters(from: MapCoordinates, to: MapCoordinates): number {
+  const latitudeDelta = toRadians(to.latitude - from.latitude);
+  const longitudeDelta = toRadians(to.longitude - from.longitude);
+  const halfChord =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(toRadians(from.latitude)) *
+      Math.cos(toRadians(to.latitude)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.asin(Math.min(1, Math.sqrt(halfChord)));
+}
+
+function toRadians(degrees: number): number {
+  return (degrees * Math.PI) / 180;
+}
+
 export function projectToMapPosition(
   coordinates: MapCoordinates,
   viewport: MapViewport = nycMapViewport,
@@ -331,16 +331,32 @@ function toConfidenceLabel(bucket: TriageBucket): string {
 }
 
 function createFallbackContext(listing: ListingCandidate): MapContextFixture {
+  const borough = listing.borough?.trim();
+  const neighborhood = listing.neighborhood?.trim();
+
   return {
     listingId: listing.title,
     zone: {
-      label: listing.neighborhood ?? "Location pending",
-      kind: listing.borough === "Manhattan" ? "preferred-manhattan" : "unknown",
-      boroughFallback: listing.borough ?? "Borough pending",
+      label: neighborhood || borough || "Location pending",
+      kind: toZoneKind(borough),
+      boroughFallback: toBoroughFallback(borough),
     },
-    subway: [],
     amenities: [],
   };
+}
+
+function toZoneKind(borough?: string): MapContextFixture["zone"]["kind"] {
+  if (!borough) return "unknown";
+  if (borough === "Manhattan") return "preferred-manhattan";
+  if (borough === "Brooklyn" || borough === "Queens") return "exceptional-fallback";
+
+  return "outer-borough";
+}
+
+function toBoroughFallback(borough?: string): string {
+  if (!borough) return "Borough pending";
+
+  return borough === "Manhattan" ? "Manhattan preferred zone" : `${borough} fallback`;
 }
 
 function normalizeAddress(address?: string): string {
@@ -370,7 +386,6 @@ function createContext(
   longitude: number,
   label: string,
   kind: MapContextFixture["zone"]["kind"],
-  subway: [string, string[], number][],
 ): MapContextFixture {
   return {
     listingId,
@@ -381,12 +396,6 @@ function createContext(
       boroughFallback:
         kind === "exceptional-fallback" ? "Brooklyn fallback" : "Manhattan preferred zone",
     },
-    subway: subway.map(([station, routes, distanceMeters]) => ({
-      station,
-      routes,
-      distanceMeters,
-      source: "fixture:mta-open-data-style",
-    })),
     amenities: [],
   };
 }

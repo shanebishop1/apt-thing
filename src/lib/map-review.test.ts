@@ -58,7 +58,56 @@ describe("G3A map-enhanced review model", () => {
       pinState: "missing-location",
       zoneLabel: "Location pending",
       boroughFallback: "Borough pending",
+      subway: [],
     });
+  });
+
+  it("derives subway context from listing coordinates", () => {
+    const listing = withDefined<ListingCandidate>({
+      ...fixtureListings[0]!,
+      id: "realtyapi-union-square",
+      title: "Live listing near Union Square",
+      address: "1 Irving Place",
+      neighborhood: "Union Square",
+      borough: "Manhattan",
+      location: { latitude: 40.7347, longitude: -73.9905 },
+    });
+
+    const model = createMapReviewModel([listing], listing.id);
+    const subway = model.selected?.subway ?? [];
+
+    expect(subway).toHaveLength(3);
+    expect(subway[0]?.station).toBe("14 St-Union Sq");
+    expect(subway[0]?.routes).toEqual(expect.arrayContaining(["4", "5", "6", "L", "N", "Q", "R"]));
+    expect(subway[0]?.distanceMeters).toBeLessThan(300);
+    expect(subway[0]!.distanceMeters % 10).toBe(0);
+    expect(subway[0]!.distanceMeters).toBeLessThanOrEqual(subway[1]!.distanceMeters);
+    expect(model.selected).toMatchObject({
+      zoneLabel: "Union Square",
+      zoneKind: "preferred-manhattan",
+      boroughFallback: "Manhattan preferred zone",
+    });
+  });
+
+  it("labels outer-borough listings from the listing borough", () => {
+    const listing = withDefined<ListingCandidate>({
+      ...fixtureListings[0]!,
+      id: "realtyapi-bushwick",
+      title: "Live listing near the Jefferson St L",
+      address: "10 Wyckoff Avenue",
+      neighborhood: "Bushwick",
+      borough: "Brooklyn",
+      location: { latitude: 40.7065, longitude: -73.9229 },
+    });
+
+    const model = createMapReviewModel([listing], listing.id);
+
+    expect(model.selected).toMatchObject({
+      zoneLabel: "Bushwick",
+      zoneKind: "exceptional-fallback",
+      boroughFallback: "Brooklyn fallback",
+    });
+    expect(model.selected?.subway[0]?.routes).toContain("L");
   });
 
   it("geocodes known fixture addresses even when the listing title changes", () => {
