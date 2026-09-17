@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: resolve(__dirname),
   devIndicators: false,
   poweredByHeader: false,
+  // Listing photos are arbitrary third-party URLs, so remote patterns cannot be
+  // enumerated, and the Workers deployment does not run the image optimizer.
+  images: {
+    unoptimized: true,
+  },
   typescript: {
     tsconfigPath: "tsconfig.json",
   },

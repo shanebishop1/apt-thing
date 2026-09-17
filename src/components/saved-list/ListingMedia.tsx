@@ -2,13 +2,19 @@
 
 import {
   useEffect,
+  useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import Image from "next/image";
 import { ChevronLeft, ChevronRight, Map as MapIcon, X } from "lucide-react";
 import type { InviteIdentity, ListingCandidate } from "@/lib/listings";
 import { ListingInlineMap } from "./map/LeafletListingMap";
+
+const inlinePhotoSizes = "(max-width: 900px) 100vw, 640px";
+const modalPhotoSizes = "(max-width: 1180px) 100vw, 1180px";
+const thumbnailPhotoSizes = "124px";
 
 export type ListingMediaProps = {
   identity?: InviteIdentity | undefined;
@@ -18,10 +24,22 @@ export type ListingMediaProps = {
 export function ListingMedia({ identity, listing }: ListingMediaProps) {
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
-  const selectedListingId = listing.id;
-  const photoUrls = listing.photos.filter(Boolean);
+  const [shownListingId, setShownListingId] = useState(listing.id);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const dialogCloseRef = useRef<HTMLButtonElement | null>(null);
+  // Photos arrive from arbitrary scrapers, so dedupe before they become React keys.
+  const photoUrls = Array.from(new Set(listing.photos.filter(Boolean)));
   const mediaItemCount = photoUrls.length + 1;
   const mapMediaIndex = 0;
+
+  // Selecting another listing resets the carousel; adjusting during render keeps the
+  // reset in the same commit as the new listing instead of flashing the stale photo.
+  if (listing.id !== shownListingId) {
+    setShownListingId(listing.id);
+    setSelectedMediaIndex(0);
+    setIsPhotoModalOpen(false);
+  }
+
   const isMapSelected = selectedMediaIndex === mapMediaIndex;
   const selectedPhotoUrl = !isMapSelected
     ? (photoUrls[selectedMediaIndex - 1] ?? photoUrls[0])
@@ -31,16 +49,65 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
   const photoAltText = `${listing.title} photo ${selectedMediaIndex}`;
 
   useEffect(() => {
-    setSelectedMediaIndex(0);
-    setIsPhotoModalOpen(false);
-  }, [selectedListingId]);
-
-  useEffect(() => {
-    if (!isPhotoModalOpen) {
+    const dialog = dialogRef.current;
+    if (!isPhotoModalOpen || !dialog) {
       return;
     }
 
-    function handleModalKeyDown(event: KeyboardEvent) {
+    // jsdom has no modal dialog implementation; the markup still renders there.
+    if (!dialog.open && typeof dialog.showModal === "function") {
+      dialog.showModal();
+    }
+
+    dialogCloseRef.current?.focus();
+  }, [isPhotoModalOpen]);
+
+  const selectPhoto = (index: number) => setSelectedMediaIndex(index);
+  const handlePreviousPhoto = () => {
+    setSelectedMediaIndex((currentIndex) =>
+      currentIndex === 0 ? mediaItemCount - 1 : currentIndex - 1,
+    );
+  };
+  const handleNextPhoto = () => {
+    setSelectedMediaIndex((currentIndex) =>
+      currentIndex === mediaItemCount - 1 ? 0 : currentIndex + 1,
+    );
+  };
+
+  /** Arrow keys step through the media whenever one of the carousel controls has focus. */
+  const handleControlArrowKeys = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (!showPhotoControls) {
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      handlePreviousPhoto();
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      handleNextPhoto();
+    }
+  };
+
+  // The lightbox's platform wiring lives on the dialog element itself: a click that lands
+  // on the dialog rather than a child is a backdrop click, and arrow keys step through the
+  // media wherever focus sits inside the modal.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!isPhotoModalOpen || !dialog) {
+      return;
+    }
+
+    function handleBackdropClick(event: MouseEvent) {
+      if (event.target === dialog) {
+        setIsPhotoModalOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsPhotoModalOpen(false);
         return;
@@ -65,36 +132,13 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
       }
     }
 
-    window.addEventListener("keydown", handleModalKeyDown);
-    return () => window.removeEventListener("keydown", handleModalKeyDown);
+    dialog.addEventListener("click", handleBackdropClick);
+    dialog.addEventListener("keydown", handleKeyDown);
+    return () => {
+      dialog.removeEventListener("click", handleBackdropClick);
+      dialog.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isPhotoModalOpen, mediaItemCount]);
-
-  const selectPhoto = (index: number) => setSelectedMediaIndex(index);
-  const handlePreviousPhoto = () => {
-    setSelectedMediaIndex((currentIndex) =>
-      currentIndex === 0 ? mediaItemCount - 1 : currentIndex - 1,
-    );
-  };
-  const handleNextPhoto = () => {
-    setSelectedMediaIndex((currentIndex) =>
-      currentIndex === mediaItemCount - 1 ? 0 : currentIndex + 1,
-    );
-  };
-  const handlePhotoCarouselKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (!showPhotoControls) {
-      return;
-    }
-
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      handlePreviousPhoto();
-    }
-
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      handleNextPhoto();
-    }
-  };
 
   const listingMap = <ListingInlineMap identity={identity} listing={listing} />;
   const sharedFrameProps = {
@@ -103,6 +147,7 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
     showNavigation: showPhotoControls,
     onPrevious: handlePreviousPhoto,
     onNext: handleNextPhoto,
+    onArrowKeys: handleControlArrowKeys,
   };
   const sharedStripProps = {
     listingTitle: listing.title,
@@ -111,27 +156,30 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
     isMapSelected,
     onSelectMap: () => setSelectedMediaIndex(mapMediaIndex),
     onSelectPhoto: selectPhoto,
+    onArrowKeys: handleControlArrowKeys,
   };
 
   return (
     <>
-      <section
-        className="listing-photo-carousel"
-        aria-label={`Media for ${listing.title}`}
-        tabIndex={showPhotoControls ? 0 : undefined}
-        onKeyDown={handlePhotoCarouselKeyDown}
-      >
+      <section className="listing-photo-carousel" aria-label={`Media for ${listing.title}`}>
         <PhotoFrame {...sharedFrameProps}>
           {isMapSelected ? (
             listingMap
           ) : selectedPhotoUrl ? (
             <button
               type="button"
-              className="listing-photo-open"
+              className="listing-photo-open listing-photo-canvas"
               aria-label={`Enlarge photo ${selectedMediaIndex} of ${photoUrls.length} for ${listing.title}`}
               onClick={() => setIsPhotoModalOpen(true)}
+              onKeyDown={handleControlArrowKeys}
             >
-              <img src={selectedPhotoUrl} alt={photoAltText} loading="lazy" />
+              <Image
+                unoptimized
+                fill
+                sizes={inlinePhotoSizes}
+                src={selectedPhotoUrl}
+                alt={photoAltText}
+              />
             </button>
           ) : null}
         </PhotoFrame>
@@ -139,18 +187,13 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
       </section>
 
       {isPhotoModalOpen ? (
-        <div
+        <dialog
+          ref={dialogRef}
           className="listing-photo-modal"
-          role="dialog"
-          aria-modal="true"
           aria-label={`Enlarged photos for ${listing.title}`}
+          onCancel={() => setIsPhotoModalOpen(false)}
+          onClose={() => setIsPhotoModalOpen(false)}
         >
-          <button
-            type="button"
-            className="listing-photo-modal-backdrop"
-            aria-label="Close enlarged photo carousel"
-            onClick={() => setIsPhotoModalOpen(false)}
-          />
           <section className="listing-photo-modal-panel" aria-label={`Photos for ${listing.title}`}>
             <div className="listing-photo-modal-header">
               <div>
@@ -158,6 +201,7 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
                 <h3>{listing.title}</h3>
               </div>
               <button
+                ref={dialogCloseRef}
                 type="button"
                 className="listing-photo-modal-close"
                 aria-label="Close enlarged photo carousel"
@@ -170,7 +214,15 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
               {isMapSelected ? (
                 listingMap
               ) : selectedPhotoUrl ? (
-                <img src={selectedPhotoUrl} alt={photoAltText} />
+                <div className="listing-photo-canvas">
+                  <Image
+                    unoptimized
+                    fill
+                    sizes={modalPhotoSizes}
+                    src={selectedPhotoUrl}
+                    alt={photoAltText}
+                  />
+                </div>
               ) : null}
             </PhotoFrame>
             {showPhotoControls ? (
@@ -181,7 +233,7 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
               />
             ) : null}
           </section>
-        </div>
+        </dialog>
       ) : null}
     </>
   );
@@ -195,6 +247,7 @@ function PhotoFrame({
   showNavigation,
   onPrevious,
   onNext,
+  onArrowKeys,
   children,
 }: {
   className?: string;
@@ -203,6 +256,7 @@ function PhotoFrame({
   showNavigation: boolean;
   onPrevious: () => void;
   onNext: () => void;
+  onArrowKeys: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   children: ReactNode;
 }) {
   return (
@@ -210,7 +264,12 @@ function PhotoFrame({
       {children}
       <figcaption className="listing-photo-count">{positionLabel}</figcaption>
       {showNavigation ? (
-        <PhotoNavigation listingTitle={listingTitle} onPrevious={onPrevious} onNext={onNext} />
+        <PhotoNavigation
+          listingTitle={listingTitle}
+          onPrevious={onPrevious}
+          onNext={onNext}
+          onArrowKeys={onArrowKeys}
+        />
       ) : null}
     </figure>
   );
@@ -220,10 +279,12 @@ function PhotoNavigation({
   listingTitle,
   onPrevious,
   onNext,
+  onArrowKeys,
 }: {
   listingTitle: string;
   onPrevious: () => void;
   onNext: () => void;
+  onArrowKeys: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <div className="listing-photo-controls" aria-label="Photo navigation controls">
@@ -232,6 +293,7 @@ function PhotoNavigation({
         className="listing-photo-arrow listing-photo-arrow-previous"
         aria-label={`Show previous photo for ${listingTitle}`}
         onClick={onPrevious}
+        onKeyDown={onArrowKeys}
       >
         <ChevronLeft aria-hidden="true" />
       </button>
@@ -240,6 +302,7 @@ function PhotoNavigation({
         className="listing-photo-arrow listing-photo-arrow-next"
         aria-label={`Show next photo for ${listingTitle}`}
         onClick={onNext}
+        onKeyDown={onArrowKeys}
       >
         <ChevronRight aria-hidden="true" />
       </button>
@@ -257,6 +320,7 @@ function MediaStrip({
   isMapSelected,
   onSelectMap,
   onSelectPhoto,
+  onArrowKeys,
 }: {
   className?: string;
   thumbnailsClassName?: string;
@@ -266,6 +330,7 @@ function MediaStrip({
   isMapSelected: boolean;
   onSelectMap: () => void;
   onSelectPhoto: (index: number) => void;
+  onArrowKeys: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <div
@@ -278,6 +343,7 @@ function MediaStrip({
         aria-label={`Show map for ${listingTitle}`}
         aria-current={isMapSelected ? "true" : undefined}
         onClick={onSelectMap}
+        onKeyDown={onArrowKeys}
       >
         <MapIcon aria-hidden="true" />
         <span>Map</span>
@@ -289,13 +355,14 @@ function MediaStrip({
         {photoUrls.map((photoUrl, index) => (
           <button
             type="button"
-            key={`${photoUrl}-${index}`}
+            key={photoUrl}
             className="listing-photo-thumbnail"
             aria-label={`Show photo ${index + 1} of ${photoUrls.length} for ${listingTitle}`}
             aria-current={index + 1 === selectedMediaIndex ? "true" : undefined}
             onClick={() => onSelectPhoto(index + 1)}
+            onKeyDown={onArrowKeys}
           >
-            <img src={photoUrl} alt="" loading="lazy" />
+            <Image unoptimized fill sizes={thumbnailPhotoSizes} src={photoUrl} alt="" />
           </button>
         ))}
       </div>

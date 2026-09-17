@@ -43,6 +43,24 @@ export function ListingFieldDialog({
     firstEditInputRef.current?.focus();
   }, [isOpen]);
 
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!isOpen || !dialog) {
+      return;
+    }
+
+    // A click that lands on the dialog element itself landed on the backdrop; a click
+    // anywhere in the panel targets one of its children instead.
+    function handleBackdropClick(event: MouseEvent) {
+      if (event.target === dialog) {
+        onOpenChange(false);
+      }
+    }
+
+    dialog.addEventListener("click", handleBackdropClick);
+    return () => dialog.removeEventListener("click", handleBackdropClick);
+  }, [isOpen, onOpenChange]);
+
   if (!isOpen) {
     return null;
   }
@@ -53,13 +71,6 @@ export function ListingFieldDialog({
       id={editFieldsDialogId}
       className="field-edit-modal"
       aria-labelledby={editFieldsTitleId}
-      // A click that lands on the dialog itself is a click on the backdrop; anything
-      // inside the panel targets one of its children instead.
-      onClick={(event) => {
-        if (event.target === dialogRef.current) {
-          onOpenChange(false);
-        }
-      }}
       onCancel={() => onOpenChange(false)}
       onClose={() => onOpenChange(false)}
     >
