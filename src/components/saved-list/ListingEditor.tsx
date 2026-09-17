@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Pencil, X } from "lucide-react";
 import type { GroupActionRecord } from "@/lib/agent-contracts";
 import type { InviteIdentity, ListingCandidate, ReviewStatus } from "@/lib/listings";
@@ -44,11 +44,15 @@ export function ListingEditor({
   const [isEditingFields, setIsEditingFields] = useState(false);
   const [isAboutExpanded, setIsAboutExpanded] = useState(false);
   const selectedListingId = listing?.id;
+  const [shownListingId, setShownListingId] = useState(selectedListingId);
 
-  useEffect(() => {
+  // Another listing means a fresh panel: no half-finished field edit, no expanded blurb.
+  // Adjusting during render keeps the reset in the same commit as the new listing.
+  if (selectedListingId !== shownListingId) {
+    setShownListingId(selectedListingId);
     setIsEditingFields(false);
     setIsAboutExpanded(false);
-  }, [selectedListingId]);
+  }
 
   if (!listing) {
     return (
