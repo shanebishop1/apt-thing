@@ -8,6 +8,7 @@ import type {
   PersistedRunHistoryRun,
   PersistedRunSkipCounts,
 } from "@/lib/run-history-store";
+import { withDefined } from "@/lib/utils/records";
 import { formatLabel } from "./listing-presentation";
 
 export type RunHistoryArtifactPointer = {
@@ -70,7 +71,7 @@ export function createRunHistoryPanelModel(history: PersistedRunHistory): RunHis
       const skippedCount =
         run.skipped.seen + run.skipped.saved + run.skipped.rejected + run.skipped.triaged;
 
-      return {
+      return withDefined<RunHistoryPanelRunModel>({
         runId: run.runId,
         heading: createRunHistoryHeading(run),
         cadence: run.cadence,
@@ -112,7 +113,7 @@ export function createRunHistoryPanelModel(history: PersistedRunHistory): RunHis
         ),
         artifactPointers,
         candidateSummaries: run.candidateSummaries,
-      } satisfies RunHistoryPanelRunModel;
+      });
     }),
   };
 }
@@ -141,13 +142,13 @@ function createRunArtifactPointers(
   return pointers.map((pointer, index) => {
     const id = `artifact-${slugify(run.runId)}-${index}`;
 
-    return {
+    return withDefined<RunHistoryArtifactPointer>({
       id,
       label: `${pointer.owner.toUpperCase()} pointer`,
       ownerLabel: pointer.owner.toUpperCase(),
       storageKey: pointer.key,
       contentType: pointer.contentType,
-    };
+    });
   });
 }
 

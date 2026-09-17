@@ -13,9 +13,9 @@ import { ListingMedia } from "./ListingMedia";
 import { ReviewStatusDropdown } from "./ReviewStatusDropdown";
 
 export type ListingEditorProps = {
-  identity?: InviteIdentity;
-  listing?: ListingCandidate;
-  actions?: ListingGroupActionsState;
+  identity?: InviteIdentity | undefined;
+  listing?: ListingCandidate | undefined;
+  actions?: ListingGroupActionsState | undefined;
   commentText: string;
   onCommentTextChange: (value: string) => void;
   onFieldChange: (listingId: string, field: FieldProvenance["field"], rawValue: string) => void;

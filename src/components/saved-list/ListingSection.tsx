@@ -13,7 +13,7 @@ const noGroups: ListingListGroup[] = [];
 
 type ListingSectionProps = {
   groups?: ListingListGroup[];
-  selectedId?: string;
+  selectedId?: string | undefined;
   onSelect: (listingId: string) => void;
   onSourceOpen: (listing: ListingCandidate) => void;
 };

@@ -11,7 +11,7 @@ import type { InviteIdentity, ListingCandidate } from "@/lib/listings";
 import { ListingInlineMap } from "./map/LeafletListingMap";
 
 export type ListingMediaProps = {
-  identity?: InviteIdentity;
+  identity?: InviteIdentity | undefined;
   listing: ListingCandidate;
 };
 

@@ -7,8 +7,8 @@ import { formatLabel } from "./listing-presentation";
 import { createRunHistoryPanelModel } from "./run-history-model";
 
 export type RunHistoryState =
-  | { status: "loading"; history?: PersistedRunHistory }
-  | { status: "error"; error: string; history?: PersistedRunHistory }
+  | { status: "loading"; history?: PersistedRunHistory | undefined }
+  | { status: "error"; error: string; history?: PersistedRunHistory | undefined }
   | { status: "ready"; history: PersistedRunHistory };
 
 export function RunHistoryPanel({

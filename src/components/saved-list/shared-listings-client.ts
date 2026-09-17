@@ -1,6 +1,7 @@
 import type { GroupActionRecord, SeenRejectedMemoryRecord } from "@/lib/agent-contracts";
 import type { InviteIdentity, ListingCandidate } from "@/lib/listings";
 import type { PersistedRunHistory } from "@/lib/run-history-store";
+import { withDefined } from "@/lib/utils/records";
 
 export type SharedListingSnapshot = {
   groupId: string;
@@ -64,13 +65,16 @@ export async function establishGroupSession(
   displayName: string,
   options: RequestOptions = {},
 ): Promise<GroupSession> {
-  const response = await fetch("/api/group/session", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ inviteCode, displayName }),
-    signal: options.signal,
-  });
+  const response = await fetch(
+    "/api/group/session",
+    withDefined<RequestInit>({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ inviteCode, displayName }),
+      signal: options.signal,
+    }),
+  );
   const payload = (await response.json()) as
     | { ok: true; identity: InviteIdentity }
     | ApiErrorPayload;
@@ -84,9 +88,11 @@ export async function loadSharedSnapshot(
   session: GroupSession,
   options: RequestOptions = {},
 ): Promise<SharedListingSnapshot> {
-  const response = await sessionFetch(session, "/api/group/listings", {
-    signal: options.signal,
-  });
+  const response = await sessionFetch(
+    session,
+    "/api/group/listings",
+    withDefined<RequestInit>({ signal: options.signal }),
+  );
   const payload = await readSharedListingsResponse(response, "snapshot-load-failed");
   return payload.snapshot;
 }
@@ -95,7 +101,11 @@ export async function loadRunHistory(
   session: GroupSession,
   options: RequestOptions = {},
 ): Promise<PersistedRunHistory> {
-  const response = await sessionFetch(session, "/api/group/runs", { signal: options.signal });
+  const response = await sessionFetch(
+    session,
+    "/api/group/runs",
+    withDefined<RequestInit>({ signal: options.signal }),
+  );
   const payload = (await response.json()) as
     | { ok: true; history: PersistedRunHistory }
     | ApiErrorPayload;
@@ -113,14 +123,21 @@ export async function createSharedListing(
   snapshot: SharedListingSnapshot;
   result?: CreateSharedListingResult;
 }> {
-  const response = await sessionFetch(session, "/api/group/listings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
-    signal: options.signal,
-  });
+  const response = await sessionFetch(
+    session,
+    "/api/group/listings",
+    withDefined<RequestInit>({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+      signal: options.signal,
+    }),
+  );
   const payload = await readSharedListingsResponse(response, "create-listing-failed");
-  return { snapshot: payload.snapshot, result: payload.result };
+  return withDefined<{ snapshot: SharedListingSnapshot; result?: CreateSharedListingResult }>({
+    snapshot: payload.snapshot,
+    result: payload.result,
+  });
 }
 
 export async function patchSharedListing(
@@ -132,12 +149,12 @@ export async function patchSharedListing(
   const response = await sessionFetch(
     session,
     `/api/group/listings/${encodeURIComponent(listingId)}`,
-    {
+    withDefined<RequestInit>({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(mutation),
       signal: options.signal,
-    },
+    }),
   );
   const payload = await readSharedListingsResponse(response, "listing-mutation-failed");
   return payload.snapshot;
@@ -152,12 +169,12 @@ export async function postSharedAction(
   const response = await sessionFetch(
     session,
     `/api/group/listings/${encodeURIComponent(listingId)}`,
-    {
+    withDefined<RequestInit>({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(action),
       signal: options.signal,
-    },
+    }),
   );
   const payload = await readSharedListingsResponse(response, "listing-action-failed");
   return payload.snapshot;
@@ -169,9 +186,11 @@ async function sessionFetch(session: GroupSession, input: string, init: RequestI
   const response = await request();
   if (response.status !== 401) return response;
 
-  await establishGroupSession(session.inviteCode, session.displayName, {
-    signal: init.signal ?? undefined,
-  });
+  await establishGroupSession(
+    session.inviteCode,
+    session.displayName,
+    withDefined<RequestOptions>({ signal: init.signal ?? undefined }),
+  );
   return request();
 }
 

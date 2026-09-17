@@ -5,7 +5,7 @@ import { Plus } from "lucide-react";
 import type { InviteIdentity } from "@/lib/listings";
 
 type ListingIntakeProps = {
-  identity?: InviteIdentity;
+  identity?: InviteIdentity | undefined;
   url: string;
   message: string;
   apiBusy: boolean;

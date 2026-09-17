@@ -7,7 +7,7 @@ import type { IdentityFormState } from "./saved-list-state";
 type InviteIdentityFormProps = {
   mode: "gate" | "settings";
   identityForm: IdentityFormState;
-  identity?: InviteIdentity;
+  identity?: InviteIdentity | undefined;
   message: string;
   onChange: (field: keyof IdentityFormState, value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;

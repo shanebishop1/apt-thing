@@ -31,10 +31,10 @@ export function MapReviewPanel({
   onComment,
   onCloseDetail,
 }: {
-  identity?: InviteIdentity;
+  identity?: InviteIdentity | undefined;
   model: ReturnType<typeof createMapReviewModel>;
-  selectedId?: string;
-  actions?: ListingGroupActions;
+  selectedId?: string | undefined;
+  actions?: ListingGroupActions | undefined;
   commentText: string;
   isDetailOverlayOpen: boolean;
   onSelect: (listingId: string) => void;
@@ -132,7 +132,7 @@ function MapDetail({
   onSourceOpen,
 }: {
   id: string;
-  candidate?: MapReviewCandidate;
+  candidate?: MapReviewCandidate | undefined;
   onSourceOpen: (listing: ListingCandidate) => void;
 }) {
   if (!candidate) {

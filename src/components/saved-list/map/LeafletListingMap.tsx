@@ -25,9 +25,9 @@ export function LeafletListingMap({
   onSelect,
   className = "leaflet-map",
 }: {
-  identity?: InviteIdentity;
+  identity?: InviteIdentity | undefined;
   model: ReturnType<typeof createMapReviewModel>;
-  selectedId?: string;
+  selectedId?: string | undefined;
   onSelect: (listingId: string) => void;
   className?: string;
 }) {
@@ -143,7 +143,7 @@ export function ListingInlineMap({
   identity,
   listing,
 }: {
-  identity?: InviteIdentity;
+  identity?: InviteIdentity | undefined;
   listing: ListingCandidate;
 }) {
   const model = createMapReviewModel([listing], listing.id);

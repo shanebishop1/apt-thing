@@ -7,9 +7,9 @@ import type { ListingGroupActions as ListingGroupActionsState } from "@/lib/grou
 import { formatLabel } from "./listing-presentation";
 
 export type ListingGroupActionsProps = {
-  identity?: InviteIdentity;
+  identity?: InviteIdentity | undefined;
   listing: ListingCandidate;
-  actions?: ListingGroupActionsState;
+  actions?: ListingGroupActionsState | undefined;
   commentText: string;
   onCommentTextChange: (value: string) => void;
   onReaction: (listing: ListingCandidate, reaction: GroupActionRecord["reaction"]) => void;
@@ -82,7 +82,7 @@ export function ListingGroupActions({
 }
 
 export type GroupActionSummaryProps = {
-  actions?: ListingGroupActionsState;
+  actions?: ListingGroupActionsState | undefined;
 };
 
 export function GroupActionSummary({ actions }: GroupActionSummaryProps) {

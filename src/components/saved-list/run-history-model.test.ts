@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { briefingRunHistoryFixture } from "@/lib/agent-contract-fixtures";
 import type { PersistedRunHistoryRun } from "@/lib/run-history-store";
+import { withDefined } from "@/lib/utils/records";
 import { createRunHistoryPanelModel } from "./run-history-model";
 
 const baseRun: PersistedRunHistoryRun = {
@@ -15,7 +16,8 @@ const baseRun: PersistedRunHistoryRun = {
 describe("createRunHistoryPanelModel", () => {
   it("orders persisted runs newest-first and derives counts without hiding coverage", () => {
     const realCoverage = baseRun.sourceCoverage[0]!;
-    const olderRun: PersistedRunHistoryRun = {
+    // withDefined drops completedAt entirely, as a still-running persisted run does.
+    const olderRun = withDefined<PersistedRunHistoryRun>({
       ...baseRun,
       runId: "older-run",
       mode: "fixture",
@@ -26,7 +28,7 @@ describe("createRunHistoryPanelModel", () => {
         { ...realCoverage, checkedCount: 4, candidateCount: 3 },
         { ...realCoverage, source: "zillow", status: "failed", checkedCount: 0 },
       ],
-    };
+    });
 
     const model = createRunHistoryPanelModel({
       groupId: briefingRunHistoryFixture.groupId,

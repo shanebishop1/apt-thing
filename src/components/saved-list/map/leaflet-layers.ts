@@ -40,7 +40,7 @@ export function syncLeafletMap({
   map: LeafletMap;
   model: ReturnType<typeof createMapReviewModel>;
   onSelect: (listingId: string) => void;
-  selectedId?: string;
+  selectedId?: string | undefined;
 }): LeafletSyncResult {
   const groceryMarkers = groceryStoreLocations.map((store) => {
     const marker = leaflet
