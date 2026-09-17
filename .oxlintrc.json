@@ -39,20 +39,7 @@
     "eslint/no-await-in-loop": "off",
     // app/layout.tsx imports globals.css for its side effect, which is the only way
     // to load global styles in the App Router.
-    "import/no-unassigned-import": "off",
-
-    // Off: known debt, tracked rather than silently satisfied.
-    // The status dropdown, field dialog and photo lightbox are hand-built ARIA
-    // widgets; these rules want them rebuilt on native elements, which is a UI
-    // change well beyond a lint pass.
-    "jsx-a11y/prefer-tag-over-role": "off",
-    "jsx-a11y/click-events-have-key-events": "off",
-    "jsx-a11y/no-static-element-interactions": "off",
-    "jsx-a11y/no-noninteractive-element-interactions": "off",
-    "jsx-a11y/no-noninteractive-tabindex": "off",
-    // Listing photos come from arbitrary third-party hosts and the Workers
-    // deployment does not run the Next image optimizer.
-    "nextjs/no-img-element": "off"
+    "import/no-unassigned-import": "off"
   },
   "overrides": [
     {

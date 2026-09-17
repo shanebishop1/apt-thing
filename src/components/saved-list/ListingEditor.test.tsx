@@ -31,7 +31,15 @@ vi.mock("leaflet", () => {
   };
 });
 
+// jsdom ships no modal dialog behaviour, so `showModal` only has to flip the open state.
 beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    this.open = false;
+    this.dispatchEvent(new Event("close"));
+  };
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({

@@ -1903,30 +1903,32 @@ button:disabled {
   gap: 11px;
 }
 
-.field-modal-backdrop {
+dialog.field-edit-modal {
   position: fixed;
   inset: 0;
   z-index: 1200;
   display: grid;
-  place-items: center;
-  overflow: auto;
-  background: rgb(8 7 6 / 14%);
-  padding: max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
-    max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
-  backdrop-filter: blur(1.5px) saturate(1);
-}
-
-.field-edit-modal {
-  display: grid;
   width: min(720px, 100%);
+  max-width: calc(100vw - 28px);
   max-height: min(760px, calc(100vh - 36px));
+  margin: auto;
   gap: 16px;
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--panel) 96%, var(--panel-strong));
   box-shadow: 0 32px 90px rgb(0 0 0 / 48%);
+  color: var(--bg-ink);
   padding: clamp(16px, 4vw, 24px);
+}
+
+dialog.field-edit-modal:not([open]) {
+  display: none;
+}
+
+dialog.field-edit-modal::backdrop {
+  background: rgb(8 7 6 / 14%);
+  backdrop-filter: blur(1.5px) saturate(1);
 }
 
 .field-modal-header {
