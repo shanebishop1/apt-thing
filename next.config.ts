@@ -34,4 +34,18 @@ const nextConfig: NextConfig = {
 
 export default nextConfig;
 
-import("@opennextjs/cloudflare").then((m) => m.initOpenNextCloudflareForDev());
+// `APT_WRANGLER_CONFIG` lets the end-to-end suite point the dev bridge at
+// `e2e/wrangler.e2e.jsonc` (which binds a local D1) and at its own persistence directory, so
+// an e2e run never reads or writes a developer's `.wrangler/state`.
+const e2eWranglerConfig = process.env.APT_WRANGLER_CONFIG;
+
+import("@opennextjs/cloudflare").then((m) =>
+  m.initOpenNextCloudflareForDev(
+    e2eWranglerConfig
+      ? // `wrangler d1 migrations apply --persist-to .wrangler/e2e-state` writes under a `v3`
+        // subdirectory, while `getPlatformProxy` treats `persist.path` as the directory that
+        // directly holds the `d1` store, so this path carries the `v3` segment explicitly.
+        { configPath: e2eWranglerConfig, persist: { path: ".wrangler/e2e-state/v3" } }
+      : undefined,
+  ),
+);

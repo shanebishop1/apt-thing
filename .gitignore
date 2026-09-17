@@ -32,6 +32,8 @@ Desktop.ini
 .direnv/
 .dev.vars
 .dev.vars.*
+# Tracked on purpose: dummy invite code and blank provider keys for the e2e dev bridge.
+!e2e/.dev.vars
 
 # Python
 __pycache__/
@@ -89,6 +91,8 @@ temp/
 # Test / browser automation artifacts
 playwright-report/
 test-results/
+blob-report/
+.wrangler/e2e-state/
 
 # Archives
 *.7z
