@@ -111,3 +111,7 @@ requests, and never deploys.
 See **[SETUP.md](SETUP.md)** for a clean-clone walkthrough: the local D1 database,
 invite codes, API checks, optional provider credentials, the source loop, and
 optional Cloudflare deployment.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
