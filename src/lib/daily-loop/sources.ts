@@ -15,7 +15,7 @@ import {
   type ListingCandidate,
 } from "../listings";
 import { safeJson } from "../utils/json";
-import { firstRecord } from "../utils/records";
+import { firstRecord, withDefined } from "../utils/records";
 import { detectMaterialChange, findExistingState } from "./candidates";
 import { stableId } from "./ids";
 import {
@@ -72,9 +72,9 @@ export async function runStreetEasySource({
 
   const liveMetadata = await maybeCollectStreetEasyLiveSafeMetadata({
     mode,
-    env,
+    ...(env !== undefined ? { env } : {}),
     fixture,
-    fetchImpl,
+    ...(fetchImpl !== undefined ? { fetchImpl } : {}),
   });
   const sourceFixture =
     liveMetadata.normalizedFixture ??
@@ -101,13 +101,22 @@ export async function runStreetEasySource({
     }
     statesForExtraction.push(
       state.state ??
-        createGroupScopedListingState(identity.groupId, result.sourceUrl, {
-          seen: state.reason !== "saved",
-          triaged: state.reason === "triaged" || state.reason === "rejected",
-          triageBucket:
-            state.listing?.triageBucket ?? (state.reason === "rejected" ? "rejected" : "untriaged"),
-          reviewStatus: state.reason === "rejected" ? "rejected" : state.listing?.reviewStatus,
-        }),
+        createGroupScopedListingState(
+          identity.groupId,
+          result.sourceUrl,
+          withDefined<
+            Partial<
+              Pick<GroupScopedListingState, "seen" | "triaged" | "triageBucket" | "reviewStatus">
+            >
+          >({
+            seen: state.reason !== "saved",
+            triaged: state.reason === "triaged" || state.reason === "rejected",
+            triageBucket:
+              state.listing?.triageBucket ??
+              (state.reason === "rejected" ? "rejected" : "untriaged"),
+            reviewStatus: state.reason === "rejected" ? "rejected" : state.listing?.reviewStatus,
+          }),
+        ),
     );
   }
 
@@ -116,7 +125,7 @@ export async function runStreetEasySource({
     fixture: sourceFixture,
     priorStates: statesForExtraction,
     concurrencyLimit,
-    analyzer,
+    ...(analyzer !== undefined ? { analyzer } : {}),
   });
   skipped.push(
     ...result.skipped.map((item) => ({
@@ -205,14 +214,14 @@ export function runSecondaryZillowFixture({
     [],
   );
   if (existing) {
-    const skipped: DailyLoopSkippedCandidate = {
+    const skipped = withDefined<DailyLoopSkippedCandidate>({
       source: "zillow",
       sourceUrl: zillowManualFixture.sourceUrl,
       listingId: zillowManualFixture.sourceListingId,
       reason: existing.reason,
       materialChangeDetected: false,
       materialChangeReasons: [],
-    };
+    });
     return {
       status: "success",
       coverage: zillowCoverage("success", 1, 0, now),
@@ -321,6 +330,16 @@ function zillowCoverage(
   };
 }
 
+type StreetEasyLiveSafeMetadata = {
+  liveAttempted: boolean;
+  classification: DailyLoopSourceCoverage["classification"];
+  missingKey: boolean;
+  queryAttempts: number;
+  detailMetadataByListing: Record<string, DailyLoopDetailRetryMetadata>;
+  failureCode?: string;
+  normalizedFixture?: StreetEasyBatchFixture;
+};
+
 async function maybeCollectStreetEasyLiveSafeMetadata({
   mode,
   env,
@@ -331,15 +350,7 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
   env?: DailyLoopEnv;
   fixture: StreetEasyBatchFixture;
   fetchImpl?: typeof fetch;
-}): Promise<{
-  liveAttempted: boolean;
-  classification: DailyLoopSourceCoverage["classification"];
-  missingKey: boolean;
-  queryAttempts: number;
-  detailMetadataByListing: Record<string, DailyLoopDetailRetryMetadata>;
-  failureCode?: string;
-  normalizedFixture?: StreetEasyBatchFixture;
-}> {
+}): Promise<StreetEasyLiveSafeMetadata> {
   if (mode !== "live-safe") {
     return {
       liveAttempted: false,
@@ -454,7 +465,7 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
     const hasDetailFailures = Object.values(detailMetadataByListing).some(
       (metadata) => metadata.status !== "success",
     );
-    return {
+    return withDefined<StreetEasyLiveSafeMetadata>({
       liveAttempted: true,
       classification:
         normalizedFixture.results.length > 0 && !hasDetailFailures ? "success" : "partial",
@@ -468,7 +479,7 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
             ? "streeteasy-live-safe-detail-partial"
             : undefined,
       normalizedFixture,
-    };
+    });
   } catch {
     return {
       liveAttempted: true,

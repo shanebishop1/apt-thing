@@ -15,6 +15,7 @@ import {
   type ListingCandidate,
 } from "../listings";
 import { AI_TRIAGE_SCHEMA_VERSION } from "../triage";
+import { withDefined } from "../utils/records";
 import { stableId } from "./ids";
 import {
   DAILY_LOOP_RETRY_POLICY,
@@ -112,7 +113,7 @@ export function toSkippedUnit(
   item: DailyLoopSkippedCandidate,
   now: string,
 ): AgentRunLogRecord["units"][number] {
-  return {
+  return withDefined<AgentRunLogRecord["units"][number]>({
     id: stableId(`${runId}:${item.sourceUrl}:skipped:${item.reason}`),
     source: item.source,
     sourceUrl: item.sourceUrl,
@@ -126,7 +127,7 @@ export function toSkippedUnit(
       : undefined,
     startedAt: now,
     completedAt: now,
-  };
+  });
 }
 
 export function toMaterialChangeUnit(
@@ -134,7 +135,7 @@ export function toMaterialChangeUnit(
   item: DailyLoopSkippedCandidate,
   now: string,
 ): AgentRunLogRecord["units"][number] {
-  return {
+  return withDefined<AgentRunLogRecord["units"][number]>({
     id: stableId(`${runId}:${item.sourceUrl}:material-change-processed`),
     source: item.source,
     sourceUrl: item.sourceUrl,
@@ -145,7 +146,7 @@ export function toMaterialChangeUnit(
     errorCode: `material-change-${item.materialChangeReasons.join("+")}`,
     startedAt: now,
     completedAt: now,
-  };
+  });
 }
 
 export function toSuccessUnit(
@@ -177,18 +178,18 @@ export function toProviderFailureUnits(
     if (metadata.status !== "failed") return [];
     const listing = listings[index];
     return [
-      {
+      withDefined<AgentRunLogRecord["units"][number]>({
         id: stableId(`${runId}:gemini:${metadata.attemptId}:${index}:failed`),
-        source: "gemini" as const,
+        source: "gemini",
         sourceUrl: listing?.url,
         listingId: listing?.sourceListingId ?? listing?.id,
-        status: "failed" as const,
+        status: "failed",
         attempt: 1,
         maxRetries: DAILY_LOOP_RETRY_POLICY.maxRetries,
         errorCode: metadata.failureCode ?? "gemini-provider-failed",
         startedAt: metadata.startedAt,
         completedAt: metadata.completedAt ?? now,
-      },
+      }),
     ];
   });
 }

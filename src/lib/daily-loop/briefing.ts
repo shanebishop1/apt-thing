@@ -16,6 +16,7 @@ import {
   type AiProviderAttemptMetadata,
   type ListingCandidate,
 } from "../listings";
+import { withDefined } from "../utils/records";
 import { uniqueStrings } from "../utils/text";
 import { stableId } from "./ids";
 import type {
@@ -59,12 +60,14 @@ export function createDailyLoopBriefing({
       `${listings.length} candidate(s) persisted for review/history`,
       `${skipped.filter((item) => !item.materialChangeDetected).length} seen/saved/rejected/triaged candidate(s) skipped`,
     ],
-    sourceCoverage: coverage.map((item) => ({
-      source: item.source,
-      status: item.status,
-      checkedCount: item.checkedCount,
-      failureCode: item.failureCode,
-    })),
+    sourceCoverage: coverage.map((item) =>
+      withDefined<BriefingRecord["sourceCoverage"][number]>({
+        source: item.source,
+        status: item.status,
+        checkedCount: item.checkedCount,
+        failureCode: item.failureCode,
+      }),
+    ),
     skippedSeenCount: skipped.filter(
       (item) => !item.materialChangeDetected && (item.reason === "seen" || item.reason === "saved"),
     ).length,
@@ -107,19 +110,21 @@ export function createDailyLoopHistory({
   const candidateSummaries = listings.map((listing) =>
     toCandidateSummary(listing, sourceEvidence, triageMetadata),
   );
-  const coverage = sourceCoverage.map((item): SourceCoverageSummary => ({
-    source: item.source,
-    status: item.status,
-    checkedCount: item.checkedCount,
-    candidateCount: item.candidateCount,
-    failureCode: item.failureCode,
-    failureMessage: item.failureMessage,
-    rawArtifactPointers: rawArtifactPointers.filter(
-      (pointer) =>
-        pointer.key.includes(`/${item.source}/`) || pointer.key.includes("source-failures"),
-    ),
-  }));
-  const latestRun: BriefingRunHistoryRun = {
+  const coverage = sourceCoverage.map((item) =>
+    withDefined<SourceCoverageSummary>({
+      source: item.source,
+      status: item.status,
+      checkedCount: item.checkedCount,
+      candidateCount: item.candidateCount,
+      failureCode: item.failureCode,
+      failureMessage: item.failureMessage,
+      rawArtifactPointers: rawArtifactPointers.filter(
+        (pointer) =>
+          pointer.key.includes(`/${item.source}/`) || pointer.key.includes("source-failures"),
+      ),
+    }),
+  );
+  const latestRun = withDefined<BriefingRunHistoryRun>({
     runId: run.id,
     cadence: run.cadence,
     trigger: run.trigger,
@@ -144,7 +149,7 @@ export function createDailyLoopHistory({
     providerMetadata,
     rawArtifactPointers,
     operatorEvidence: run.operatorEvidence,
-  };
+  });
   return {
     contract: "briefing-run-history-v1",
     schemaVersion: "briefing-run-history-v1",
@@ -273,19 +278,21 @@ export function createDailyLoopOperatorEvidence(input: {
   const reviewNeeded = input.listings.filter(
     (listing) => listing.triageBucket === "review-needed",
   ).length;
-  const candidateIdentifiers = input.listings.map((listing) => ({
-    listingId: listing.id,
-    sourceListingId: listing.sourceListingId,
-    source: listing.source,
-    sourceUrl: listing.url,
-    duplicateKey: listing.duplicateKey,
-    groupScopedDuplicateKey: listing.groupScopedDuplicateKey,
-    bucket: listing.triageBucket,
-    triageStatus: listing.triageStatus,
-    reviewStatus: listing.reviewStatus,
-  }));
+  const candidateIdentifiers = input.listings.map((listing) =>
+    withDefined<AgentRunOperatorEvidence["candidateIdentifiers"][number]>({
+      listingId: listing.id,
+      sourceListingId: listing.sourceListingId,
+      source: listing.source,
+      sourceUrl: listing.url,
+      duplicateKey: listing.duplicateKey,
+      groupScopedDuplicateKey: listing.groupScopedDuplicateKey,
+      bucket: listing.triageBucket,
+      triageStatus: listing.triageStatus,
+      reviewStatus: listing.reviewStatus,
+    }),
+  );
 
-  return {
+  return withDefined<AgentRunOperatorEvidence>({
     runId: input.run.id,
     groupId: input.run.groupId,
     cadence: input.run.cadence,
@@ -311,7 +318,7 @@ export function createDailyLoopOperatorEvidence(input: {
     },
     sourceCoverage: input.coverage.map((coverage) => {
       const identifiers = identifiersForSource(coverage, input.listings, input.skipped);
-      return {
+      return withDefined<AgentRunOperatorEvidence["sourceCoverage"][number]>({
         source: coverage.source,
         sourceKey: coverage.sourceKey,
         classification: coverage.classification,
@@ -328,27 +335,31 @@ export function createDailyLoopOperatorEvidence(input: {
         pageMetadata: coverage.pageMetadata,
         detailRetryMetadata: coverage.detailRetryMetadata,
         identifiers,
-      };
+      });
     }),
     failures: input.coverage
       .filter((coverage) => coverage.status === "failed" || coverage.failureCode)
-      .map((coverage) => ({
-        sourceKey: coverage.sourceKey,
-        source: coverage.source,
-        status: coverage.status,
-        failureCode: coverage.failureCode,
-        failureMessage: coverage.failureMessage,
-      })),
+      .map((coverage) =>
+        withDefined<AgentRunOperatorEvidence["failures"][number]>({
+          sourceKey: coverage.sourceKey,
+          source: coverage.source,
+          status: coverage.status,
+          failureCode: coverage.failureCode,
+          failureMessage: coverage.failureMessage,
+        }),
+      ),
     skips: {
       byReason,
-      candidates: input.skipped.map((item) => ({
-        source: item.source,
-        sourceUrl: item.sourceUrl,
-        listingId: item.listingId,
-        reason: item.reason,
-        materialChangeDetected: item.materialChangeDetected,
-        materialChangeReasons: item.materialChangeReasons,
-      })),
+      candidates: input.skipped.map((item) =>
+        withDefined<AgentRunOperatorEvidence["skips"]["candidates"][number]>({
+          source: item.source,
+          sourceUrl: item.sourceUrl,
+          listingId: item.listingId,
+          reason: item.reason,
+          materialChangeDetected: item.materialChangeDetected,
+          materialChangeReasons: item.materialChangeReasons,
+        }),
+      ),
     },
     retryAttempts: input.run.units.map((unit) => ({ ...unit })),
     detailRetries: input.coverage.flatMap((coverage) => coverage.detailRetryMetadata ?? []),
@@ -373,7 +384,7 @@ export function createDailyLoopOperatorEvidence(input: {
         input.listings.map((listing) => listing.groupScopedDuplicateKey),
       ),
     },
-  };
+  });
 }
 
 function countSkippedByReason(skipped: DailyLoopSkippedCandidate[]): Record<string, number> {

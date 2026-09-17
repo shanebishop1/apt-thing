@@ -9,7 +9,13 @@ import {
   runDailySourceAgentLoop,
 } from "./daily-source-loop";
 import { streetEasyBatchFixture } from "./fixtures";
-import { createGroupScopedListingState, createGroupIdentity, defaultSearchGroup } from "./listings";
+import {
+  createGroupScopedListingState,
+  createGroupIdentity,
+  defaultSearchGroup,
+  type AiProviderAttemptMetadata,
+} from "./listings";
+import { withDefined } from "./utils/records";
 import { validateBriefingRunHistoryContract } from "./agent-contracts";
 import {
   DAILY_SOURCE_AGENT_LOOP_WORKFLOW_BINDING,
@@ -151,11 +157,11 @@ describe("runDailySourceAgentLoop", () => {
             concerns: [],
             suggestedAction: "confirm",
           } as any,
-          providerMetadata: {
+          providerMetadata: withDefined<AiProviderAttemptMetadata>({
             ...fallback.providerMetadata,
-            status: "success" as const,
+            status: "success",
             failureCode: undefined,
-          },
+          }),
         };
       },
     });

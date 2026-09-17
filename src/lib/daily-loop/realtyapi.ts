@@ -10,6 +10,7 @@ import {
   stringArrayField,
   stringField,
 } from "../utils/records";
+import { withDefined } from "../utils/records";
 import { uniqueStrings } from "../utils/text";
 
 /**
@@ -114,13 +115,13 @@ export function mergeStreetEasyDetails(
           ...normalizeStreetEasyDetails(detailRecord, result.listingId, result.sourceUrl),
         }
       : result.details;
-    if (!mergedDetails.photos?.length) {
+    if (!mergedDetails.photos?.length && result.details.photos) {
       mergedDetails.photos = result.details.photos;
     }
-    if (!mergedDetails.amenities?.length) {
+    if (!mergedDetails.amenities?.length && result.details.amenities) {
       mergedDetails.amenities = result.details.amenities;
     }
-    if (!mergedDetails.location) {
+    if (!mergedDetails.location && result.details.location) {
       mergedDetails.location = result.details.location;
     }
     return {
@@ -142,7 +143,7 @@ function normalizeStreetEasyDetails(
     streetEasySearchAddress(record) ??
     realtyApiAddress(record) ??
     "Unknown address";
-  return {
+  return withDefined<StreetEasyDetailsFixture>({
     listingId,
     sourceListingId: listingId,
     sourceUrl,
@@ -171,7 +172,7 @@ function normalizeStreetEasyDetails(
       stringArrayField(record, ["photos", "images", "photoUrls", "imageUrls"]) ??
       realtyApiPhotos(record),
     status: stringField(record, ["status", "propertyStatus"]),
-  };
+  });
 }
 
 function normalizeStreetEasyTitle(title: string | undefined, address: string) {

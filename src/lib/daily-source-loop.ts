@@ -73,10 +73,13 @@ export async function runDailySourceAgentLoop(
     options.concurrencyLimit ?? DAILY_LOOP_DEFAULT_CONCURRENCY,
   );
   const runId = stableId(`${identity.groupId}:daily-loop:${cadence}:${trigger}:${now}`);
+  // Spread instead of assigned so an unset binding stays absent rather than explicitly undefined.
+  const envOption = options.env !== undefined ? { env: options.env } : {};
+  const fetchImplOption = options.fetchImpl !== undefined ? { fetchImpl: options.fetchImpl } : {};
   const d1TransitionErrors = uniqueStrings(
     [
       await persistDailyLoopRunTransition({
-        env: options.env,
+        ...envOption,
         mode,
         runId,
         groupId: identity.groupId,
@@ -87,7 +90,7 @@ export async function runDailySourceAgentLoop(
         startedAt: now,
       }),
       await persistDailyLoopRunTransition({
-        env: options.env,
+        ...envOption,
         mode,
         runId,
         groupId: identity.groupId,
@@ -121,13 +124,13 @@ export async function runDailySourceAgentLoop(
     identity,
     fixture,
     mode,
-    env: options.env,
+    ...envOption,
     now,
     concurrencyLimit,
     existingStates: preexistingStates,
-    fail: options.failStreetEasy,
-    analyzer,
-    fetchImpl: options.fetchImpl,
+    ...(options.failStreetEasy !== undefined ? { fail: options.failStreetEasy } : {}),
+    ...(analyzer !== undefined ? { analyzer } : {}),
+    ...fetchImplOption,
   });
   coverage.push(streetEasyResult.coverage);
   if (streetEasyResult.status === "failed") {
@@ -158,7 +161,7 @@ export async function runDailySourceAgentLoop(
           concurrencyLimit,
           existingListings: [...(options.existingListings ?? []), ...listings],
           seenMemory: options.seenMemory ?? [],
-          fail: options.failSecondary,
+          ...(options.failSecondary !== undefined ? { fail: options.failSecondary } : {}),
         });
   coverage.push(secondaryResult.coverage);
   if (secondaryResult.status === "failed") {
@@ -304,7 +307,7 @@ export async function runDailySourceAgentLoop(
   const persistence: DailyLoopPersistencePlan = {
     ...persistenceBase,
     outcome: await persistDailyLoopArtifacts({
-      env: options.env,
+      ...envOption,
       mode,
       run,
       coverage,
