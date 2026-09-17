@@ -24,6 +24,16 @@ the group's decisions in one place.
 - Compare listings on a Leaflet map with neighborhood, subway, and grocery context.
 - Use list and map views on desktop or mobile, in light or dark theme.
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/list-dark.png" alt="Listing review with map, dark theme" width="45%">
+  <img src="assets/screenshots/map-light.png" alt="Map view with subway context, light theme" width="45%">
+  <br>
+  <img src="assets/screenshots/runs.png" alt="Run history for a live source loop" width="45%">
+  <img src="assets/screenshots/phone-list.png" alt="Listing list on a phone" width="45%">
+</p>
+
 ## How It Works
 
 ```text
@@ -43,6 +53,20 @@ group is always taken from the authenticated identity. Shared state lives in
 Cloudflare D1. Browser storage holds only the entered invite code, display name,
 and UI preferences. OpenNext packages the app for Cloudflare Workers, with
 `src/worker.ts` supplying the fetch and scheduled entrypoints.
+
+### Data Sources And Attribution
+
+Base map data comes from OpenStreetMap contributors under the Open Database
+License (ODbL). Raster tiles come from Stadia Maps when `STADIA_MAPS_API_KEY` is
+set and from OpenStreetMap's standard tiles otherwise. Subway station names,
+routes, and coordinates come from the MTA Subway Stations dataset (39hk-dx4f) on
+data.ny.gov, Metropolitan Transportation Authority open data republished by New
+York State under the data.ny.gov terms of use; `scripts/build-subway-stations.mjs`
+regenerates the committed module and the map carries the credit. The subway route
+and stop overlay is drawn from the MTA Subway Routes & Stops feature service.
+StreetEasy listing facts come from RealtyAPI, which is not affiliated with
+StreetEasy. Other sources are read from the fetched page and extracted by Google
+Gemini, whose output is not a guarantee of accuracy.
 
 ## Project Layout
 
