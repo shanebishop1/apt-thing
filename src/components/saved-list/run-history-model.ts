@@ -46,6 +46,7 @@ export type RunHistoryPanelRunModel = {
   memoryUpdates: number;
   briefingSummary?: string;
   aiCallCount: number;
+  aiFailureCount: number;
   aiAttemptsLabel: string;
   aiOutputLabel: string;
   sourceCoverage: SourceCoverageSummary[];
@@ -75,6 +76,9 @@ export function createRunHistoryPanelModel(history: PersistedRunHistory): RunHis
       );
       const skippedCount =
         run.skipped.seen + run.skipped.saved + run.skipped.rejected + run.skipped.triaged;
+      const aiFailureCount = run.providerMetadata.filter(
+        (metadata) => metadata.status === "failed",
+      ).length;
 
       return withDefined<RunHistoryPanelRunModel>({
         runId: run.runId,
@@ -97,11 +101,8 @@ export function createRunHistoryPanelModel(history: PersistedRunHistory): RunHis
         memoryUpdates: run.memoryUpdates,
         briefingSummary: run.briefingSummary,
         aiCallCount: run.providerMetadata.length,
-        // Fixture-mode runs persist simulated provider metadata; never present it as real AI calls.
-        aiAttemptsLabel:
-          run.mode === "fixture"
-            ? "simulated AI attempt(s), fixture mode"
-            : "AI attempt(s) recorded",
+        aiFailureCount,
+        aiAttemptsLabel: createAiAttemptsLabel(run.mode, aiFailureCount),
         aiOutputLabel: `${counts.confirmedMatches} yes / ${counts.reviewNeeded} review / ${counts.rejected} no`,
         sourceCoverage,
         failures,
@@ -111,6 +112,14 @@ export function createRunHistoryPanelModel(history: PersistedRunHistory): RunHis
       });
     }),
   };
+}
+
+// Fixture-mode runs persist simulated provider metadata; never present it as real AI calls.
+// A failed attempt fell back to the deterministic triage, which the reader must know.
+function createAiAttemptsLabel(mode: PersistedRunHistoryRun["mode"], failed: number): string {
+  const base =
+    mode === "fixture" ? "simulated AI attempt(s), fixture mode" : "AI attempt(s) recorded";
+  return failed > 0 ? `${base}, ${failed} failed` : base;
 }
 
 function createRunHistoryHeading(run: PersistedRunHistoryRun): string {

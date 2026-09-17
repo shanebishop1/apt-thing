@@ -157,6 +157,7 @@ export function RunHistoryPanel({
                     }
                     value={String(run.aiCallCount)}
                   />
+                  <RunMetric label="AI attempts failed" value={String(run.aiFailureCount)} />
                   <RunMetric label="Triaged" value={String(run.counts.candidatesTriaged)} />
                   <RunMetric label="Source failures" value={String(run.counts.sourceFailures)} />
                 </section>

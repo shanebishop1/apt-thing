@@ -54,6 +54,7 @@ describe("createRunHistoryPanelModel", () => {
       completedLabel: "Still running",
     });
     expect(older?.counts.sourceFailures).toBe(1);
+    expect(latest?.aiFailureCount).toBe(0);
     expect(older?.sourceCoverage).toHaveLength(2);
   });
 
@@ -65,5 +66,31 @@ describe("createRunHistoryPanelModel", () => {
         runs: [],
       }).runs,
     ).toEqual([]);
+  });
+});
+
+describe("createRunHistoryPanelModel AI attempt failures", () => {
+  it("counts failed provider attempts and says so in the attempts label", () => {
+    const failedRun: PersistedRunHistoryRun = {
+      ...baseRun,
+      runId: "failed-ai-run",
+      providerMetadata: [
+        { ...baseRun.providerMetadata[0]!, status: "failed", failureCode: "schema-invalid" },
+        { ...baseRun.providerMetadata[0]!, status: "failed", failureCode: "gemini-http-429" },
+        { ...baseRun.providerMetadata[0]!, status: "success" },
+      ],
+    };
+
+    const [run] = createRunHistoryPanelModel({
+      groupId: "nyc-5br-2026",
+      generatedAt: "2026-09-17T00:00:00.000Z",
+      runs: [failedRun],
+    }).runs;
+
+    expect(run).toMatchObject({
+      aiCallCount: 3,
+      aiFailureCount: 2,
+      aiAttemptsLabel: "AI attempt(s) recorded, 2 failed",
+    });
   });
 });
