@@ -1,4 +1,5 @@
 import type { ListingCandidate, TriageBucket } from "./listings";
+import { withDefined } from "./utils/records";
 
 export type MapCoordinates = {
   latitude: number;
@@ -220,7 +221,7 @@ export function createMapReviewModel(
   const locatedCandidates = candidates.filter((candidate) => candidate.coordinates);
   const missingLocationCandidates = candidates.filter((candidate) => !candidate.coordinates);
 
-  return {
+  return withDefined<MapReviewModel>({
     candidates,
     locatedCandidates,
     missingLocationCandidates,
@@ -230,7 +231,7 @@ export function createMapReviewModel(
       "Map data © OpenStreetMap contributors. Subway routes/stations use the public MTA Subway Routes & Stops FeatureServer derived from MTA GTFS feeds.",
     viewport: nycMapViewport,
     mobileModes: ["map", "list", "detail"],
-  };
+  });
 }
 
 function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
@@ -241,7 +242,7 @@ function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
     new Set([listing.url, ...listing.evidence.map((item) => item.sourceUrl)].filter(Boolean)),
   );
 
-  return {
+  return withDefined<MapReviewCandidate>({
     listing,
     coordinates,
     mapPosition: coordinates ? projectToMapPosition(coordinates) : undefined,
@@ -260,7 +261,7 @@ function toMapReviewCandidate(listing: ListingCandidate): MapReviewCandidate {
         : "No concerns recorded.",
     confidenceLabel: toConfidenceLabel(listing.triageBucket),
     sourceLinks,
-  };
+  });
 }
 
 function resolveListingCoordinates(listing: ListingCandidate): MapCoordinates | undefined {

@@ -48,3 +48,25 @@ export function stringArrayField(
   }
   return undefined;
 }
+
+/** `T` with every already-optional property also accepting an explicit `undefined`. */
+export type WithUndefined<T> = {
+  [K in keyof T]: undefined extends T[K] ? T[K] | undefined : T[K];
+};
+
+/**
+ * Drops keys whose value is `undefined` so the literal satisfies `T` under
+ * `exactOptionalPropertyTypes`: a field that is conceptually absent stays absent
+ * instead of being written as an explicit `undefined`. Pass `T` explicitly so the
+ * literal is checked (and its string literals narrowed) against the target type.
+ */
+export function withDefined<T extends object>(value: WithUndefined<T>): T {
+  const defined: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined) defined[key] = entry;
+  }
+  // Removing the undefined-valued keys is exactly what turns WithUndefined<T> back
+  // into T; TypeScript cannot follow that through Object.entries, so the one
+  // assertion lives here instead of at every call site.
+  return defined as T;
+}

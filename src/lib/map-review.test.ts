@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { fixtureListings } from "./fixtures";
+import type { ListingCandidate } from "./listings";
 import { createMapReviewModel } from "./map-review";
+import { withDefined } from "./utils/records";
 
 describe("G3A map-enhanced review model", () => {
   it("synchronizes selected listing, pins, detail evidence, context, and source links", () => {
@@ -40,14 +42,14 @@ describe("G3A map-enhanced review model", () => {
   });
 
   it("keeps missing-coordinate listings reviewable in the synchronized list/detail flow", () => {
-    const unmapped = {
+    const unmapped = withDefined<ListingCandidate>({
       ...fixtureListings[0]!,
       id: "fixture-unmapped",
       title: "Fixture listing without map context",
       address: "Unknown fixture address",
       neighborhood: undefined,
       borough: undefined,
-    };
+    });
     const model = createMapReviewModel([unmapped], unmapped.id);
 
     expect(model.locatedCandidates).toHaveLength(0);
@@ -107,14 +109,14 @@ describe("G3A map-enhanced review model", () => {
   });
 
   it("geocodes StreetEasy addresses when the saved address includes unit text", () => {
-    const listing = {
+    const listing = withDefined<ListingCandidate>({
       ...fixtureListings[0]!,
       id: "streeteasy-325-east-14-phd",
       title: "325 EAST 14 STREET PH-D, NEW YORK, NY 10003",
       address: "325 East 14 Street PHD",
       neighborhood: undefined,
       borough: "Manhattan",
-    };
+    });
 
     const model = createMapReviewModel([listing], listing.id);
 
@@ -129,14 +131,14 @@ describe("G3A map-enhanced review model", () => {
   });
 
   it("geocodes Avenue A StreetEasy addresses with unit text", () => {
-    const listing = {
+    const listing = withDefined<ListingCandidate>({
       ...fixtureListings[0]!,
       id: "streeteasy-205-avenue-a-5a",
       title: "205 AVENUE A 5A, NEW YORK, NY 10009",
       address: "205 AVENUE A 5A, NEW YORK, NY 10009",
       neighborhood: undefined,
       borough: "Manhattan",
-    };
+    });
 
     const model = createMapReviewModel([listing], listing.id);
 

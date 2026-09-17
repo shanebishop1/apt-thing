@@ -1,4 +1,5 @@
 import { stableHash } from "./utils/ids";
+import { withDefined } from "./utils/records";
 import { titleCase } from "./utils/text";
 
 export type SourceType = "streeteasy" | "zillow" | "renthop" | "craigslist" | "other";
@@ -802,12 +803,14 @@ export function createListingFromUrl(
   const inferredDraft = inferDraftFromUrl(submittedUrl.normalizedUrl, submittedUrl.source);
   const mergedDraft = { ...inferredDraft, ...draft };
   const fitFlags = calculateFitFlags(mergedDraft, submittedUrl.normalizedUrl);
-  const extractionStatus: ExtractionStatus = hasMinimumRowFields({
-    url: submittedUrl.normalizedUrl,
-    title: mergedDraft.title,
-    rent: mergedDraft.rent,
-    bedrooms: mergedDraft.bedrooms,
-  })
+  const extractionStatus: ExtractionStatus = hasMinimumRowFields(
+    withDefined<Partial<MinimumSavedListRow>>({
+      url: submittedUrl.normalizedUrl,
+      title: mergedDraft.title,
+      rent: mergedDraft.rent,
+      bedrooms: mergedDraft.bedrooms,
+    }),
+  )
     ? "partial"
     : "manual-needed";
   const triageBucket: TriageBucket =
@@ -824,7 +827,7 @@ export function createListingFromUrl(
   );
   const listingId = createId(`${identity.groupId}:${submittedUrl.normalizedUrl}`);
 
-  const baseListing = {
+  const baseListing = withDefined<Omit<ListingCandidate, "display">>({
     id: listingId,
     groupId: identity.groupId,
     source: submittedUrl.source,
@@ -857,12 +860,12 @@ export function createListingFromUrl(
     photos: mergedDraft.photos ?? [],
     imageEvidence,
     evidence: [
-      {
+      withDefined<ListingEvidence>({
         claim: "Source link captured",
         quote: submittedUrl.normalizedUrl,
         sourceUrl: submittedUrl.normalizedUrl,
         pointerId: evidencePointers[0]?.id,
-      },
+      }),
     ],
     evidencePointers,
     concerns:
@@ -872,7 +875,7 @@ export function createListingFromUrl(
     fieldProvenance: createFieldProvenanceFromDraft(mergedDraft, now),
     createdAt: now,
     updatedAt: now,
-  } satisfies Omit<ListingCandidate, "display">;
+  });
 
   return {
     ...baseListing,
@@ -920,14 +923,14 @@ export function intakePastedListingUrl({
       ? createStreetEasyUrlResolutionJob(identity.groupId, listing.url, streetEasyQuery)
       : undefined;
 
-  return {
+  return withDefined<Extract<PastedListingIntakeResult, { status: "accepted" }>>({
     status: "accepted",
     feedback: createIntakeFeedback(listing.source),
     submittedUrl,
     listing,
     providerRouting: listing.providerRouting,
     streetEasyResolutionJob,
-  };
+  });
 }
 
 export function createStreetEasyBatchRun(
@@ -1019,7 +1022,7 @@ export function createGroupScopedListingState(
 ): GroupScopedListingState {
   const duplicateKey = createDuplicateKey(rawUrl);
 
-  return {
+  return withDefined<GroupScopedListingState>({
     groupId,
     duplicateKey,
     groupScopedDuplicateKey: `${groupId}:${duplicateKey}`,
@@ -1028,7 +1031,7 @@ export function createGroupScopedListingState(
     triageBucket: options.triageBucket ?? "untriaged",
     reviewStatus: options.reviewStatus,
     lastSeenAt: new Date().toISOString(),
-  };
+  });
 }
 
 export function capImageEvidence(images: ImageEvidence[]): ImageEvidence[] {
@@ -1056,7 +1059,7 @@ export function createSavedListDisplayFields(
     | "fitFlags"
   >,
 ): SavedListDisplayFields {
-  return {
+  return withDefined<SavedListDisplayFields>({
     url: listing.url,
     title: listing.title,
     source: listing.source,
@@ -1069,7 +1072,7 @@ export function createSavedListDisplayFields(
     triageBucket: listing.triageBucket,
     reviewStatus: listing.reviewStatus,
     fitFlags: listing.fitFlags,
-  };
+  });
 }
 
 export function updateReviewStatus(
@@ -1143,12 +1146,14 @@ export function calculateFitFlags(draft: ListingDraft, rowUrl = "fixture://draft
   }
 
   if (
-    !hasMinimumRowFields({
-      url: rowUrl,
-      title: draft.title,
-      rent: draft.rent,
-      bedrooms: draft.bedrooms,
-    })
+    !hasMinimumRowFields(
+      withDefined<Partial<MinimumSavedListRow>>({
+        url: rowUrl,
+        title: draft.title,
+        rent: draft.rent,
+        bedrooms: draft.bedrooms,
+      }),
+    )
   ) {
     flags.push("missing_required_fields", "manual_review_needed");
   }
