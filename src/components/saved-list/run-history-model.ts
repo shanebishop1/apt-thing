@@ -11,6 +11,12 @@ import type {
 import { withDefined } from "@/lib/utils/records";
 import { formatLabel } from "./listing-presentation";
 
+export type RunHistoryProviderCall = {
+  /** `provider / model`, unique within a run. */
+  label: string;
+  detail: string;
+};
+
 export type RunHistoryArtifactPointer = {
   id: string;
   label: string;
@@ -44,8 +50,7 @@ export type RunHistoryPanelRunModel = {
   aiOutputLabel: string;
   sourceCoverage: SourceCoverageSummary[];
   failures: SourceCoverageSummary[];
-  providerMetadata: string[];
-  providerDetails: string[];
+  providerCalls: RunHistoryProviderCall[];
   artifactPointers: RunHistoryArtifactPointer[];
   candidateSummaries: BriefingRunHistoryRun["candidateSummaries"];
 };
@@ -100,17 +105,7 @@ export function createRunHistoryPanelModel(history: PersistedRunHistory): RunHis
         aiOutputLabel: `${counts.confirmedMatches} yes / ${counts.reviewNeeded} review / ${counts.rejected} no`,
         sourceCoverage,
         failures,
-        providerMetadata: uniqueNonEmpty(
-          run.providerMetadata.map((metadata) => `${metadata.provider} / ${metadata.model}`),
-        ),
-        providerDetails: run.providerMetadata.map((metadata) =>
-          uniqueNonEmpty([
-            metadata.status,
-            metadata.purpose,
-            metadata.promptVersion ?? "",
-            metadata.schemaValidation ? `schema ${metadata.schemaValidation}` : "",
-          ]).join(" / "),
-        ),
+        providerCalls: createProviderCalls(run.providerMetadata),
         artifactPointers,
         candidateSummaries: run.candidateSummaries,
       });
@@ -167,6 +162,35 @@ function slugify(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+/**
+ * One entry per distinct provider/model pair. The label and its detail used to live in two
+ * parallel arrays read by index, which drifted apart as soon as two calls shared a label.
+ */
+function createProviderCalls(
+  entries: PersistedRunHistoryRun["providerMetadata"],
+): RunHistoryProviderCall[] {
+  const callsByLabel = new Map<string, string>();
+
+  for (const metadata of entries) {
+    const label = `${metadata.provider} / ${metadata.model}`.trim();
+    if (!label || callsByLabel.has(label)) {
+      continue;
+    }
+
+    callsByLabel.set(
+      label,
+      uniqueNonEmpty([
+        metadata.status,
+        metadata.purpose,
+        metadata.promptVersion ?? "",
+        metadata.schemaValidation ? `schema ${metadata.schemaValidation}` : "",
+      ]).join(" / "),
+    );
+  }
+
+  return [...callsByLabel].map(([label, detail]) => ({ label, detail }));
 }
 
 function uniqueNonEmpty(items: string[]): string[] {

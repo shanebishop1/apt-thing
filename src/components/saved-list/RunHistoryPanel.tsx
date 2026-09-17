@@ -221,14 +221,14 @@ export function RunHistoryPanel({
                   aria-label={`${run.heading} provider metadata`}
                 >
                   <h4>AI calls</h4>
-                  {run.providerMetadata.length === 0 ? (
+                  {run.providerCalls.length === 0 ? (
                     <p>No AI call metadata recorded for this run.</p>
                   ) : (
                     <ul>
-                      {run.providerMetadata.map((metadata, index) => (
-                        <li key={`${run.runId}-provider-${metadata}-${index}`}>
-                          <strong>{metadata}</strong>
-                          {run.providerDetails[index] ? ` · ${run.providerDetails[index]}` : ""}
+                      {run.providerCalls.map((call) => (
+                        <li key={`${run.runId}-provider-${call.label}`}>
+                          <strong>{call.label}</strong>
+                          {call.detail ? ` · ${call.detail}` : ""}
                         </li>
                       ))}
                     </ul>
