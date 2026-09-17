@@ -290,6 +290,50 @@ describe("single-link live extraction", () => {
     ]);
   });
 
+  it("gives a pasted StreetEasy link the loop's coordinates and readable title", async () => {
+    const targetUrl = "https://streeteasy.com/building/54-2-avenue-new_york/2";
+    const searchNode = {
+      id: "se-54-2",
+      urlPath: "/building/54-2-avenue-new_york/2",
+      display_address: "54 2 AVENUE 2, NEW YORK, NY 10003",
+      street: "54 2nd Avenue",
+      unit: "2",
+      areaName: "East Village",
+      price: 12995,
+      bedroomCount: 5,
+      fullBathroomCount: 2,
+      halfBathroomCount: 1,
+      geoPoint: { latitude: 40.7251, longitude: -73.9912 },
+    };
+    const fetchImpl = async (url: string | URL | Request) => {
+      const value = String(url);
+      if (value.includes("/search/rent")) {
+        return Response.json({ search_results: { listings: [{ node: searchNode }] } });
+      }
+      if (value.includes("/rental_detailsbyid")) {
+        return Response.json({ ...searchNode, listing_id: "se-54-2" });
+      }
+      return new Response("blocked", { status: 403 });
+    };
+
+    const result = await extractListingFromUrlLive({
+      rawUrl: targetUrl,
+      identity,
+      env: { REALTYAPI_KEY: "realty-test", REALTYAPI_BASE_URL: "https://realty.test" },
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+
+    expect(result.listing).toMatchObject({
+      title: "54 2nd Avenue 2",
+      address: "54 2nd Avenue 2",
+      neighborhood: "East Village",
+      rent: 12995,
+      bedrooms: 5,
+      bathrooms: 2.5,
+      location: { latitude: 40.7251, longitude: -73.9912 },
+    });
+  });
+
   it("keeps the StreetEasy URL building number when RealtyAPI detail address omits it", async () => {
     const targetUrl = "https://streeteasy.com/building/325-east-14-street-new_york/phd";
     const fetchImpl = async (url: string | URL | Request) => {

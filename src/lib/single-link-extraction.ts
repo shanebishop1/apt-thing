@@ -1,3 +1,10 @@
+import { realtyApiRecordToListingDraft } from "./daily-loop/realtyapi";
+import {
+  GEMINI_LOW_THINKING,
+  extractGeminiText,
+  parseGeminiJson,
+  requestGeminiGenerateContent,
+} from "./gemini-client";
 import {
   calculateFitFlags,
   classifySource,
@@ -10,14 +17,8 @@ import {
   type ListingDraft,
   type ListingEvidence,
 } from "./listings";
-import {
-  GEMINI_LOW_THINKING,
-  extractGeminiText,
-  parseGeminiJson,
-  requestGeminiGenerateContent,
-} from "./gemini-client";
 import { safeJson } from "./utils/json";
-import { firstRecord, isRecord, numberField, stringField, withDefined } from "./utils/records";
+import { firstRecord, isRecord, stringField, withDefined } from "./utils/records";
 import { titleCase, uniqueStrings } from "./utils/text";
 
 export type SingleLinkExtractionEnv = {
@@ -1026,70 +1027,29 @@ function arrayRecords(value: unknown): Array<Record<string, unknown>> {
   return array.filter((item): item is Record<string, unknown> => isRecord(item));
 }
 
-/** Unlike the shared reader, this one also unwraps `{ url | src | href }` image objects. */
-function stringArrayField(record: Record<string, unknown>, names: string[]): string[] {
-  for (const name of names) {
-    const value = record[name];
-    if (Array.isArray(value)) {
-      return value.flatMap((item) => {
-        if (typeof item === "string") return [item];
-        if (isRecord(item)) return imageUrlsFromValue(item.url ?? item.src ?? item.href);
-        return [];
-      });
-    }
-  }
-  return [];
-}
-
+/**
+ * A pasted StreetEasy link reads the RealtyAPI record with the daily loop's normalizer, so it gets
+ * the same coordinates, readable title, photos, amenities, and bath count. Only the URL-derived
+ * parts stay here: the postal address the detail payload nests, and the building number the URL
+ * carries when the provider address drops it.
+ */
 function realtyApiRecordToDraft(record: Record<string, unknown>, sourceUrl: string): ListingDraft {
-  const title = stringField(record, ["title", "name", "display_address"]);
+  const draft = realtyApiRecordToListingDraft(record);
   const details = isRecord(record.propertyDetails) ? record.propertyDetails : undefined;
   const nestedAddress = details && isRecord(details.address) ? details.address : undefined;
-  const nestedAddressText = nestedAddress ? formatNestedAddress(nestedAddress) : undefined;
-  const address =
-    nestedAddressText ??
-    stringField(record, ["address", "display_address", "streetAddress", "street_address"]) ??
-    streetEasyAddressFromUrl(sourceUrl);
   const urlAddress = streetEasyAddressFromUrl(sourceUrl);
-  const normalizedAddress = selectStreetEasyAddress(address, urlAddress);
-  const pricing = isRecord(record.pricing) ? record.pricing : undefined;
-  const media = isRecord(record.media) ? record.media : undefined;
-  const amenities = details && isRecord(details.amenities) ? details.amenities : undefined;
-  const features = details && isRecord(details.features) ? details.features : undefined;
+  const providerAddress =
+    (nestedAddress ? formatNestedAddress(nestedAddress) : undefined) ?? draft.address ?? urlAddress;
+  const address = selectStreetEasyAddress(providerAddress, urlAddress);
+  const title = draft.title ?? address;
+
   return withDefined<ListingDraft>({
-    title: title ?? address,
-    address: normalizedAddress
-      ? cleanExtractedAddress(normalizedAddress, title ?? "StreetEasy listing")
-      : undefined,
-    neighborhood: stringField(record, ["neighborhood", "area"]),
+    ...draft,
+    title,
+    address: address ? cleanExtractedAddress(address, title ?? "StreetEasy listing") : undefined,
     borough:
-      stringField(record, ["borough", "city"]) ?? inferBorough(`${address ?? ""} ${sourceUrl}`),
-    rent:
-      numberField(record, ["rent", "price", "monthlyRent", "monthly_rent"]) ??
-      numberField(pricing ?? {}, ["price"]),
-    bedrooms:
-      numberField(record, ["bedrooms", "beds", "bedroom_count"]) ??
-      numberField(details ?? {}, ["bedroomCount"]),
-    bathrooms:
-      numberField(record, ["bathrooms", "baths", "bathroom_count"]) ??
-      numberField(details ?? {}, ["fullBathroomCount"]),
-    availableAt: stringField(record, [
-      "availableAt",
-      "available_at",
-      "availableDate",
-      "availability",
-    ]),
-    description: stringField(record, ["description", "details"]),
-    amenities: uniqueStrings([
-      ...stringArrayField(record, ["amenities"]),
-      ...stringArrayField(amenities ?? {}, ["list"]),
-      ...stringArrayField(features ?? {}, ["list"]),
-    ]),
-    photos: uniqueStrings([
-      ...stringArrayField(record, ["photos", "images", "image_urls", "photo_urls"]),
-      ...stringArrayField(media ?? {}, ["photos"]),
-    ]).filter(isLikelyListingPhoto),
-    sourceListingId: stringField(record, ["listingId", "listing_id", "id"]),
+      draft.borough ?? inferBorough(`${providerAddress ?? ""} ${address ?? ""} ${sourceUrl}`),
+    photos: draft.photos?.filter(isLikelyListingPhoto),
   });
 }
 

@@ -3,6 +3,7 @@ import type {
   StreetEasyDetailsFixture,
   StreetEasySearchResultFixture,
 } from "../extraction";
+import type { ListingDraft } from "../listings";
 import {
   firstRecord,
   isRecord,
@@ -133,32 +134,49 @@ export function mergeStreetEasyDetails(
   return { ...fallback, results };
 }
 
-function normalizeStreetEasyDetails(
-  record: Record<string, unknown>,
-  listingId: string,
-  sourceUrl: string,
-): StreetEasyDetailsFixture {
+/**
+ * The RealtyAPI record fields both StreetEasy paths save: the daily loop through
+ * `normalizeStreetEasyDetails`, and a pasted single link through its own draft builder. Keeping one
+ * reader is what gives a pasted link the same readable title, coordinates, photos, and bath count
+ * the loop already produced.
+ */
+export function realtyApiRecordToListingDraft(record: Record<string, unknown>): ListingDraft {
+  // Structured street/unit fields first: the flat `display_address` string is raw provider casing
+  // ("54 2 AVENUE 2, NEW YORK, NY 10003"), and it also seeds the title when the record has none.
   const address =
-    stringField(record, ["address", "display_address", "streetAddress"]) ??
     streetEasySearchAddress(record) ??
     realtyApiAddress(record) ??
-    "Unknown address";
-  return withDefined<StreetEasyDetailsFixture>({
-    listingId,
-    sourceListingId: listingId,
-    sourceUrl,
-    urlPath: new URL(sourceUrl).pathname,
+    stringField(record, ["address", "display_address", "streetAddress", "street_address"]);
+  const explicitPhotos = stringArrayField(record, [
+    "photos",
+    "images",
+    "photoUrls",
+    "imageUrls",
+    "photo_urls",
+    "image_urls",
+  ]);
+
+  return withDefined<ListingDraft>({
     title: normalizeStreetEasyTitle(stringField(record, ["title", "name"]), address),
     address,
     neighborhood: stringField(record, ["neighborhood", "area", "areaName"]),
-    borough: stringField(record, ["borough", "city"]) ?? realtyApiCity(record) ?? "Manhattan",
+    borough: stringField(record, ["borough", "city"]) ?? realtyApiCity(record),
     location: realtyApiCoordinates(record),
-    rent: numberField(record, ["rent", "price", "monthlyRent"]) ?? realtyApiPrice(record),
+    rent:
+      numberField(record, ["rent", "price", "monthlyRent", "monthly_rent"]) ??
+      realtyApiPrice(record),
     bedrooms:
-      numberField(record, ["bedrooms", "beds", "bedroomCount"]) ??
+      numberField(record, ["bedrooms", "beds", "bedroomCount", "bedroom_count"]) ??
       realtyApiNestedNumber(record, "bedroomCount"),
-    bathrooms: numberField(record, ["bathrooms", "baths"]) ?? realtyApiBathroomCount(record),
-    availableAt: stringField(record, ["availableAt", "available_at", "availableDate"]),
+    bathrooms:
+      numberField(record, ["bathrooms", "baths", "bathroom_count"]) ??
+      realtyApiBathroomCount(record),
+    availableAt: stringField(record, [
+      "availableAt",
+      "available_at",
+      "availableDate",
+      "availability",
+    ]),
     description: stringField(record, ["description", "details"]),
     amenities:
       stringArrayField(record, ["amenities"]) ??
@@ -168,20 +186,38 @@ function normalizeStreetEasyDetails(
             ...(realtyApiStringList(record.propertyDetails, "features") ?? []),
           ])
         : undefined),
-    photos:
-      stringArrayField(record, ["photos", "images", "photoUrls", "imageUrls"]) ??
-      realtyApiPhotos(record),
+    photos: explicitPhotos?.length ? explicitPhotos : realtyApiPhotos(record),
+    sourceListingId: stringField(record, ["listingId", "listing_id", "id"]),
+  });
+}
+
+function normalizeStreetEasyDetails(
+  record: Record<string, unknown>,
+  listingId: string,
+  sourceUrl: string,
+): StreetEasyDetailsFixture {
+  const draft = realtyApiRecordToListingDraft(record);
+
+  return withDefined<StreetEasyDetailsFixture>({
+    ...draft,
+    title: draft.title ?? "StreetEasy listing",
+    address: draft.address ?? "Unknown address",
+    borough: draft.borough ?? "Manhattan",
+    listingId,
+    sourceListingId: listingId,
+    sourceUrl,
+    urlPath: new URL(sourceUrl).pathname,
     status: stringField(record, ["status", "propertyStatus"]),
   });
 }
 
-function normalizeStreetEasyTitle(title: string | undefined, address: string) {
+function normalizeStreetEasyTitle(title: string | undefined, address: string | undefined) {
   const normalizedTitle = title?.trim();
   if (normalizedTitle && normalizedTitle.toLowerCase() !== "streeteasy listing") {
     return normalizedTitle;
   }
 
-  return address && address !== "Unknown address" ? address : "StreetEasy listing";
+  return address && address !== "Unknown address" ? address : undefined;
 }
 
 function realtyApiCoordinates(record: Record<string, unknown>) {
