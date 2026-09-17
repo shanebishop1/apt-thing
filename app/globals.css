@@ -2067,6 +2067,16 @@ dialog.field-edit-modal::backdrop {
 }
 
 @media (max-width: 560px) {
+  /* Titles get two lines instead of a five-character ellipsis next to the rent column.
+     Scoped under the button so it outranks the base rule declared later in the file. */
+  .listing-row-button .listing-row-main strong {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.2;
+  }
+
   .dashboard-shell {
     padding-right: max(10px, env(safe-area-inset-right));
     padding-left: max(10px, env(safe-area-inset-left));
