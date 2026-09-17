@@ -105,16 +105,17 @@ describe("SavedListApp identity and shared listing behavior", () => {
     });
 
     await user.click(screen.getByRole("button", { name: `Selected ${listing.title}` }));
-    await user.click(
+    await user.selectOptions(
       screen.getByRole("combobox", { name: `Change review status for ${listing.title}` }),
+      "interested",
     );
-    await user.click(screen.getByRole("option", { name: "interested" }));
 
     expect(await screen.findByText("Status updated to interested.")).toBeTruthy();
     expect(
-      screen.getByRole("combobox", { name: `Change review status for ${listing.title}` })
-        .textContent,
-    ).toContain("interested");
+      screen.getByRole<HTMLSelectElement>("combobox", {
+        name: `Change review status for ${listing.title}`,
+      }).value,
+    ).toBe("interested");
     const patchCall = fetchMock.mock.calls.find(
       ([input, init]) =>
         String(input) === `/api/group/listings/${listing.id}` &&
@@ -167,20 +168,20 @@ describe("SavedListApp identity and shared listing behavior", () => {
     await submitIdentity(user, "Ari");
     await screen.findByRole("heading", { name: listing.title });
     await user.click(screen.getByRole("button", { name: `Selected ${listing.title}` }));
-    const statusButton = () =>
-      screen.getByRole("combobox", { name: `Change review status for ${listing.title}` });
+    const statusSelect = () =>
+      screen.getByRole<HTMLSelectElement>("combobox", {
+        name: `Change review status for ${listing.title}`,
+      });
 
-    await user.click(statusButton());
-    await user.click(screen.getByRole("option", { name: "interested" }));
+    await user.selectOptions(statusSelect(), "interested");
 
     expect((await screen.findByRole("alert")).textContent).toMatch(
       /Someone else changed that listing first/,
     );
     expect(screen.queryByText("Status updated to interested.")).toBeNull();
-    expect(statusButton().textContent).toContain("touring");
+    expect(statusSelect().value).toBe("touring");
 
-    await user.click(statusButton());
-    await user.click(screen.getByRole("option", { name: "interested" }));
+    await user.selectOptions(statusSelect(), "interested");
 
     await waitFor(() => expect(patchBodies).toHaveLength(2));
     expect(patchBodies.map((body) => body.revision)).toEqual([1, 2]);
@@ -204,10 +205,10 @@ describe("SavedListApp identity and shared listing behavior", () => {
     await submitIdentity(user, "Ari");
     await screen.findByRole("heading", { name: listing.title });
     await user.click(screen.getByRole("button", { name: `Selected ${listing.title}` }));
-    await user.click(
+    await user.selectOptions(
       screen.getByRole("combobox", { name: `Change review status for ${listing.title}` }),
+      "interested",
     );
-    await user.click(screen.getByRole("option", { name: "interested" }));
 
     expect((await screen.findByRole("alert")).textContent).toMatch(
       /That listing was removed by someone else/,

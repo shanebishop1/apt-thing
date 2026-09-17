@@ -805,6 +805,7 @@ button:disabled {
 }
 
 .status-dropdown-trigger {
+  position: relative;
   display: grid;
   grid-template-columns: 9px minmax(0, 1fr) 17px;
   min-height: 44px;
@@ -831,8 +832,33 @@ button:disabled {
     transform 160ms ease;
 }
 
-.status-dropdown-trigger:hover,
-.status-dropdown-trigger[aria-expanded="true"] {
+.status-dropdown-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The real control: a native select stretched over the pill and made invisible, so the
+ * browser still draws its own popup, handles the keyboard and exposes combobox semantics.
+ */
+.status-dropdown-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: transparent;
+  cursor: inherit;
+  font: inherit;
+  opacity: 0;
+}
+
+.status-dropdown-trigger:hover {
   border-color: color-mix(in srgb, var(--accent) 68%, var(--line));
   background: color-mix(in srgb, var(--accent-soft) 62%, var(--panel));
   box-shadow:
@@ -841,8 +867,8 @@ button:disabled {
   transform: translateY(-1px);
 }
 
-.status-dropdown-trigger:disabled,
-.status-dropdown-trigger:disabled:hover {
+.status-dropdown-trigger:has(.status-dropdown-select:disabled),
+.status-dropdown-trigger:has(.status-dropdown-select:disabled):hover {
   border-color: color-mix(in srgb, var(--line) 78%, var(--muted));
   background: color-mix(in srgb, var(--panel-strong) 56%, #7c7c7c);
   color: color-mix(in srgb, var(--muted) 82%, var(--bg-ink));
@@ -852,11 +878,11 @@ button:disabled {
   transform: none;
 }
 
-.status-dropdown-trigger:disabled .status-option-dot {
+.status-dropdown-trigger:has(.status-dropdown-select:disabled) .status-option-dot {
   background: color-mix(in srgb, var(--muted) 72%, #8a8a8a);
 }
 
-.status-dropdown-trigger:focus-visible {
+.status-dropdown-trigger:has(.status-dropdown-select:focus-visible) {
   outline: none;
   border-color: color-mix(in srgb, var(--accent) 76%, var(--line));
   background: color-mix(in srgb, var(--accent-soft) 62%, var(--panel));
@@ -875,67 +901,6 @@ button:disabled {
   transition: transform 160ms ease;
 }
 
-.status-dropdown-trigger[aria-expanded="true"] .status-dropdown-chevron {
-  transform: rotate(180deg);
-}
-
-.status-dropdown-menu {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 8px);
-  left: 0;
-  display: grid;
-  width: 100%;
-  gap: 4px;
-  padding: 7px;
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--panel-strong) 94%, white);
-  box-shadow:
-    0 18px 38px rgb(28 19 8 / 18%),
-    inset 0 1px 0 rgb(255 255 255 / 62%);
-}
-
-.status-dropdown-menu[hidden] {
-  display: none;
-}
-
-.status-dropdown-option {
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) 14px;
-  min-height: 36px;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 13px;
-  background: transparent;
-  color: var(--bg-ink);
-  padding: 8px 9px;
-  font-family: var(--mono);
-  font-size: 0.73rem;
-  font-weight: 800;
-  letter-spacing: 0.035em;
-  text-align: left;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition:
-    background 140ms ease,
-    color 140ms ease,
-    transform 140ms ease;
-}
-
-.status-dropdown-option:hover,
-.status-dropdown-option.active {
-  background: color-mix(in srgb, var(--accent-soft) 72%, var(--panel));
-  color: color-mix(in srgb, var(--bg-ink) 92%, var(--accent));
-  transform: translateX(2px);
-}
-
-.status-dropdown-option:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 54%, transparent);
-  outline-offset: 2px;
-}
-
 .status-option-dot {
   width: 8px;
   height: 8px;
@@ -948,102 +913,60 @@ button:disabled {
   height: 9px;
 }
 
-.status-dropdown-option.status-interested .status-option-dot,
 .status-dropdown-trigger.status-interested {
   border-color: color-mix(in srgb, #67d391 58%, var(--line));
 }
 
-.status-dropdown-option.status-touring .status-option-dot,
 .status-dropdown-trigger.status-touring {
   border-color: color-mix(in srgb, #8fb8ff 62%, var(--line));
 }
 
-.status-dropdown-option.status-unavailable .status-option-dot,
 .status-dropdown-trigger.status-unavailable {
   border-color: color-mix(in srgb, #b9c0ca 62%, var(--line));
 }
 
-.status-dropdown-option.status-gone .status-option-dot,
 .status-dropdown-trigger.status-gone {
   border-color: color-mix(in srgb, #f0a34e 60%, var(--line));
 }
 
-.status-dropdown-option.status-rejected .status-option-dot,
 .status-dropdown-trigger.status-rejected {
   border-color: color-mix(in srgb, #e18a75 58%, var(--line));
 }
 
-.status-dropdown-option.status-new .status-option-dot,
 .status-dropdown-trigger.status-new {
   border-color: color-mix(in srgb, var(--status-new-bg) 62%, var(--line));
 }
 
-.status-dropdown-option.status-review .status-option-dot,
 .status-dropdown-trigger.status-review {
   border-color: color-mix(in srgb, var(--accent-strong) 70%, var(--line));
 }
 
-.status-dropdown-option.status-review .status-option-dot,
 .status-dropdown-trigger.status-review .status-option-dot {
   background: var(--accent-strong);
-}
-
-.status-dropdown-option.status-new .status-option-dot {
-  background: var(--status-new-bg);
 }
 
 .status-dropdown-trigger.status-new .status-option-dot {
   background: var(--status-new-bg);
 }
 
-.status-dropdown-option.status-interested .status-option-dot {
-  background: #67d391;
-}
-
 .status-dropdown-trigger.status-interested .status-option-dot {
   background: #67d391;
-}
-
-.status-dropdown-option.status-touring .status-option-dot {
-  background: #8fb8ff;
 }
 
 .status-dropdown-trigger.status-touring .status-option-dot {
   background: #8fb8ff;
 }
 
-.status-dropdown-option.status-unavailable .status-option-dot {
-  background: #b9c0ca;
-}
-
 .status-dropdown-trigger.status-unavailable .status-option-dot {
   background: #b9c0ca;
-}
-
-.status-dropdown-option.status-gone .status-option-dot {
-  background: #f0a34e;
 }
 
 .status-dropdown-trigger.status-gone .status-option-dot {
   background: #f0a34e;
 }
 
-.status-dropdown-option.status-rejected .status-option-dot {
-  background: #e18a75;
-}
-
 .status-dropdown-trigger.status-rejected .status-option-dot {
   background: #e18a75;
-}
-
-.status-option-check::before {
-  content: "";
-  display: block;
-  width: 8px;
-  height: 5px;
-  border-bottom: 2px solid var(--bg-ink);
-  border-left: 2px solid var(--bg-ink);
-  transform: rotate(-45deg);
 }
 
 .map-review-card {
