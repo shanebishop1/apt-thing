@@ -1164,6 +1164,8 @@ button:disabled {
 .map-detail {
   display: grid;
   align-content: start;
+  /* Explicit row sizing: the scroll container otherwise squeezes the fact strip to a sliver. */
+  grid-auto-rows: max-content;
   gap: 10px;
   overflow: auto;
   padding: 12px;
@@ -1232,7 +1234,8 @@ button:disabled {
   line-height: 1.45;
 }
 
-.map-facts {
+/* Wins over the generic five-column .fact-strip rule declared later in the file. */
+.fact-strip.map-facts {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
