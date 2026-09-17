@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { POST as dailyLoopPOST } from "../../app/api/platform/daily-loop/route";
+import { createSqliteD1, type SqliteD1 } from "../test-support/sqlite-d1";
+import { readPersistedRunHistory } from "./run-history-store";
 import {
   createDailyLoopCronPayload,
   createDailyLoopProviderFailureAnalyzer,
@@ -28,6 +30,14 @@ vi.mock("@opennextjs/cloudflare", () => ({
 }));
 
 const identity = createGroupIdentity(defaultSearchGroup.id, "Daily Loop Test")!;
+
+async function selectGroupRows<T>(db: SqliteD1, sql: string, ...values: string[]): Promise<T[]> {
+  const result = await db
+    .prepare(sql)
+    .bind(defaultSearchGroup.id, ...values)
+    .all<T>();
+  return result.results ?? [];
+}
 
 describe("runDailySourceAgentLoop", () => {
   it("runs fixture-mode manual/daily-compatible loop with StreetEasy and Zillow manual fixture", async () => {
@@ -281,7 +291,8 @@ describe("runDailySourceAgentLoop", () => {
 
   it("processes material changes instead of skipping saved listings", async () => {
     const changedFixture = structuredClone(streetEasyBatchFixture);
-    changedFixture.results = [streetEasyBatchFixture.results[2]!];
+    // Cloned so the rent edit below stays local instead of mutating the shared fixture.
+    changedFixture.results = [structuredClone(streetEasyBatchFixture.results[2]!)];
     const staleListing = (
       await runDailySourceAgentLoop({
         identity,
@@ -434,6 +445,145 @@ describe("runDailySourceAgentLoop", () => {
     expect(result.persistence.rawArtifacts.rawArtifactPointers).toEqual(
       expect.arrayContaining([expect.objectContaining({ owner: "d1", groupScoped: true })]),
     );
+  });
+
+  it("records triage-rejected candidates without adding them to the shared shortlist", async () => {
+    const db = createSqliteD1();
+    const savedResult = structuredClone(streetEasyBatchFixture.results[2]!);
+    const rejectedResult = structuredClone(streetEasyBatchFixture.results[2]!);
+    rejectedResult.listingId = "batch-one-bath-1";
+    rejectedResult.sourceUrl = "https://streeteasy.com/building/batch-one-bath/9";
+    rejectedResult.urlPath = "/building/batch-one-bath/9";
+    rejectedResult.details = {
+      ...rejectedResult.details,
+      listingId: rejectedResult.listingId,
+      sourceUrl: rejectedResult.sourceUrl,
+      urlPath: rejectedResult.urlPath,
+      title: "One bath Chelsea five bed",
+      address: "909 One Bath Street",
+      bathrooms: 1,
+    };
+
+    try {
+      const result = await runDailySourceAgentLoop({
+        identity,
+        streeteasyFixture: { ...streetEasyBatchFixture, results: [savedResult, rejectedResult] },
+        failSecondary: true,
+        env: { DB: db },
+        now: "2026-09-17T12:00:00.000Z",
+      });
+
+      expect(result.persistence.outcome.d1.error).toBeUndefined();
+      const rejectedListing = result.listings.find(
+        (listing) => listing.url === rejectedResult.sourceUrl,
+      );
+      expect(rejectedListing).toMatchObject({ triageBucket: "rejected" });
+      expect(rejectedListing?.concerns).toContain(
+        "Bathroom count is below the 2 bath hard constraint.",
+      );
+      expect(result.listings).toHaveLength(2);
+      expect(result.run.counts.candidatesSaved).toBe(1);
+      expect(result.run.counts.candidatesRejected).toBe(1);
+
+      const savedRows = await selectGroupRows<{ url: string }>(
+        db,
+        "SELECT url FROM app_saved_listings WHERE group_id = ?",
+      );
+      expect(savedRows.map((row) => row.url)).toEqual([savedResult.sourceUrl]);
+
+      const candidateRows = await selectGroupRows<{ triage_bucket: string }>(
+        db,
+        "SELECT triage_bucket FROM daily_loop_candidates WHERE group_id = ? AND source_url = ?",
+        rejectedResult.sourceUrl,
+      );
+      expect(candidateRows).toEqual([{ triage_bucket: "rejected" }]);
+
+      const statusRows = await selectGroupRows<{ reason: string }>(
+        db,
+        "SELECT reason FROM daily_loop_candidate_status WHERE group_id = ? AND source_url = ?",
+        rejectedResult.sourceUrl,
+      );
+      expect(statusRows.map((row) => row.reason)).toContain(
+        "Rejected by triage; kept out of the group shortlist.",
+      );
+
+      const loopMemoryRows = await selectGroupRows<{ memory_state: string }>(
+        db,
+        "SELECT memory_state FROM daily_loop_seen_memory WHERE group_id = ? AND source_url = ?",
+        rejectedResult.sourceUrl,
+      );
+      expect(loopMemoryRows).toEqual([{ memory_state: "rejected" }]);
+
+      const appMemoryRows = await selectGroupRows<{ memory_json: string }>(
+        db,
+        "SELECT memory_json FROM app_seen_rejected_memory WHERE group_id = ? AND source_url = ?",
+        rejectedResult.sourceUrl,
+      );
+      expect(JSON.parse(String(appMemoryRows[0]?.memory_json))).toMatchObject({
+        memoryState: "rejected",
+        sourceUrl: rejectedResult.sourceUrl,
+      });
+
+      const history = await readPersistedRunHistory(db, defaultSearchGroup.id);
+      expect(history.runs[0]?.counts).toMatchObject({ candidatesTriaged: 2, rejected: 1 });
+      expect(
+        history.runs[0]?.candidateSummaries.map((candidate) => [
+          candidate.sourceUrl,
+          candidate.bucket,
+        ]),
+      ).toContainEqual([rejectedResult.sourceUrl, "rejected"]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("leaves an already saved listing in place when changed facts fail a hard constraint", async () => {
+    const db = createSqliteD1();
+    const fixture = structuredClone(streetEasyBatchFixture);
+    fixture.results = [structuredClone(streetEasyBatchFixture.results[2]!)];
+
+    try {
+      const firstRun = await runDailySourceAgentLoop({
+        identity,
+        streeteasyFixture: fixture,
+        failSecondary: true,
+        env: { DB: db },
+        now: "2026-09-17T12:00:00.000Z",
+      });
+      const savedListing = firstRun.listings[0]!;
+      expect(savedListing.triageBucket).not.toBe("rejected");
+
+      const changedFixture = structuredClone(fixture);
+      changedFixture.results[0]!.details.rent = (savedListing.rent ?? 0) + 250;
+      changedFixture.results[0]!.details.bathrooms = 1;
+
+      const secondRun = await runDailySourceAgentLoop({
+        identity,
+        streeteasyFixture: changedFixture,
+        existingListings: [savedListing],
+        failSecondary: true,
+        env: { DB: db },
+        now: "2026-09-17T13:00:00.000Z",
+      });
+
+      expect(secondRun.materialChanges).toHaveLength(1);
+      expect(secondRun.listings[0]?.triageBucket).toBe("rejected");
+      expect(secondRun.run.counts.candidatesSaved).toBe(0);
+      expect(secondRun.persistence.outcome.d1.error).toBeUndefined();
+
+      const savedRows = await selectGroupRows<{ listing_json: string; updated_at: string }>(
+        db,
+        "SELECT listing_json, updated_at FROM app_saved_listings WHERE group_id = ?",
+      );
+      expect(savedRows).toHaveLength(1);
+      expect(JSON.parse(String(savedRows[0]?.listing_json))).toMatchObject({
+        id: savedListing.id,
+        rent: savedListing.rent,
+      });
+      expect(savedRows[0]?.updated_at).toBe(savedListing.updatedAt);
+    } finally {
+      db.close();
+    }
   });
 
   it("surfaces D1 and KV persistence failures without dropping run outputs", async () => {

@@ -182,6 +182,9 @@ export async function runDailySourceAgentLoop(
     sourceFailures === coverage.length ? "failed" : sourceFailures > 0 ? "partial" : "success";
   const triagedListings = listings.filter((listing) => listing.triageBucket !== "untriaged");
   const rejected = triagedListings.filter((listing) => listing.triageBucket === "rejected").length;
+  // Rejected candidates stay in the run outputs (briefing, history, candidate rows) but are never
+  // written to the group's shortlist, so the saved count only covers what the shortlist receives.
+  const savedListings = listings.filter((listing) => listing.triageBucket !== "rejected");
   const runCounts: AgentRunLogRecord["counts"] = {
     candidatesFound: coverage.reduce((sum, item) => sum + item.checkedCount, 0),
     candidatesSkippedSeen: skipped.filter(
@@ -191,7 +194,7 @@ export async function runDailySourceAgentLoop(
       (item) => !item.materialChangeDetected && item.reason === "triaged",
     ).length,
     candidatesAnalyzed: triagedListings.length,
-    candidatesSaved: listings.length,
+    candidatesSaved: savedListings.length,
     candidatesRejected: rejected,
     sourceFailures,
   };
@@ -284,6 +287,7 @@ export async function runDailySourceAgentLoop(
         "daily_loop_candidates",
         "daily_loop_candidate_status",
         "daily_loop_seen_memory",
+        "app_seen_rejected_memory",
         "daily_loop_briefings",
         "source_evidence_records",
         "agent_run_logs",

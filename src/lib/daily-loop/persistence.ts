@@ -177,28 +177,34 @@ async function persistD1(
       rowsWritten += 1;
     }
     for (const listing of input.listings) {
-      await runD1(
-        db,
-        [
-          "INSERT INTO app_saved_listings",
-          "(id, group_id, url, duplicate_key, group_scoped_duplicate_key, listing_json, created_at, updated_at)",
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          "ON CONFLICT(id) DO UPDATE SET",
-          "url = excluded.url, duplicate_key = excluded.duplicate_key,",
-          "group_scoped_duplicate_key = excluded.group_scoped_duplicate_key,",
-          "listing_json = excluded.listing_json, updated_at = excluded.updated_at,",
-          "revision = app_saved_listings.revision + 1",
-        ].join(" "),
-        listing.id,
-        input.run.groupId,
-        listing.url,
-        listing.duplicateKey,
-        listing.groupScopedDuplicateKey,
-        JSON.stringify(listing),
-        listing.createdAt,
-        listing.updatedAt,
-      );
-      rowsWritten += 1;
+      // A triage-rejected candidate stays fully visible in the run's own tables, but it never
+      // reaches the group's shortlist. An earlier shortlist row for the same listing (facts that
+      // changed into a hard-constraint failure) is deliberately left in place, not deleted.
+      const rejectedByTriage = listing.triageBucket === "rejected";
+      if (!rejectedByTriage) {
+        await runD1(
+          db,
+          [
+            "INSERT INTO app_saved_listings",
+            "(id, group_id, url, duplicate_key, group_scoped_duplicate_key, listing_json, created_at, updated_at)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "ON CONFLICT(id) DO UPDATE SET",
+            "url = excluded.url, duplicate_key = excluded.duplicate_key,",
+            "group_scoped_duplicate_key = excluded.group_scoped_duplicate_key,",
+            "listing_json = excluded.listing_json, updated_at = excluded.updated_at,",
+            "revision = app_saved_listings.revision + 1",
+          ].join(" "),
+          listing.id,
+          input.run.groupId,
+          listing.url,
+          listing.duplicateKey,
+          listing.groupScopedDuplicateKey,
+          JSON.stringify(listing),
+          listing.createdAt,
+          listing.updatedAt,
+        );
+        rowsWritten += 1;
+      }
       await runD1(
         db,
         "INSERT INTO listing_candidates (id, group_id, source, url, duplicate_key, submitted_by, title, extraction_status, review_status, address, neighborhood, borough, rent, bedrooms, bathrooms, available_at, description, fit_flags_json, evidence_json, concerns_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET source = excluded.source, url = excluded.url, duplicate_key = excluded.duplicate_key, submitted_by = excluded.submitted_by, title = excluded.title, extraction_status = excluded.extraction_status, review_status = excluded.review_status, address = excluded.address, neighborhood = excluded.neighborhood, borough = excluded.borough, rent = excluded.rent, bedrooms = excluded.bedrooms, bathrooms = excluded.bathrooms, available_at = excluded.available_at, description = excluded.description, fit_flags_json = excluded.fit_flags_json, evidence_json = excluded.evidence_json, concerns_json = excluded.concerns_json, updated_at = excluded.updated_at",
@@ -272,7 +278,9 @@ async function persistD1(
             : "processed",
         material
           ? "Processed because material listing details changed."
-          : "Daily loop processed candidate.",
+          : rejectedByTriage
+            ? "Rejected by triage; kept out of the group shortlist."
+            : "Daily loop processed candidate.",
         material ? 1 : 0,
         JSON.stringify(material?.materialChangeReasons ?? []),
         input.run.completedAt ?? input.run.startedAt,
@@ -308,6 +316,27 @@ async function persistD1(
         memory.memoryState,
         memory.reason,
         input.run.id,
+        memory.lastSeenAt,
+      );
+      rowsWritten += 1;
+      if (memory.memoryState !== "rejected") continue;
+      // Rejected candidates never land in app_saved_listings, so the app-side memory table is the
+      // only place the group can see that the loop already turned this source URL down.
+      await runD1(
+        db,
+        [
+          "INSERT INTO app_seen_rejected_memory",
+          "(id, group_id, source_url, group_scoped_duplicate_key, memory_json, last_seen_at)",
+          "VALUES (?, ?, ?, ?, ?, ?)",
+          "ON CONFLICT(group_id, group_scoped_duplicate_key) DO UPDATE SET",
+          "source_url = excluded.source_url, memory_json = excluded.memory_json,",
+          "last_seen_at = excluded.last_seen_at",
+        ].join(" "),
+        memory.id,
+        memory.groupId,
+        memory.sourceUrl,
+        memory.groupScopedDuplicateKey,
+        JSON.stringify(memory),
         memory.lastSeenAt,
       );
       rowsWritten += 1;
