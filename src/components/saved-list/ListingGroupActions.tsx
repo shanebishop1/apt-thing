@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type FormEvent, type ToggleEvent } from "react";
+import { useId, useRef, type FormEvent, type ToggleEvent } from "react";
 import type { GroupActionRecord } from "@/lib/agent-contracts";
 import type { InviteIdentity, ListingCandidate } from "@/lib/listings";
 import type { ListingGroupActions as ListingGroupActionsState } from "@/lib/group-actions";
@@ -120,23 +120,27 @@ export type ReactionScoreBadgeProps = {
 
 export function ReactionScoreBadge({ reactions }: ReactionScoreBadgeProps) {
   const reactionDigest = createReactionScoreDigest(reactions);
+  const tooltipId = useId();
 
   if (reactionDigest.score === 0) {
     return null;
   }
 
+  // A button rather than a focusable div: the badge is the tooltip trigger, so it needs a
+  // role that explains why it takes focus, and `aria-describedby` to announce the names.
   return (
-    <div
+    <button
+      type="button"
       className={`reaction-score-badge ${reactionDigest.tone}`}
-      tabIndex={0}
       aria-label={`Reaction score: ${reactionDigest.accessibleScore}. Hover or focus to see who liked or passed.`}
+      aria-describedby={tooltipId}
     >
       <strong>{reactionDigest.displayScore}</strong>
-      <div className="reaction-score-popover" role="tooltip">
+      <span id={tooltipId} className="reaction-score-popover" role="tooltip">
         <ReactionNameGroup label="Liked" names={reactionDigest.likedNames} />
         <ReactionNameGroup label="Passed" names={reactionDigest.passedNames} />
-      </div>
-    </div>
+      </span>
+    </button>
   );
 }
 
@@ -160,20 +164,24 @@ function createReactionScoreDigest(reactions: GroupActionRecord[]) {
   };
 }
 
+/**
+ * Phrasing-only markup: this lives inside the badge button and is read out as the button's
+ * description, where list and heading semantics are flattened to text anyway.
+ */
 function ReactionNameGroup({ label, names }: { label: string; names: string[] }) {
   return (
-    <section className="reaction-name-group" aria-label={label}>
-      <h4>{label}</h4>
+    <span className="reaction-name-group">
+      <span className="reaction-name-label">{label}</span>
       {names.length === 0 ? (
-        <p>No one yet.</p>
+        <span className="reaction-name-empty">No one yet.</span>
       ) : (
-        <ul>
-          {names.map((name) => (
-            <li key={name}>{name}</li>
-          ))}
-        </ul>
+        names.map((name) => (
+          <span key={name} className="reaction-name">
+            {name}
+          </span>
+        ))
       )}
-    </section>
+    </span>
   );
 }
 

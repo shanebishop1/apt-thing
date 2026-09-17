@@ -98,19 +98,19 @@ function IdentityForm({
         />
       </label>
       <button type="submit">{isGate ? "Enter shared list" : "Save identity"}</button>
-      <div className="settings-status" role="status" aria-live="polite">
+      <output className="settings-status" aria-live="polite">
         <span className="eyebrow">{isGate ? "Access required" : "Current workspace"}</span>
         <strong>
           {isGate ? "No active group" : identity ? identity.groupId : "No active group"}
         </strong>
-        <p>
+        <span className="settings-status-message">
           {isGate
             ? message || "Enter a valid invite code and display name to continue."
             : identity
               ? `Saving as ${identity.displayName}`
               : "Enter a valid invite code."}
-        </p>
-      </div>
+        </span>
+      </output>
     </form>
   );
 }

@@ -58,19 +58,17 @@ export function RunHistoryPanel({
       ) : null}
 
       {state.status === "loading" && !state.history ? (
-        <p className="run-history-notice" role="status">
-          Loading run history…
-        </p>
+        <output className="run-history-notice">Loading run history…</output>
       ) : null}
 
       {state.status === "ready" && model.runs.length === 0 ? (
-        <div className="run-history-notice run-history-empty" role="status">
+        <output className="run-history-notice run-history-empty">
           <strong>No runs recorded yet</strong>
-          <p>
+          <span className="run-history-notice-text">
             Runs appear here once a manual or scheduled daily search run is saved to this
             group&apos;s shared list.
-          </p>
-        </div>
+          </span>
+        </output>
       ) : null}
 
       {model.runs.length === 0 ? null : (

@@ -328,6 +328,7 @@ label {
 }
 
 .run-history-notice {
+  display: block;
   margin-top: 16px;
   padding: 14px 16px;
   border: 1px solid var(--line);
@@ -335,7 +336,9 @@ label {
   background: var(--panel-strong);
 }
 
-.run-history-notice p {
+.run-history-notice p,
+.run-history-notice-text {
+  display: block;
   margin: 4px 0 0;
 }
 
@@ -736,8 +739,7 @@ button:disabled {
   letter-spacing: -0.035em;
 }
 
-.settings-status p {
-  margin: 0;
+.settings-status-message {
   color: var(--muted);
   line-height: 1.45;
 }
@@ -1829,6 +1831,9 @@ button:disabled {
 
 .reaction-score-popover {
   position: absolute;
+  display: block;
+  text-align: left;
+  font-weight: 400;
   z-index: 100;
   top: calc(100% + 8px);
   bottom: auto;
@@ -1850,32 +1855,37 @@ button:disabled {
     transform 150ms ease;
 }
 
+.reaction-name-group {
+  display: block;
+}
+
 .reaction-name-group + .reaction-name-group {
   margin-top: 12px;
   border-top: 1px solid var(--line);
   padding-top: 10px;
 }
 
-.reaction-score-popover h4 {
+.reaction-name-label {
+  display: block;
   margin-bottom: 8px;
   color: var(--bg-ink);
   font-size: 0.8rem;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.reaction-score-popover ul {
-  gap: 6px;
-  padding-left: 0;
-  list-style: none;
-}
-
-.reaction-score-popover li {
+.reaction-name {
+  display: block;
   color: var(--muted);
 }
 
-.reaction-score-popover p {
-  margin: 0;
+.reaction-name + .reaction-name {
+  margin-top: 6px;
+}
+
+.reaction-name-empty {
+  display: block;
   color: var(--muted);
   font-size: 0.86rem;
 }
@@ -2520,7 +2530,7 @@ button,
   outline: none;
 }
 
-.add-listing-control .intake-form p {
+.add-listing-control .intake-feedback {
   position: absolute;
   width: 1px;
   height: 1px;

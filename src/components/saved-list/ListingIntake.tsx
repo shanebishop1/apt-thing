@@ -54,9 +54,9 @@ export function ListingIntake({
         <button type="submit" disabled={apiBusy || !identity}>
           {apiBusy ? "Saving…" : "Add"}
         </button>
-        <p id="intake-feedback" role="status" aria-live="polite">
+        <output id="intake-feedback" className="intake-feedback" aria-live="polite">
           {message || " "}
-        </p>
+        </output>
       </form>
     </details>
   );
