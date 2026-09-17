@@ -22,18 +22,9 @@
     // which is safe; every hit is a helper declared later in the same hook.
     "react/immutability": "off",
     "react/memo-dependencies": "off",
-    // The hooks here deliberately write a "latest value" ref during render so that
-    // stable callbacks can read the current identity without re-subscribing.
-    "react/refs": "off",
     // Duplicates react-hooks/exhaustive-deps, which is enabled above; the few
     // intentional deviations are annotated at the call sites.
     "react/exhaustive-effect-dependencies": "off",
-    // Hydration and identity-reset effects intentionally set state once on mount or
-    // on identity change; reworking them is a behavioural change, not a lint fix.
-    "react/set-state-in-effect": "off",
-    // Keys are composite (`${value}-${index}`); the index is part of the identity
-    // because these lists are positional and may repeat the same value.
-    "react/no-array-index-key": "off",
     // Loops that await are rate-limited fetches and ordered writes; running them
     // concurrently would change behaviour.
     "eslint/no-await-in-loop": "off",

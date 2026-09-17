@@ -112,10 +112,8 @@ describe("SavedListApp identity and shared listing behavior", () => {
 
     expect(await screen.findByText("Status updated to interested.")).toBeTruthy();
     expect(
-      screen.getByRole<HTMLSelectElement>("combobox", {
-        name: `Change review status for ${listing.title}`,
-      }).value,
-    ).toBe("interested");
+      screen.getByRole("combobox", { name: `Change review status for ${listing.title}` }),
+    ).toHaveProperty("value", "interested");
     const patchCall = fetchMock.mock.calls.find(
       ([input, init]) =>
         String(input) === `/api/group/listings/${listing.id}` &&
@@ -169,9 +167,7 @@ describe("SavedListApp identity and shared listing behavior", () => {
     await screen.findByRole("heading", { name: listing.title });
     await user.click(screen.getByRole("button", { name: `Selected ${listing.title}` }));
     const statusSelect = () =>
-      screen.getByRole<HTMLSelectElement>("combobox", {
-        name: `Change review status for ${listing.title}`,
-      });
+      screen.getByRole("combobox", { name: `Change review status for ${listing.title}` });
 
     await user.selectOptions(statusSelect(), "interested");
 
@@ -179,7 +175,7 @@ describe("SavedListApp identity and shared listing behavior", () => {
       /Someone else changed that listing first/,
     );
     expect(screen.queryByText("Status updated to interested.")).toBeNull();
-    expect(statusSelect().value).toBe("touring");
+    expect(statusSelect()).toHaveProperty("value", "touring");
 
     await user.selectOptions(statusSelect(), "interested");
 

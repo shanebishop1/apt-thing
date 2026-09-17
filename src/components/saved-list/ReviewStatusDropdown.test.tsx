@@ -16,11 +16,9 @@ describe("ReviewStatusDropdown", () => {
       <ReviewStatusDropdown listing={listing} onStatusChange={onStatusChange} />,
     );
     const select = () =>
-      screen.getByRole("combobox", {
-        name: `Change review status for ${listing.title}`,
-      }) as HTMLSelectElement;
+      screen.getByRole("combobox", { name: `Change review status for ${listing.title}` });
 
-    expect(select().value).toBe("new");
+    expect(select()).toHaveProperty("value", "new");
     await user.selectOptions(select(), "interested");
     expect(onStatusChange).toHaveBeenCalledWith(listing.id, "interested");
 
@@ -40,10 +38,10 @@ describe("ReviewStatusDropdown", () => {
     render(<ReviewStatusDropdown listing={listing} disabled onStatusChange={vi.fn()} />);
     const select = screen.getByRole("combobox", {
       name: `Change review status for ${listing.title}`,
-    }) as HTMLSelectElement;
+    });
 
-    expect(select.disabled).toBe(true);
-    expect(select.value).toBe("review");
+    expect(select).toHaveProperty("disabled", true);
+    expect(select).toHaveProperty("value", "review");
     expect(screen.getByRole("option", { name: "review" })).toHaveProperty("disabled", true);
     expect(screen.getByRole("option", { name: "interested" })).toHaveProperty("disabled", false);
   });
