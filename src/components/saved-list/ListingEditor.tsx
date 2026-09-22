@@ -136,14 +136,7 @@ export function ListingEditor({
 
       {isReviewNeeded ? (
         <section className="review-decision-panel" aria-label="Review decision">
-          <div>
-            <p className="eyebrow">Needs review</p>
-            <h3>Approve or reject this candidate</h3>
-            <p>
-              Approving keeps it in the shared list as a current candidate. Rejecting removes it
-              from the list and records it in rejected memory.
-            </p>
-          </div>
+          <h3>Approve or reject this candidate</h3>
           <div className="review-decision-actions">
             <button
               type="button"
@@ -157,7 +150,7 @@ export function ListingEditor({
               className="secondary-danger"
               onClick={() => onReviewDecision(listing.id, "reject")}
             >
-              Reject and remove
+              Reject
             </button>
           </div>
         </section>

@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "apt-thing",
+  "name": "apt-thing-local",
   "main": "src/worker.ts",
   "compatibility_date": "2026-06-05",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -16,11 +16,35 @@
     "NEXTJS_ENV": "production",
     "APP_ENV": "local",
     "DAILY_LOOP_ENABLED": "false",
+    "AI_RUNS_ENABLED": "false",
   },
   "triggers": {
     "crons": [],
   },
   "observability": {
     "enabled": false,
+  },
+  "env": {
+    "production": {
+      "name": "apt-thing",
+      "workers_dev": true,
+      "preview_urls": false,
+      "routes": [{ "pattern": "apt.shane-bishop.com", "custom_domain": true }],
+      "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+      "vars": {
+        "NEXTJS_ENV": "production",
+        "APP_ENV": "production",
+        "DAILY_LOOP_ENABLED": "false",
+        "AI_RUNS_ENABLED": "false",
+      },
+      "d1_databases": [{
+        "binding": "DB",
+        "database_name": "apt-thing-db",
+        "database_id": "df5ba3be-9c4b-4581-92b3-c6d5d35ee598",
+        "migrations_dir": "migrations",
+      }],
+      "triggers": { "crons": [] },
+      "observability": { "enabled": true },
+    },
   },
 }

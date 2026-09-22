@@ -40,7 +40,7 @@ echo "GROUP_INVITE_CODES=nyc-5br-2026=$(openssl rand -hex 16)" >> .env
 ```
 
 The value is a comma-separated list of `groupId=inviteCode` pairs. Group ids must
-exist in `searchGroups` in `src/lib/listings.ts` (only `nyc-5br-2026` today), and
+exist in `searchGroups` in `src/lib/listings/identity.ts` (only `nyc-5br-2026` today), and
 codes shorter than 16 characters are ignored. If no valid entry is configured,
 every protected API route fails closed with HTTP 503 `group-auth-unconfigured`.
 The old `apt-g1` code is public in git history and is never accepted.
@@ -90,7 +90,9 @@ but `search_groups` does not exist, the local state is inconsistent: move
 
 Local database files live under `.wrangler/state/`. They survive server restarts
 but are separate from any remote database. Removing that directory loses local
-data. `pnpm cf:types` updates `worker-configuration.d.ts`; inspect generated and
+data. `pnpm cf:types` updates `worker-configuration.d.ts` from the production
+binding contract. For a different local binding contract, run
+`pnpm exec wrangler types --env-file .env.example`. Inspect generated and
 configuration changes before including them in your own commits.
 
 ## 3. Start And Use The App
@@ -131,10 +133,11 @@ shows a "Someone else changed that listing first" alert, and it adopts the curre
 listing. Rejecting a listing in one window and then editing it in the other returns
 HTTP 404 `listing-not-found`; the listing is not recreated.
 
-Real URLs are fetched by the server even when provider keys are blank. A fetched
-page may contribute metadata, but Gemini extraction without a key reports
-`gemini-api-key-missing`. Failed or blocked source requests also leave records
-for manual review. No paid key is necessary for saving and editing those records.
+With `AI_RUNS_ENABLED=false` (the default), URLs save as manual-needed records
+with `ai-runs-disabled` metadata and no server-side source/provider requests.
+When enabled, real URLs can be fetched even when provider keys are blank; a
+missing Gemini key then reports `gemini-api-key-missing`. Failed or blocked
+requests also leave records for manual review.
 
 ### Check The API
 
@@ -185,6 +188,52 @@ dispatch. Plain `pnpm build` produces a Next.js build, not a deployed Worker.
 
 ## 4. Optional Provider Access
 
+### Search Criteria
+
+Edit `src/lib/search-config.ts` to change the search's bedroom/bathroom minimums,
+rent ceiling, flex-confidence threshold, move-in target/months, preferred
+Manhattan neighborhoods, and exceptional-fallback boroughs/budget. Rebuild and
+redeploy for hosted changes. Provider query defaults, acquisition filtering,
+fit flags, extraction concerns, deterministic checks, confidence values, and
+Gemini instructions use this same configuration. Pasted URLs remain user-qualified
+and bypass discovery filtering. Existing saved facts, review decisions, and
+historical run results are not rewritten. Legacy confidence field names such as
+`realFiveBedroom` stay stable for stored-data compatibility but use configured
+thresholds. The stable group ID `nyc-5br-2026` must not change with the criteria.
+
+### Pause Or Resume Paid AI Runs
+
+**`AI_RUNS_ENABLED=false` keeps the app online without paid discovery/extraction.**
+Unset, blank, or unrecognized values also disable it; `true`, `1`, and `on`
+(case-insensitive) explicitly enable it.
+
+| Switch state | Behavior |
+| --- | --- |
+| AI off | Live manual/API runs return HTTP 503 `ai-runs-disabled`; Cron/Workflow execution skips before provider calls or run writes. Pasted URLs save manual-needed records without fetching the source or calling RealtyAPI/Gemini. |
+| AI on, daily loop off | Pasted-link extraction and manual live runs can call configured providers; scheduled dispatch is skipped. |
+| Both on | Live extraction/manual runs allowed; scheduled runs also require a configured Cron/Workflow setup. |
+
+To toggle the hosted app without rebuilding code, open **Cloudflare → Workers &
+Pages → apt-thing → Settings → Variables and Secrets**, edit the plaintext
+`AI_RUNS_ENABLED` variable to `false` or `true`, and deploy that settings change.
+No route removal, secret deletion, or database teardown is needed. Requests that
+already started on the prior Worker version may finish; the switch gates new work.
+
+For a durable repo-managed setting, change
+`env.production.vars.AI_RUNS_ENABLED` in `wrangler.jsonc`, then run
+`pnpm cf:deploy:production`. A normal deployment restores the repo's values, so
+the committed `false` resets any temporary dashboard opt-in. Local Worker/Next
+bridge settings use root `vars` (or local `.dev.vars`/`.env` overrides); restart
+the local server after changes. A runtime binding takes precedence over a
+`process.env` fallback. Both root and production defaults are off.
+
+Verify with the authenticated `GET /api/platform/smoke`: expect
+`aiRunsEnabled: false` and `dailyLoopEnabled: false` when paused. Normal shortlist
+reads, field edits, comments, reactions, and reviews keep working. Map tiles,
+photos, and normal Worker/D1 traffic are independent of this switch.
+
+### Provider Credentials
+
 Create credentials with the providers you intend to use, enable the necessary
 API access/quota on those accounts, and put the values in the existing `.env`
 entries. Restart the server after changing them. Providers may charge even when
@@ -199,7 +248,7 @@ the app itself is running locally; consult their current terms and pricing.
 | `APP_ENV`             | Diagnostic environment label; `local` by default. Not a security or provider-disable switch.                                                                                                                                |
 | `NEXTJS_ENV`          | OpenNext build/runtime environment setting; retain the template's `production` value.                                                                                                                                       |
 
-For StreetEasy URLs, a configured RealtyAPI key takes the provider path first.
+With `AI_RUNS_ENABLED=true`, a configured RealtyAPI key takes the StreetEasy provider path first.
 That path searches for an exact URL match and can make multiple paid requests;
 it does not require Gemini when successful. Pasted links and the source loop read
 the same provider record, so a pasted StreetEasy listing saves the provider's
@@ -227,10 +276,9 @@ shape offline and makes no paid request.
 read past runs from `GET /api/group/runs` instead. With D1 bound, a run writes run
 records and shortlist data.
 
-**Fixture mode is not a universal no-spend switch:** a supplied Gemini key can
-still activate the analyzer. For provider-free fixtures, leave keys blank in
-`.env` and unset inherited provider credentials in your shell. Run fixtures only
-against disposable local data, not a real group's database.
+**Fixture mode stays offline**, even when provider keys are present. It does not
+auto-select Gemini or RealtyAPI. It still writes simulated results to D1, so run
+fixtures against disposable local data rather than a real group's database.
 
 ```sh
 curl -sS -X POST http://localhost:3000/api/platform/daily-loop \
@@ -247,7 +295,7 @@ Provider metadata from fixture runs is shown as simulated AI attempts. The tab
 also reports how many attempts failed, so a run that fell back to deterministic
 triage is visible rather than reading as a clean set of AI calls.
 Missing KV and disabled R2 are not evidence of a live storage failure. The
-`live-safe` name does not mean free: that mode can call RealtyAPI and Gemini.
+`live-safe` name does not mean free: with `AI_RUNS_ENABLED=true`, that mode can call RealtyAPI and Gemini.
 Its secondary source is not a live Zillow crawler. Automated scheduling is
 disabled in the checked-in configuration.
 
@@ -269,8 +317,8 @@ Tests use fixtures, mocks, and an
 in-memory `node:sqlite` database that applies the real migrations, covering the
 listing race, two-client, and run-history paths. They need no provider key and no
 cloud account. `check:client-secrets` scans `.next/static` for the retired invite
-code, for `GROUP_INVITE_CODES` entries found in the environment, `.env.local`, or
-`.dev.vars`, and for provider key values. After `pnpm cf:build`, run
+code, for `GROUP_INVITE_CODES` entries found in the environment or root `.env*` /
+`.dev.vars*` files (including `.env.demo`), and for provider key values. After `pnpm cf:build`, run
 `node scripts/check-client-secrets.mjs --open-next` to scan the Worker assets too.
 GitHub Actions runs the same checks on pushes to `main` and pull requests, without
 deploying. None of them prove live provider access or cloud bindings.
@@ -299,8 +347,9 @@ copy of the committed Wrangler config plus a local `DB` binding, so requests rea
 the D1 emulator instead of a mock. Its data lives in `.wrangler/e2e-state`, separate
 from the `.wrangler/state` a normal `wrangler dev` uses, and `e2e/reset-database.mjs`
 deletes and re-migrates that directory before every run so each suite starts empty.
-Provider keys are blank for this server, so pasted links become manual-review
-records; that is what the specs assert against. `e2e/.dev.vars` holds the dummy
+`AI_RUNS_ENABLED=false` and provider keys are blank for this server. The specs
+verify manual-review intake, blocked live runs, and working shared edits/reviews.
+`e2e/.dev.vars` holds the dummy
 invite code the suite signs in with — it is a fixture, not a secret. A failing run
 leaves an HTML report in `playwright-report/`; open it with
 `pnpm exec playwright show-report`. GitHub Actions runs the same suite in a second
@@ -308,8 +357,96 @@ leaves an HTML report in `playwright-report/`; open it with
 
 ## 6. Optional Cloudflare Deployment
 
+### Maintainer Demo Environment
+
+The `production` environment in `wrangler.jsonc` restores the maintainer's private
+demo at **https://apt.shane-bishop.com** (also
+https://apt-thing.shane-b.workers.dev). It uses Worker `apt-thing`, D1
+`apt-thing-db`, and the seven committed migrations. The default environment is
+named `apt-thing-local` and remains unbound and unreachable; always pass
+`--env production` when operating on the hosted demo. Forks should replace the
+production database ID and domain with resources in their own account.
+
+```sh
+pnpm check
+pnpm test:e2e
+pnpm exec wrangler d1 migrations apply DB --remote --env production
+pnpm cf:types
+pnpm cf:deploy:production
+```
+
+`cf:deploy:production` builds the production OpenNext bundle, scans client assets
+for local server-only credentials, and deploys. A packaging-only check is:
+
+```sh
+pnpm exec opennextjs-cloudflare build --env production
+pnpm exec wrangler deploy --dry-run --env production
+```
+
+The hosted Worker has `GROUP_INVITE_CODES`, `GEMINI_API_KEY`, and `REALTYAPI_KEY`
+secrets. Maps use the working OpenStreetMap fallback; no Stadia credential is
+required. KV and R2 are not required. Worker observability is enabled. Cron and
+Workflow scheduling remain off. Paid runs are also paused with
+`AI_RUNS_ENABLED=false`; enable that switch before requesting manual live runs.
+To change a hosted secret, use `pnpm exec wrangler secret put NAME --env production`.
+
+On the maintainer's machine, the private demo invite is stored in ignored,
+owner-readable `.env.demo`. It is not a provider-key backup. Display the invite
+locally, then enter it and any display name on the live site's invite screen:
+
+```sh
+node --env-file=.env.demo -p 'process.env.GROUP_INVITE_CODES.split("=")[1]'
+```
+
+For CLI checks and on-demand discovery, load that file without printing the code:
+
+```sh
+set -a
+source .env.demo
+set +a
+export INVITE_CODE="${GROUP_INVITE_CODES#*=}"
+curl -fsS https://apt.shane-bishop.com/api/platform/smoke \
+  -H "X-Invite-Code: $INVITE_CODE"
+# Requires AI_RUNS_ENABLED=true; makes paid calls and saves candidates.
+curl -fsS --max-time 600 https://apt.shane-bishop.com/api/platform/daily-loop \
+  -H "X-Invite-Code: $INVITE_CODE" -H 'Content-Type: application/json' \
+  -d '{"mode":"live-safe","cadence":"manual","trigger":"manual"}'
+```
+
+Repeated discovery reads saved/rejected history from D1 before analysis. Changed
+source facts are retained in run history, but do not replace the shortlist's
+roommate-edited record; apply desired corrections through the listing editor.
+Only one queued/running discovery is allowed per group; concurrent requests
+receive HTTP 409, while interrupted runs older than two hours are marked failed
+before a new run starts. Final run artifacts and shortlist inserts commit in one
+D1 batch, so a failed final write does not leave partial history.
+AI failures produce a partial run with explicit failed-attempt metadata. Run
+completion timestamps reflect actual acquisition/analysis time rather than a
+fixed synthetic duration. Earlier run records retain their original metadata.
+
+For recording: show the List, open a real listing's photos and map, review its
+facts, change a status, add a comment/reaction, then show the Runs briefing.
+The initial live run on September 19 saved 11 actual StreetEasy listings (six
+confirmed, five review-needed); no fixture listings were loaded into remote D1.
+Google returned four HTTP 503s and one HTTP 429 among 12 AI attempts. Successful
+analysis is verified, but live provider quota/availability can still require review.
+
+To pause provider spending while keeping the app online, use
+[`AI_RUNS_ENABLED=false`](#pause-or-resume-paid-ai-runs).
+To take the demo itself offline, remove its public route and set
+`env.production.workers_dev` to `false`, then redeploy. This retains D1 data.
+Alternatively, `pnpm exec wrangler delete --env production` removes this Worker
+and its secrets; it does not delete the database. Export D1 before any deliberate
+database deletion:
+
+```sh
+pnpm exec wrangler d1 export DB --remote --env production --output tmp/apt-thing-backup.sql
+```
+
+### Provision Your Own Environment
+
 This section creates real resources and can incur charges. It is not required
-for local development. The repository's default config has `workers_dev: false`,
+for local development. The repository's default (non-production) config has `workers_dev: false`,
 `preview_urls: false`, no routes, no resource bindings, an empty cron list, and
 `DAILY_LOOP_ENABLED: "false"`. Deploying it unchanged is not a usable hosted app.
 
@@ -388,14 +525,14 @@ a queue consumer, so adding queue bindings alone does not enable a queue pipelin
 Scheduled discovery is a separate, opt-in operational step. The Worker exports
 `DailySourceAgentLoopWorkflow`; its expected binding name is
 `DAILY_SOURCE_AGENT_LOOP_WORKFLOW`. A workflow-backed schedule needs that binding
-and a Cron schedule, plus deliberately enabling `DAILY_LOOP_ENABLED` and validating
+and a Cron schedule, plus deliberately enabling both `AI_RUNS_ENABLED` and `DAILY_LOOP_ENABLED` and validating
 live provider access and spending limits. The scheduler has an inline fallback
 if the Workflow binding is missing or dispatch fails. Leave scheduling disabled
 until that path has been tested for your account.
 
 `DAILY_LOOP_ENABLED: "false"` gates the scheduled handler only. It does **not**
 block manual API calls, listing extraction, or the daily-loop HTTP endpoint.
-Disabling the Cron schedule is not a substitute for securing those endpoints.
+Use `AI_RUNS_ENABLED=false` as the master pause switch for those paid paths.
 
 ## Troubleshooting
 
@@ -419,5 +556,6 @@ Disabling the Cron schedule is not a substitute for securing those endpoints.
 
 - [OpenNext Cloudflare setup](https://github.com/opennextjs/docs/blob/main/pages/cloudflare/get-started.mdx)
 - [Cloudflare local environment variables](https://developers.cloudflare.com/workers/configuration/environment-variables)
+- [Wrangler variable handling](https://developers.cloudflare.com/workers/wrangler/commands/) — retrieved via Context7; dashboard variable edits are overwritten by normal repo-managed deployments.
 - [Wrangler D1 commands](https://developers.cloudflare.com/workers/wrangler/commands/d1)
 - [Cloudflare Workflow bindings](https://developers.cloudflare.com/workflows/build/workers-api)

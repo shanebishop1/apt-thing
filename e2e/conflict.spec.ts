@@ -82,7 +82,7 @@ test("a stale edit to a removed listing reports the removal", async ({ request, 
   const api = await playwright.request.newContext({ baseURL: E2E_BASE_URL });
   let removed: E2eListing;
   try {
-    // Left in the review-needed holding state so the UI offers "Reject and remove".
+    // Left in the review-needed holding state so the UI offers "Reject".
     removed = await createListing(api, {
       url: uniqueSourceUrl("removal"),
       title: removedTitle,
@@ -100,7 +100,7 @@ test("a stale edit to a removed listing reports the removal", async ({ request, 
   await bob.reload();
   await openListing(bob, removedTitle);
   const bobRemoved = waitForListingResponse(bob, "PATCH", 200);
-  await listingDetail(bob).getByRole("button", { name: "Reject and remove" }).click();
+  await listingDetail(bob).getByRole("button", { name: "Reject", exact: true }).click();
   await bobRemoved;
 
   const aliceRejected = waitForListingResponse(alice, "PATCH", 404);

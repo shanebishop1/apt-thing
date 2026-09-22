@@ -1,4 +1,5 @@
 import type { GeminiTriageAnalysisResult, GeminiTriageAnalyzer } from "../extraction";
+import { areAiRunsEnabled } from "../ai-runs";
 import {
   GEMINI_LOW_THINKING,
   extractGeminiText,
@@ -23,6 +24,7 @@ import {
 import { safeJson } from "../utils/json";
 import { uniqueStrings } from "../utils/text";
 import type { DailyLoopEnv } from "./types";
+import type { ProviderAttempt } from "../providers/http";
 
 /** Gemini fit-triage analyzers: the direct provider call and the failure-injection stand-in. */
 
@@ -65,7 +67,7 @@ export function createGeminiAnalyzerFromEnv(
   fetchImpl: typeof fetch = fetch,
 ): GeminiTriageAnalyzer | undefined {
   const apiKey = env?.GEMINI_API_KEY;
-  if (!apiKey) return undefined;
+  if (!apiKey || !areAiRunsEnabled(env)) return undefined;
   return async (input) => analyzeWithDirectGemini(input, apiKey, fetchImpl);
 }
 
@@ -92,7 +94,7 @@ function buildTriageInstructions(sourceUrl: string): string {
     FIT_EVIDENCE_RUBRIC;
 
   return [
-    "You are triaging one New York City apartment rental listing for a five-bedroom apartment search.",
+    `You are triaging one New York City apartment rental listing for a ${hardConstraints.bedroom.minimum}-bedroom apartment search.`,
     `Return only JSON matching the supplied response schema. "schemaVersion" must be exactly "${AI_TRIAGE_SCHEMA_VERSION}".`,
     "Bucket definitions:",
     `- "confirmed-match": every hard constraint is met and quoted — at least ${hardConstraints.bedroom.minimum} bedrooms (a credible real layout, or flex/convertible evidence at confidence ${hardConstraints.bedroom.flexHighConfidenceThreshold} or higher), at least ${hardConstraints.bathrooms.minimum} bathrooms, rent at or under $${hardConstraints.maxRent}, a whole NYC apartment rental, and a move-in inside ${hardConstraints.moveIn.acceptableMonths.join(", ")} (target ${hardConstraints.moveIn.target}).`,
@@ -147,6 +149,7 @@ async function analyzeWithDirectGemini(
   const started = Date.now();
   const imageCount = Math.min(input.listing.imageEvidence.length, MAX_IMAGES_PER_LISTING);
   const baseMetadata = createAiProviderAttemptMetadata("fit-triage", imageCount);
+  const requestAttempts: ProviderAttempt[] = [];
   const finalize = (
     status: "success" | "failed",
     failureCode?: string,
@@ -160,6 +163,7 @@ async function analyzeWithDirectGemini(
     concurrencySlot: input.concurrencySlot,
     promptVersion: AI_TRIAGE_SCHEMA_VERSION,
     schemaValidation: status === "success" ? "passed" : "failed",
+    requestAttempts,
     ...(failureCode === undefined ? {} : { failureCode }),
   });
   /** The deterministic verdict stays the fallback whenever Gemini cannot be trusted. */
@@ -175,6 +179,7 @@ async function analyzeWithDirectGemini(
       model: TRIAGE_MODEL,
       body: buildTriageRequestBody(input),
       fetchImpl,
+      onAttempt: (attempt) => requestAttempts.push(attempt),
     });
     if (!response.ok) return failed(`gemini-http-${response.status}`);
 

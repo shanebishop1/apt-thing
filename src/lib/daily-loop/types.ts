@@ -10,6 +10,8 @@ import type {
   SourceEvidenceRecord,
 } from "../agent-contracts";
 import type { GeminiTriageAnalyzer, StreetEasyBatchInput } from "../extraction";
+import { PROVIDER_RETRY_POLICY } from "../providers/http";
+import type { D1DatabaseLike } from "../shared-listing-store";
 import {
   MAX_IMAGES_PER_LISTING,
   type AiProviderAttemptMetadata,
@@ -23,25 +25,28 @@ import {
 
 export const DAILY_LOOP_CONTRACT_VERSION = "daily-source-loop-v1" as const;
 export const DAILY_LOOP_DEFAULT_CONCURRENCY = 2;
-export const DAILY_LOOP_RETRY_POLICY = { maxRetries: 1, retryDelayMs: 250 } as const;
+export const DAILY_LOOP_RETRY_POLICY = PROVIDER_RETRY_POLICY;
 
 export type DailyLoopMode = "fixture" | "live-safe";
 export type DailyLoopTrigger = "manual" | "cron" | "fixture";
 export type DailyLoopSourceKey = "streeteasy" | "zillow-manual-fixture";
 export type DailyLoopSkipReason = "seen" | "saved" | "rejected" | "triaged";
 
-export type DailyLoopD1Binding = {
-  prepare(sql: string): {
-    bind(...values: unknown[]): { run(): Promise<unknown> };
-  };
-};
+export type DailyLoopD1Binding = D1DatabaseLike;
 
 export type DailyLoopKVBinding = {
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<unknown>;
 };
 
 export type DailyLoopEnv = Partial<
-  Record<"GEMINI_API_KEY" | "REALTYAPI_KEY" | "REALTYAPI_BASE_URL" | "DAILY_LOOP_ENABLED", string>
+  Record<
+    | "GEMINI_API_KEY"
+    | "REALTYAPI_KEY"
+    | "REALTYAPI_BASE_URL"
+    | "DAILY_LOOP_ENABLED"
+    | "AI_RUNS_ENABLED",
+    string
+  >
 > & {
   DB?: DailyLoopD1Binding;
   APP_CACHE?: DailyLoopKVBinding;
@@ -78,6 +83,7 @@ export type DailyLoopPersistenceOutcome = {
     attempted: boolean;
     skippedReason?: "missing-binding";
     rowsWritten: number;
+    candidatesSaved?: number;
     error?: string;
   };
   r2: {
@@ -88,7 +94,7 @@ export type DailyLoopPersistenceOutcome = {
   };
   kv: {
     attempted: boolean;
-    skippedReason?: "missing-binding";
+    skippedReason?: "missing-binding" | "persistence-failed";
     writes: number;
     authoritative: false;
     error?: string;

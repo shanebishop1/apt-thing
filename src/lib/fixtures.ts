@@ -6,7 +6,10 @@ import {
 } from "./extraction";
 import type { ListingCandidate } from "./listings";
 import {
-  PREFERRED_NEIGHBORHOODS,
+  DEFAULT_STREETEASY_DISCOVERY_QUERY,
+  DEFAULT_STREETEASY_URL_RESOLUTION_QUERY,
+} from "./listings/config";
+import {
   createGroupScopedListingState,
   createGroupIdentity,
   createListingFromUrl,
@@ -68,12 +71,8 @@ export const streetEasyPastedFixture: StreetEasyUrlResolutionInput = {
   kind: "streeteasy-realtyapi-url-resolution-fixture",
   sourceUrl: "https://streeteasy.com/building/152-manhattan-avenue-brooklyn/4b",
   query: {
-    endpoint: "search/rent",
+    ...DEFAULT_STREETEASY_URL_RESOLUTION_QUERY,
     areas: ["williamsburg", "brooklyn"],
-    minBeds: 5,
-    maxRent: 15000,
-    rentalStatus: "active",
-    sort: "newest",
   },
   locationCandidates: ["Williamsburg", "Brooklyn", "NYC and NJ"],
   pagesScanned: [1, 2],
@@ -116,14 +115,7 @@ const batchPhotoUrls = [
 
 export const streetEasyBatchFixture: StreetEasyBatchInput = {
   kind: "streeteasy-batch-fixture",
-  query: {
-    endpoint: "search/rent",
-    areas: [...PREFERRED_NEIGHBORHOODS],
-    minBeds: 5,
-    maxRent: 15000,
-    rentalStatus: "active",
-    sort: "newest",
-  },
+  query: DEFAULT_STREETEASY_DISCOVERY_QUERY,
   results: [
     {
       listingId: "batch-seen-1",

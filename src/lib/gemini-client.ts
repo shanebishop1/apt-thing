@@ -8,6 +8,7 @@
  */
 
 import { isRecord } from "./utils/records";
+import { fetchWithRetry, type ProviderAttempt } from "./providers/http";
 
 export type GeminiSchemaType = "OBJECT" | "ARRAY" | "STRING" | "NUMBER" | "INTEGER" | "BOOLEAN";
 
@@ -34,17 +35,23 @@ export function requestGeminiGenerateContent({
   model,
   body,
   fetchImpl,
+  onAttempt,
 }: {
   apiKey: string;
   model: string;
   body: unknown;
   fetchImpl: typeof fetch;
+  onAttempt?: (attempt: ProviderAttempt) => void;
 }): Promise<Response> {
-  return fetchImpl(geminiGenerateContentUrl(model), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify(body),
-  });
+  return fetchWithRetry(
+    geminiGenerateContentUrl(model),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify(body),
+    },
+    { fetchImpl, timeoutMs: 60000, ...(onAttempt ? { onAttempt } : {}) },
+  );
 }
 
 /**

@@ -1,5 +1,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { runDailySourceAgentLoop } from "./lib/daily-source-loop";
+import { DailyLoopRunConflict } from "./lib/daily-loop/run-lifecycle";
+import { AiRunsDisabled } from "./lib/ai-runs";
 import {
   createDailyLoopWorkerHandler,
   type DailyLoopScheduledEnv,
@@ -18,13 +20,34 @@ export class DailySourceAgentLoopWorkflow extends WorkflowEntrypoint<
 > {
   override async run(event: Readonly<WorkflowEvent<DailyLoopWorkflowPayload>>, step: WorkflowStep) {
     return step.do("run daily source agent loop", async () => {
-      const result = await runDailySourceAgentLoop({
-        mode: event.payload.mode ?? "live-safe",
-        cadence: event.payload.cadence ?? "daily",
-        trigger: event.payload.trigger ?? (event.schedule ? "cron" : "fixture"),
-        env: this.env,
-        now: workflowEventTimestamp(event),
-      });
+      let result;
+      try {
+        result = await runDailySourceAgentLoop({
+          mode: event.payload.mode ?? "live-safe",
+          cadence: event.payload.cadence ?? "daily",
+          trigger: event.payload.trigger ?? (event.schedule ? "cron" : "fixture"),
+          env: this.env,
+          now: workflowEventTimestamp(event),
+        });
+      } catch (error) {
+        if (error instanceof AiRunsDisabled) {
+          return { ok: true, disabled: true, reason: error.message };
+        }
+        if (
+          error instanceof DailyLoopRunConflict &&
+          error.message === "daily-loop-already-completed"
+        ) {
+          return { ok: true, runId: error.runId, status: error.status, replayed: true };
+        }
+        throw error;
+      }
+      if (!result.ok) {
+        throw new Error(
+          result.persistence.outcome.d1.error
+            ? "daily-loop-persistence-failed"
+            : "daily-loop-source-failed",
+        );
+      }
       return {
         ok: result.ok,
         runId: result.run.id,

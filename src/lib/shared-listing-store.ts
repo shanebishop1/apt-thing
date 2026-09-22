@@ -1,6 +1,7 @@
 import type { GroupActionRecord, SeenRejectedMemoryRecord } from "./agent-contracts";
 import { defaultSearchGroup, type ListingCandidate } from "./listings";
 import { parseJson } from "./utils/json";
+import type { ProviderAttempt } from "./providers/http";
 
 export type SharedListingSnapshot = {
   groupId: string;
@@ -11,6 +12,7 @@ export type SharedListingSnapshot = {
 };
 
 export type StoredExtractionJob = {
+  requestAttempts?: ProviderAttempt[];
   id: string;
   groupId: string;
   listingId?: string;

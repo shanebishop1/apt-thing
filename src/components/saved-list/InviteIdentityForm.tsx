@@ -23,14 +23,8 @@ export function InviteIdentityForm({
 }: InviteIdentityFormProps) {
   if (mode === "gate") {
     return (
-      <section className="settings-card" aria-label="Invite gate">
-        <div className="panel-heading settings-heading">
-          <div>
-            <p className="eyebrow">Private roommate search</p>
-            <h1>Enter your invite</h1>
-          </div>
-          <p>Enter the shared invite code and your display name to load the apartment list.</p>
-        </div>
+      <section className="settings-card invite-gate" aria-label="Invite gate">
+        <h1>Enter your invite</h1>
         <IdentityForm
           mode={mode}
           identityForm={identityForm}
@@ -98,19 +92,20 @@ function IdentityForm({
         />
       </label>
       <button type="submit">{isGate ? "Enter shared list" : "Save identity"}</button>
-      <output className="settings-status" aria-live="polite">
-        <span className="eyebrow">{isGate ? "Access required" : "Current workspace"}</span>
-        <strong>
-          {isGate ? "No active group" : identity ? identity.groupId : "No active group"}
-        </strong>
-        <span className="settings-status-message">
-          {isGate
-            ? message || "Enter a valid invite code and display name to continue."
-            : identity
-              ? `Saving as ${identity.displayName}`
-              : "Enter a valid invite code."}
-        </span>
-      </output>
+      {isGate ? (
+        message ? (
+          <output className="identity-feedback" aria-live="polite">
+            {message}
+          </output>
+        ) : null
+      ) : (
+        <output className="settings-status" aria-live="polite">
+          <strong>{identity ? identity.groupId : "No active group"}</strong>
+          <span className="settings-status-message">
+            {identity ? `Saving as ${identity.displayName}` : "Enter a valid invite code."}
+          </span>
+        </output>
+      )}
     </form>
   );
 }

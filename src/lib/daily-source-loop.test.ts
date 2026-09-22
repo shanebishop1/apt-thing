@@ -11,6 +11,7 @@ import {
   runDailySourceAgentLoop,
 } from "./daily-source-loop";
 import { streetEasyBatchFixture } from "./fixtures";
+import { createGeminiAnalyzerFromEnv } from "./daily-loop/gemini-analyzer";
 import {
   createGroupScopedListingState,
   createGroupIdentity,
@@ -338,24 +339,25 @@ describe("runDailySourceAgentLoop", () => {
 
   it("persists D1 rows and keeps raw artifacts disabled without R2", async () => {
     const statements: Array<{ sql: string; values: unknown[] }> = [];
-    const db = {
-      prepare(sql: string) {
-        return {
-          bind(...values: unknown[]) {
-            if (values.some((value) => value === undefined)) {
-              throw new Error(
-                "D1_TYPE_ERROR: Type 'undefined' not supported for value 'undefined'",
-              );
-            }
-            return {
-              async run() {
-                statements.push({ sql, values });
-              },
-            };
-          },
-        };
-      },
-    };
+    const db = createSqliteD1();
+    const prepare = db.prepare.bind(db);
+    vi.spyOn(db, "prepare").mockImplementation((sql) => {
+      const statement = prepare(sql);
+      return {
+        ...statement,
+        bind(...values) {
+          if (values.some((value) => value === undefined)) throw new Error("D1_TYPE_ERROR");
+          const bound = statement.bind(...values);
+          return {
+            ...bound,
+            async run() {
+              if (sql.startsWith("INSERT")) statements.push({ sql, values });
+              return bound.run();
+            },
+          };
+        },
+      };
+    });
 
     const result = await runDailySourceAgentLoop({
       identity,
@@ -445,6 +447,7 @@ describe("runDailySourceAgentLoop", () => {
     expect(result.persistence.rawArtifacts.rawArtifactPointers).toEqual(
       expect.arrayContaining([expect.objectContaining({ owner: "d1", groupScoped: true })]),
     );
+    db.close();
   });
 
   it("records triage-rejected candidates without adding them to the shared shortlist", async () => {
@@ -586,53 +589,27 @@ describe("runDailySourceAgentLoop", () => {
     }
   });
 
-  it("surfaces D1 and KV persistence failures without dropping run outputs", async () => {
-    const db = {
-      prepare(sql: string) {
-        return {
-          bind(..._values: unknown[]) {
-            return {
-              async run() {
-                throw new Error(
-                  sql.includes("daily_loop_runs") ? "d1-transition-failed" : "d1-write-failed",
-                );
-              },
-            };
-          },
-        };
-      },
-    };
+  it("stops before acquisition when the initial run cannot be persisted", async () => {
+    const db = createSqliteD1();
+    db.sqlite.exec(
+      "CREATE TRIGGER fail_run BEFORE INSERT ON daily_loop_runs BEGIN SELECT RAISE(FAIL, 'd1-transition-failed'); END",
+    );
     const kv = {
       put: vi.fn(async () => {
         throw new Error("kv-cache-failed");
       }),
     };
 
-    const result = await runDailySourceAgentLoop({
-      identity,
-      now: "2026-06-07T19:30:00.000Z",
-      env: { DB: db, APP_CACHE: kv } as any,
-    });
-
-    expect(result.ok).toBe(true);
-    expect(result.listings.length).toBeGreaterThan(0);
-    expect(result.history.latestRun.candidateSummaries.length).toBe(result.listings.length);
-    expect(result.persistence.outcome.d1).toMatchObject({
-      attempted: true,
-      rowsWritten: 0,
-      error: expect.stringContaining("d1-transition-failed"),
-    });
-    expect(result.persistence.outcome.r2).toMatchObject({
-      attempted: false,
-      skippedReason: "disabled-no-r2",
-      objectsWritten: 0,
-    });
-    expect(result.persistence.outcome.kv).toMatchObject({
-      attempted: true,
-      writes: 0,
-      authoritative: false,
-      error: "kv-cache-failed",
-    });
+    await expect(
+      runDailySourceAgentLoop({
+        identity,
+        now: "2026-06-07T19:30:00.000Z",
+        env: { DB: db, APP_CACHE: kv },
+      }),
+    ).rejects.toThrow("d1-transition-failed");
+    expect(kv.put).not.toHaveBeenCalled();
+    expect(db.sqlite.prepare("SELECT COUNT(*) AS n FROM app_saved_listings").get()?.n).toBe(0);
+    db.close();
   });
 
   it("normalizes recognized live-safe StreetEasy payloads into candidate processing", async () => {
@@ -1051,11 +1028,7 @@ describe("runDailySourceAgentLoop", () => {
 
   it("runs an actual scheduled Worker fallback while preserving OpenNext fetch delegation", async () => {
     const waited: Promise<unknown>[] = [];
-    const db = {
-      prepare() {
-        return { bind: () => ({ run: async () => undefined }) };
-      },
-    };
+    const db = createSqliteD1();
     const result = await scheduledDailySourceAgentLoop(
       { cron: "0 10 * * *", scheduledTime: Date.parse("2026-06-07T10:00:00.000Z") },
       { DB: db },
@@ -1083,7 +1056,7 @@ describe("runDailySourceAgentLoop", () => {
     });
     expect(await response.json()).toMatchObject({ ok: true, source: "opennext" });
     expect(waited).toHaveLength(1);
-    await expect(waited[0]).resolves.toMatchObject({ ok: true, fallback: true });
+    await expect(waited[0]).rejects.toThrow("daily-loop-source-failed");
   });
 
   it("removes the Workflow binding while unattended runs are hibernated", () => {
@@ -1096,7 +1069,7 @@ describe("runDailySourceAgentLoop", () => {
     expect(wranglerConfig).toContain('"preview_urls": false');
   });
 
-  it("falls back to fixture analyzer without a Gemini key and uses direct analyzer with a mocked key", async () => {
+  it("uses the fixture analyzer by default and supports an explicitly injected mocked analyzer", async () => {
     const fixtureFallback = await runDailySourceAgentLoop({
       identity,
       failSecondary: true,
@@ -1143,6 +1116,10 @@ describe("runDailySourceAgentLoop", () => {
       failSecondary: true,
       now: "2026-06-07T21:00:00.000Z",
       env: { GEMINI_API_KEY: "gemini-test-key" },
+      analyzer: createGeminiAnalyzerFromEnv(
+        { AI_RUNS_ENABLED: "true", GEMINI_API_KEY: "gemini-test-key" },
+        fetchImpl as unknown as typeof fetch,
+      )!,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
 
@@ -1203,6 +1180,30 @@ describe("runDailySourceAgentLoop", () => {
     });
     expect(body.observability.operatorEvidence).toEqual(body.operatorEvidence);
     expect(body.persistence.d1.skippedReason).toBe("missing-binding");
+  });
+
+  it("returns an unavailable response when every live source fails", async () => {
+    const previousRealtyKey = process.env.REALTYAPI_KEY;
+    process.env.REALTYAPI_KEY = "test-key";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({}, { status: 401 }));
+    try {
+      const response = await dailyLoopPOST(
+        new NextRequest("http://localhost/api/platform/daily-loop", {
+          method: "POST",
+          headers: { "X-Invite-Code": TEST_INVITE_CODE, "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "live-safe", cadence: "manual", trigger: "manual" }),
+        }),
+      );
+      const body = (await response.json()) as Record<string, any>;
+
+      expect(response.status).toBe(503);
+      expect(body).toMatchObject({ ok: false, run: { status: "failed" } });
+    } finally {
+      fetchMock.mockRestore();
+      process.env.REALTYAPI_KEY = previousRealtyKey;
+    }
   });
 
   it("rejects daily-loop route requests without an invite code", async () => {

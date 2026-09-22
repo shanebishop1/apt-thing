@@ -60,6 +60,9 @@ export function LeafletListingMap({
         scrollWheelZoom: true,
         zoom: 13,
         zoomControl: true,
+        // Leaflet 1.9's zoom-transition timer can outlive map.remove() on tab switches.
+        // Instant zoom keeps the map interactive without callbacks touching a removed pane.
+        zoomAnimation: false,
       });
       // Drop the "Leaflet" prefix; only the data attribution matters here.
       map.attributionControl?.setPrefix(false);

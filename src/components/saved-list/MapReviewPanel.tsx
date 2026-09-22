@@ -146,7 +146,6 @@ function MapDetail({
   return (
     <article id={id} className="map-detail" aria-label="Selected map listing detail">
       <header>
-        <p className="eyebrow">Selected location</p>
         <h3>{candidate.listing.title}</h3>
         <p>
           {candidate.listing.address} · {candidate.zoneLabel} · {candidate.boroughFallback}

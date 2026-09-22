@@ -15,6 +15,7 @@ import {
   type ListingCandidate,
 } from "../listings";
 import { AI_TRIAGE_SCHEMA_VERSION } from "../triage";
+import { SEARCH_CONFIG } from "../search-config";
 import { withDefined } from "../utils/records";
 import { stableId } from "./ids";
 import {
@@ -40,15 +41,22 @@ export function buildExistingStates({
   priorStates: GroupScopedListingState[];
 }): Map<string, ExistingCandidateState> {
   const states = new Map<string, ExistingCandidateState>();
-  for (const result of batch.results) {
-    const state = findExistingState(
-      groupId,
-      result.sourceUrl,
-      existingListings,
-      seenMemory,
-      priorStates,
-    );
-    if (state) states.set(createGroupScopedDuplicateKey(groupId, result.sourceUrl), state);
+  const urls = new Set([
+    ...batch.results.map((result) => result.sourceUrl),
+    ...existingListings.filter((item) => item.groupId === groupId).map((item) => item.url),
+    ...seenMemory.filter((item) => item.groupId === groupId).map((item) => item.sourceUrl),
+  ]);
+  for (const sourceUrl of urls) {
+    const state = findExistingState(groupId, sourceUrl, existingListings, seenMemory, priorStates);
+    if (state) states.set(createGroupScopedDuplicateKey(groupId, sourceUrl), state);
+  }
+  for (const state of priorStates) {
+    if (state.groupId === groupId && !states.has(state.groupScopedDuplicateKey)) {
+      states.set(state.groupScopedDuplicateKey, {
+        reason: state.triaged ? "triaged" : "seen",
+        state,
+      });
+    }
   }
   return states;
 }
@@ -315,9 +323,13 @@ export function createSeenMemory(
 
 function confidenceForListing(listing: ListingCandidate): ConfidenceScore {
   return {
-    realFiveBedroom: listing.bedrooms !== undefined && listing.bedrooms >= 5 ? 0.9 : 0.35,
-    twoPlusBathrooms: listing.bathrooms !== undefined && listing.bathrooms >= 2 ? 0.9 : 0.35,
-    priceFit: listing.rent !== undefined && listing.rent <= 15000 ? 0.95 : 0.2,
+    realFiveBedroom:
+      listing.bedrooms !== undefined && listing.bedrooms >= SEARCH_CONFIG.minBedrooms ? 0.9 : 0.35,
+    twoPlusBathrooms:
+      listing.bathrooms !== undefined && listing.bathrooms >= SEARCH_CONFIG.minBathrooms
+        ? 0.9
+        : 0.35,
+    priceFit: listing.rent !== undefined && listing.rent <= SEARCH_CONFIG.maxRent ? 0.95 : 0.2,
     locationFit: listing.fitFlags.includes("location_fit") ? 0.9 : 0.45,
     overall:
       listing.triageBucket === "confirmed-match"

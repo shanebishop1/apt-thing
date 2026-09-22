@@ -76,7 +76,6 @@ export function ListingFieldDialog({
     >
       <header className="field-modal-header">
         <div>
-          <p className="eyebrow">Edit listing</p>
           <h3 id={editFieldsTitleId}>{listing.title}</h3>
           <p>{listing.address}</p>
         </div>

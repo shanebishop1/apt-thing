@@ -25,7 +25,10 @@ const needles = new Map([
   ["GROUP_INVITE_CODES", "server-only env variable name"],
 ]);
 
-const envSources = [process.env, ...[".env.local", ".dev.vars"].map(readEnvFile)];
+const envFiles = readdirSync(root, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && /^(?:\.env|\.dev\.vars)(?:\.|$)/.test(entry.name))
+  .map((entry) => entry.name);
+const envSources = [process.env, ...envFiles.map(readEnvFile)];
 for (const env of envSources) {
   for (const code of parseInviteCodes(env.GROUP_INVITE_CODES))
     needles.set(code, "configured invite code");

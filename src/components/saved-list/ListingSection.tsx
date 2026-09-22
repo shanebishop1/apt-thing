@@ -1,6 +1,7 @@
 "use client";
 
 import type { ListingCandidate } from "@/lib/listings";
+import { ArrowUpRight } from "lucide-react";
 import { formatAverageRent, formatLabel } from "./listing-presentation";
 
 export type ListingListGroup = {
@@ -90,7 +91,8 @@ function ListingCard({
         aria-label={`Open source for ${listing.title}`}
         onClick={() => onSourceOpen(listing)}
       >
-        ↗<span className="sr-only"> Source</span>
+        <ArrowUpRight className="listing-source-icon" aria-hidden="true" />
+        <span className="sr-only">Source</span>
       </a>
     </article>
   );

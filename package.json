@@ -19,9 +19,10 @@
     "check:client-secrets": "node scripts/check-client-secrets.mjs",
     "cf:build": "opennextjs-cloudflare build",
     "cf:preview": "pnpm cf:build && wrangler dev",
-    "cf:types": "wrangler types --env-file .env.example",
+    "cf:types": "wrangler types --env production --env-file .env.example && oxfmt --write worker-configuration.d.ts",
     "cf:deploy:dry": "pnpm cf:build && wrangler deploy --dry-run",
-    "cf:deploy": "pnpm cf:build && wrangler deploy"
+    "cf:deploy": "pnpm cf:build && wrangler deploy",
+    "cf:deploy:production": "opennextjs-cloudflare build --env production && node scripts/check-client-secrets.mjs --open-next && wrangler deploy --env production"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.20.6",

@@ -13,7 +13,10 @@ import { readSharedListingSnapshot } from "@/lib/shared-listing-store";
 import { withDefined } from "@/lib/utils/records";
 
 type AppRouteEnv = Partial<
-  Record<"DB" | "GEMINI_API_KEY" | "REALTYAPI_KEY" | "REALTYAPI_BASE_URL", unknown>
+  Record<
+    "DB" | "GEMINI_API_KEY" | "REALTYAPI_KEY" | "REALTYAPI_BASE_URL" | "AI_RUNS_ENABLED",
+    unknown
+  >
 >;
 
 export async function GET(request: NextRequest) {
@@ -44,6 +47,7 @@ export async function POST(request: NextRequest) {
       rawUrl,
       identity,
       env: withDefined<SharedApiEnv>({
+        AI_RUNS_ENABLED: readServerSecret(env, "AI_RUNS_ENABLED"),
         GEMINI_API_KEY: readServerSecret(env, "GEMINI_API_KEY"),
         REALTYAPI_KEY: readServerSecret(env, "REALTYAPI_KEY"),
         REALTYAPI_BASE_URL: readServerSecret(env, "REALTYAPI_BASE_URL"),

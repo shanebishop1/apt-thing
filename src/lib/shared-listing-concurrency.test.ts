@@ -171,16 +171,16 @@ describe("shared listing optimistic concurrency (SQLite/D1 semantics)", () => {
     expect(snapshot.memory).toHaveLength(0);
   });
 
-  it("increments the revision when the daily loop rewrites a saved listing", async () => {
+  it("leaves the revision unchanged when the daily loop rediscovers a saved listing", async () => {
     vi.stubEnv("GEMINI_API_KEY", "");
     const identity = createGroupIdentity(defaultSearchGroup.id, "Loop")!;
     const now = "2026-09-15T00:00:00.000Z";
     const first = await runDailySourceAgentLoop({ identity, env: { DB: db }, now });
     const loopListing = first.listings[0]!;
-    await runDailySourceAgentLoop({ identity, env: { DB: db }, now });
+    await runDailySourceAgentLoop({ identity, env: { DB: db }, now: "2026-09-15T01:00:00.000Z" });
     vi.unstubAllEnvs();
 
-    expect((await readSavedListing(db, identity.groupId, loopListing.id))?.revision).toBe(2);
+    expect((await readSavedListing(db, identity.groupId, loopListing.id))?.revision).toBe(1);
   });
 });
 

@@ -20,6 +20,8 @@ the group's decisions in one place.
 - Guard concurrent edits with per-listing revisions. A stale edit is rejected with
   a visible conflict instead of silently overwriting, and a rejected listing is
   never recreated by a delayed update.
+- Reload group-scoped saved/rejected history before discovery. Repeated runs skip
+  reviewed candidates and do not overwrite roommate edits with provider data.
 - Review persisted source-loop runs in the Runs tab: status, source coverage and
   failures, AI attempts and how many of them failed, skip counts, triage buckets,
   and the generated briefing.
@@ -87,6 +89,7 @@ Gemini, whose output is not a guarantee of accuracy.
 | Path                | Contents                                                                   |
 | ------------------- | -------------------------------------------------------------------------- |
 | `app/`              | App Router pages plus the `group`, `platform`, and `map` API routes.       |
+| `app/styles/`       | Modular UI styles: theme tokens, workspace, listings, media, maps, runs.  |
 | `src/components/`   | Review UI: workspace, listing editor, Leaflet map, run history panel.      |
 | `src/lib/`          | Auth, route plumbing, extraction, triage, D1 stores, agent contracts.      |
 | `src/lib/daily-loop/` | Source loop parts: sources, candidates, briefing, persistence, analyzer. |
@@ -111,6 +114,29 @@ pnpm dev
 Open `http://localhost:3000` and enter the code you just generated. No cloud
 account or paid provider key is needed for the manual-review path.
 
+## Search Criteria Configuration
+
+Edit **[`src/lib/search-config.ts`](src/lib/search-config.ts)**, then rebuild and
+deploy. It owns minimum bedrooms/bathrooms, rent ceiling, flex confidence,
+move-in dates, preferred neighborhoods, and exceptional-fallback boroughs/budget.
+Discovery defaults, extraction fit flags/concerns, deterministic triage, confidence
+scores, and Gemini instructions derive from it. Existing saved facts/history and
+the group's stable ID are preserved; changing criteria affects future processing.
+
+### Leave The App Up With AI Paused
+
+Set **`AI_RUNS_ENABLED=false`** in the Worker environment. This is the checked-in
+production default, even when provider keys are present. It blocks paid Gemini
+and RealtyAPI discovery/extraction, including manual, Cron, and Workflow runs.
+Pasted links still save as editable manual-review records. Lists, reviews,
+comments, edits, and maps remain available.
+
+Set `AI_RUNS_ENABLED=true` to resume. `DAILY_LOOP_ENABLED` separately controls
+scheduled dispatch; leave it false for manual-only use. See
+[the operator switch instructions](SETUP.md#pause-or-resume-paid-ai-runs) for
+dashboard/config changes and verifying the current state. Map hosting and normal
+Cloudflare usage are separate from this AI switch.
+
 ## Verification
 
 ```sh
@@ -128,9 +154,10 @@ requests, and never deploys.
 
 ## Limits And Security Posture
 
-- The committed Cloudflare configuration is hibernated: no database, cache, or
-  workflow bindings, an empty cron list, and no public Worker URL. Starting
-  Next.js alone does not produce a working shared database.
+- The default Cloudflare environment has no database or public URL. A separate
+  `production` environment hosts the maintainer's invite-only demo with D1; see
+  [SETUP.md](SETUP.md#maintainer-demo-environment). Starting Next.js alone does not
+  produce a working shared database.
 - Access is one shared invite code plus a self-chosen display name, not per-person
   accounts. Anyone with the code can act as any display name, and invite attempts
   are not rate limited. Use a long random code and rotate it if it leaks, which

@@ -110,7 +110,7 @@ describe("ListingEditor", () => {
       target: { value: "16000" },
     });
     await user.click(screen.getByRole("button", { name: "Approve" }));
-    await user.click(screen.getByRole("button", { name: "Reject and remove" }));
+    await user.click(screen.getByRole("button", { name: "Reject" }));
     await user.click(screen.getByRole("button", { name: `React thumbs up to ${listing.title}` }));
 
     await user.click(screen.getByText("Add comment"));

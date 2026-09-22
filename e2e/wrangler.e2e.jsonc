@@ -17,6 +17,7 @@
     "NEXTJS_ENV": "production",
     "APP_ENV": "local",
     "DAILY_LOOP_ENABLED": "false",
+    "AI_RUNS_ENABLED": "false",
   },
   "d1_databases": [
     {

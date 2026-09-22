@@ -197,7 +197,6 @@ export function ListingMedia({ identity, listing }: ListingMediaProps) {
           <section className="listing-photo-modal-panel" aria-label={`Photos for ${listing.title}`}>
             <div className="listing-photo-modal-header">
               <div>
-                <p className="eyebrow">Photos</p>
                 <h3>{listing.title}</h3>
               </div>
               <button

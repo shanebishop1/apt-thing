@@ -1,4 +1,5 @@
 import { validateBriefingRunHistoryContract, type AgentRunLogRecord } from "./agent-contracts";
+import { areAiRunsEnabled, AiRunsDisabled } from "./ai-runs";
 import {
   createDailyLoopBriefing,
   createDailyLoopHistory,
@@ -18,7 +19,11 @@ import {
 } from "./daily-loop/candidates";
 import { createGeminiAnalyzerFromEnv } from "./daily-loop/gemini-analyzer";
 import { stableId } from "./daily-loop/ids";
-import { persistDailyLoopArtifacts, persistDailyLoopRunTransition } from "./daily-loop/persistence";
+import {
+  persistDailyLoopArtifacts,
+  persistDailyLoopRunTransition,
+  readDailyLoopHistory,
+} from "./daily-loop/persistence";
 import {
   emptySecondaryZillowCoverage,
   runSecondaryZillowFixture,
@@ -36,6 +41,7 @@ import {
   type RunDailySourceAgentLoopOptions,
 } from "./daily-loop/types";
 import { streetEasyBatchFixture } from "./fixtures";
+import { DEFAULT_STREETEASY_DISCOVERY_QUERY } from "./listings/config";
 import {
   createGroupIdentity,
   defaultSearchGroup,
@@ -46,6 +52,12 @@ import {
 } from "./listings";
 import { normalizeConcurrencyLimit } from "./utils/concurrency";
 import { uniqueStrings } from "./utils/text";
+import {
+  assertRunCanStart,
+  DailyLoopRunConflict,
+  reconcileInterruptedRuns,
+  recordRunFailure,
+} from "./daily-loop/run-lifecycle";
 
 export { createDailyLoopProviderFailureAnalyzer } from "./daily-loop/gemini-analyzer";
 export type {
@@ -64,6 +76,36 @@ export type {
 export async function runDailySourceAgentLoop(
   options: RunDailySourceAgentLoopOptions = {},
 ): Promise<DailyLoopResult> {
+  if (options.mode === "live-safe" && !areAiRunsEnabled(options.env)) {
+    throw new AiRunsDisabled();
+  }
+  const now = options.now ?? new Date().toISOString();
+  const identity = options.identity ?? createGroupIdentity(defaultSearchGroup.id, "Daily Loop")!;
+  const cadence = options.cadence ?? "manual";
+  const trigger = options.trigger ?? (cadence === "daily" ? "cron" : "manual");
+  const runId = stableId(`${identity.groupId}:daily-loop:${cadence}:${trigger}:${now}`);
+  if (options.env?.DB) {
+    await reconcileInterruptedRuns(options.env.DB, identity.groupId, now);
+    await assertRunCanStart(options.env.DB, identity.groupId, runId);
+  }
+  try {
+    return await executeDailySourceAgentLoop({ ...options, now, identity });
+  } catch (error) {
+    if (!(error instanceof DailyLoopRunConflict)) {
+      await recordRunFailure(
+        options.env?.DB,
+        runId,
+        error instanceof Error ? error.message : "daily-loop-failed",
+      );
+    }
+    throw error;
+  }
+}
+
+async function executeDailySourceAgentLoop(
+  options: RunDailySourceAgentLoopOptions,
+): Promise<DailyLoopResult> {
+  const startedAtMs = Date.now();
   const mode = options.mode ?? "fixture";
   const cadence = options.cadence ?? "manual";
   const trigger = options.trigger ?? (cadence === "daily" ? "cron" : "manual");
@@ -102,12 +144,23 @@ export async function runDailySourceAgentLoop(
       }),
     ].flatMap((error) => error ?? []),
   );
-  const batch = options.streeteasyBatch ?? streetEasyBatchFixture;
+  const batch = options.streeteasyBatch ?? {
+    ...streetEasyBatchFixture,
+    query: DEFAULT_STREETEASY_DISCOVERY_QUERY,
+    ...(mode === "live-safe" ? { results: [] } : {}),
+  };
+  if (d1TransitionErrors.length) throw new Error(d1TransitionErrors.join("; "));
+  // Read before paid acquisition; a database read failure must not silently disable dedupe.
+  const persisted = options.env?.DB
+    ? await readDailyLoopHistory(options.env.DB, identity.groupId)
+    : { listings: [], memory: [] };
+  const existingListings = [...persisted.listings, ...(options.existingListings ?? [])];
+  const seenMemory = [...persisted.memory, ...(options.seenMemory ?? [])];
   const preexistingStates = buildExistingStates({
     groupId: identity.groupId,
     batch,
-    existingListings: options.existingListings ?? [],
-    seenMemory: options.seenMemory ?? [],
+    existingListings,
+    seenMemory,
     priorStates: options.priorStates ?? [],
   });
   const units: AgentRunLogRecord["units"] = [];
@@ -116,7 +169,11 @@ export async function runDailySourceAgentLoop(
   const materialChanges: DailyLoopSkippedCandidate[] = [];
   const listings: ListingCandidate[] = [];
   const providerMetadata: AiProviderAttemptMetadata[] = [];
-  const analyzer = options.analyzer ?? createGeminiAnalyzerFromEnv(options.env, options.fetchImpl);
+  const analyzer =
+    options.analyzer ??
+    (mode === "live-safe"
+      ? createGeminiAnalyzerFromEnv(options.env, options.fetchImpl)
+      : undefined);
   let maxObservedInFlight = 0;
 
   const streetEasyResult = await runStreetEasySource({
@@ -159,8 +216,8 @@ export async function runDailySourceAgentLoop(
           identity,
           now,
           concurrencyLimit,
-          existingListings: [...(options.existingListings ?? []), ...listings],
-          seenMemory: options.seenMemory ?? [],
+          existingListings: [...existingListings, ...listings],
+          seenMemory,
           ...(options.failSecondary !== undefined ? { fail: options.failSecondary } : {}),
         });
   coverage.push(secondaryResult.coverage);
@@ -178,8 +235,13 @@ export async function runDailySourceAgentLoop(
   units.push(...toProviderFailureUnits(runId, listings, providerMetadata, now));
 
   const sourceFailures = coverage.filter((item) => item.status === "failed").length;
-  const status: RunStatus =
-    sourceFailures === coverage.length ? "failed" : sourceFailures > 0 ? "partial" : "success";
+  const allAvailableSourcesFailed =
+    sourceFailures > 0 && coverage.every((item) => item.status !== "success");
+  const status: RunStatus = allAvailableSourcesFailed
+    ? "failed"
+    : sourceFailures > 0 || providerMetadata.some((attempt) => attempt.status === "failed")
+      ? "partial"
+      : "success";
   const triagedListings = listings.filter((listing) => listing.triageBucket !== "untriaged");
   const rejected = triagedListings.filter((listing) => listing.triageBucket === "rejected").length;
   // Rejected candidates stay in the run outputs (briefing, history, candidate rows) but are never
@@ -206,7 +268,7 @@ export async function runDailySourceAgentLoop(
     trigger,
     status,
     startedAt: now,
-    completedAt: new Date(Date.parse(now) + 1000).toISOString(),
+    completedAt: new Date(Date.parse(now) + Math.max(0, Date.now() - startedAtMs)).toISOString(),
     counts: runCounts,
     boundedConcurrency: concurrencyLimit,
     retryPolicy: DAILY_LOOP_RETRY_POLICY,
@@ -328,9 +390,25 @@ export async function runDailySourceAgentLoop(
     }),
   };
 
+  if (persistence.outcome.d1.attempted) {
+    run.counts.candidatesSaved = persistence.outcome.d1.candidatesSaved ?? 0;
+    operatorEvidence.candidateCounts.saved = run.counts.candidatesSaved;
+  }
+  if (persistence.outcome.d1.error) {
+    run.status = "failed";
+    operatorEvidence.status = "failed";
+    history.latestRun.status = "failed";
+    briefing.summary = "Run failed during persistence; no batch artifacts were committed.";
+    briefing.whatChanged = [
+      "The database transaction was rolled back; retry this run after recovery.",
+    ];
+    history.latestBriefing.summary = briefing.summary;
+    history.latestBriefing.whatChanged = briefing.whatChanged;
+  }
+
   return {
     contract: DAILY_LOOP_CONTRACT_VERSION,
-    ok: status !== "failed",
+    ok: run.status !== "failed",
     mode,
     run,
     sourceCoverage: coverage,

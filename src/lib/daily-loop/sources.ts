@@ -15,6 +15,7 @@ import {
   type ListingCandidate,
 } from "../listings";
 import { safeJson } from "../utils/json";
+import { fetchWithRetry } from "../providers/http";
 import { firstRecord, withDefined } from "../utils/records";
 import { detectMaterialChange, findExistingState } from "./candidates";
 import { stableId } from "./ids";
@@ -78,6 +79,11 @@ export async function runStreetEasySource({
   });
   const sourceBatch =
     liveMetadata.normalizedBatch ?? (mode === "live-safe" ? { ...batch, results: [] } : batch);
+  if (mode === "live-safe" && !liveMetadata.normalizedBatch && liveMetadata.failureCode) {
+    const failure = failedSource(runId, "streeteasy", "streeteasy", liveMetadata.failureCode, now);
+    failure.coverage.queryMetadata = { mode, liveSafe: liveMetadata };
+    return failure;
+  }
   const skipped: DailyLoopSkippedCandidate[] = [];
   const statesForExtraction: GroupScopedListingState[] = [];
 
@@ -141,7 +147,10 @@ export async function runStreetEasySource({
   const coverage: DailyLoopSourceCoverage = {
     source: "streeteasy",
     sourceKey: "streeteasy",
-    status: result.run.status === "success" ? "success" : "partial",
+    status:
+      result.run.status === "success" && liveMetadata.classification === "success"
+        ? "success"
+        : "partial",
     classification: liveMetadata.liveAttempted ? liveMetadata.classification : "success",
     checkedCount: sourceBatch.results.length,
     candidateCount: result.listings.length,
@@ -376,15 +385,20 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
     "https://streeteasy.realtyapi.io"
   ).replace(/\/$/, "");
   const detailMetadataByListing: Record<string, DailyLoopDetailRetryMetadata> = {};
+  let queryAttempts = 0;
   try {
     const liveResults: StreetEasySearchResult[] = [];
-    let queryAttempts = 0;
     for (const area of batch.query.areas) {
       for (let page = 1; page <= 3; page += 1) {
-        queryAttempts += 1;
-        const searchResponse = await fetchImpl(
+        const searchResponse = await fetchWithRetry(
           buildRealtyApiUrl(baseUrl, "/search/rent", { ...batch.query, areas: [area], page }),
           { headers: { "x-realtyapi-key": apiKey } },
+          {
+            fetchImpl,
+            onAttempt: () => {
+              queryAttempts += 1;
+            },
+          },
         );
         const searchPayload = await safeJson(searchResponse);
         if (!searchResponse.ok) {
@@ -405,10 +419,17 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
       .slice(0, 24);
     const detailPayloads: Record<string, unknown> = {};
     for (const listing of plausibleLiveResults) {
+      let attempt = 0;
       try {
-        const detailResponse = await fetchImpl(
+        const detailResponse = await fetchWithRetry(
           buildRealtyApiUrl(baseUrl, "/rental_detailsbyid", { buildingid: listing.listingId }),
           { headers: { "x-realtyapi-key": apiKey } },
+          {
+            fetchImpl,
+            onAttempt: (result) => {
+              attempt = result.attempt;
+            },
+          },
         );
         const detailPayload = await safeJson(detailResponse);
         const detailRecord = firstRecord(detailPayload);
@@ -416,7 +437,7 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
         if (!detailResponse.ok) {
           detailMetadataByListing[listing.listingId] = {
             listingId: listing.listingId,
-            attempt: 1,
+            attempt,
             status: "failed",
             httpStatus: detailResponse.status,
             fetched: false,
@@ -427,7 +448,7 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
         if (!hasDetailRecord) {
           detailMetadataByListing[listing.listingId] = {
             listingId: listing.listingId,
-            attempt: 1,
+            attempt,
             status: "missing",
             httpStatus: detailResponse.status,
             fetched: false,
@@ -437,7 +458,7 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
         }
         detailMetadataByListing[listing.listingId] = {
           listingId: listing.listingId,
-          attempt: 1,
+          attempt,
           status: "success",
           httpStatus: detailResponse.status,
           fetched: true,
@@ -446,7 +467,7 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
       } catch {
         detailMetadataByListing[listing.listingId] = {
           listingId: listing.listingId,
-          attempt: 1,
+          attempt,
           status: "failed",
           fetched: false,
           failureCode: "streeteasy-live-safe-detail-fetch-failed",
@@ -480,7 +501,7 @@ async function maybeCollectStreetEasyLiveSafeMetadata({
       liveAttempted: true,
       classification: "partial",
       missingKey: false,
-      queryAttempts: 1,
+      queryAttempts,
       detailMetadataByListing,
       failureCode: "streeteasy-live-safe-fetch-failed",
     };

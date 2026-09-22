@@ -4,6 +4,8 @@ import {
   type DailyLoopMode,
 } from "./daily-source-loop";
 import type { Cadence } from "./listings";
+import { DailyLoopRunConflict } from "./daily-loop/run-lifecycle";
+import { areAiRunsEnabled } from "./ai-runs";
 
 export const DAILY_SOURCE_AGENT_LOOP_WORKFLOW_BINDING = "DAILY_SOURCE_AGENT_LOOP_WORKFLOW" as const;
 export const DAILY_LOOP_DISABLED_VALUES = new Set(["false", "0", "off"]);
@@ -43,8 +45,8 @@ export type DailyLoopScheduledDispatch =
       disabled: true;
       dispatchedToWorkflow: false;
       fallback: false;
-      reason: "daily-loop-disabled";
-      envVar: "DAILY_LOOP_ENABLED";
+      reason: "daily-loop-disabled" | "ai-runs-disabled";
+      envVar: "DAILY_LOOP_ENABLED" | "AI_RUNS_ENABLED";
       configuredValue: string;
       payload: DailyLoopWorkflowPayload;
     }
@@ -89,6 +91,18 @@ export async function scheduledDailySourceAgentLoop(
   env: DailyLoopScheduledEnv,
 ): Promise<DailyLoopScheduledDispatch> {
   const payload = createDailyLoopWorkflowPayload(event);
+  if (!areAiRunsEnabled(env)) {
+    return {
+      ok: true,
+      disabled: true,
+      dispatchedToWorkflow: false,
+      fallback: false,
+      reason: "ai-runs-disabled",
+      envVar: "AI_RUNS_ENABLED",
+      configuredValue: env.AI_RUNS_ENABLED ?? process.env.AI_RUNS_ENABLED ?? "false",
+      payload,
+    };
+  }
   const disabledValue = getDailyLoopDisabledValue(env.DAILY_LOOP_ENABLED);
   if (disabledValue) {
     return {
@@ -172,14 +186,30 @@ export function createDailyLoopWorkerHandler(
     },
     scheduled(event, env, ctx) {
       ctx.waitUntil(
-        scheduledDailySourceAgentLoop(event, env).then((result) => {
-          if (result.disabled) {
-            // oxlint-disable-next-line no-console -- the only signal operators get that a scheduled run was skipped
-            console.info("daily-source-agent-loop-disabled", result);
-          }
+        scheduledDailySourceAgentLoop(event, env)
+          .then((result) => {
+            if (result.disabled) {
+              // oxlint-disable-next-line no-console -- the only signal operators get that a scheduled run was skipped
+              console.info("daily-source-agent-loop-disabled", result);
+            } else if ("ok" in result && !result.ok) {
+              throw new Error(
+                result.persistence.outcome.d1.error
+                  ? "daily-loop-persistence-failed"
+                  : "daily-loop-source-failed",
+              );
+            }
 
-          return result;
-        }),
+            return result;
+          })
+          .catch((error: unknown) => {
+            if (
+              error instanceof DailyLoopRunConflict &&
+              error.message === "daily-loop-already-completed"
+            ) {
+              return { ok: true, fallback: true, replayed: true, runId: error.runId };
+            }
+            throw error;
+          }),
       );
     },
   };

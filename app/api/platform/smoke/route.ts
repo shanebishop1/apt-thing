@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeGroupRequest } from "@/lib/api-auth";
-import { readCloudflareEnv } from "@/lib/route-support";
+import { readCloudflareEnv, readServerSecret } from "@/lib/route-support";
+import { areAiRunsEnabled } from "@/lib/ai-runs";
 
 type BindingState = "bound" | "missing";
 type ContextStatus = "available" | "unavailable";
-type PlatformSmokeEnv = Partial<Record<"APP_ENV" | "DB" | "APP_CACHE" | "ASSETS", unknown>>;
+type PlatformSmokeEnv = Partial<
+  Record<
+    "APP_ENV" | "DB" | "APP_CACHE" | "ASSETS" | "AI_RUNS_ENABLED" | "DAILY_LOOP_ENABLED",
+    unknown
+  >
+>;
 
 function bindingState(value: unknown): BindingState {
   return value ? "bound" : "missing";
@@ -19,6 +25,12 @@ export function buildPlatformSmokePayload(
     runtime: "cloudflare-workers",
     contextStatus,
     appEnv: typeof env?.APP_ENV === "string" ? env.APP_ENV : "unknown",
+    aiRunsEnabled: areAiRunsEnabled({
+      AI_RUNS_ENABLED: readServerSecret(env, "AI_RUNS_ENABLED") ?? "false",
+    }),
+    dailyLoopEnabled: !["false", "0", "off"].includes(
+      (readServerSecret(env, "DAILY_LOOP_ENABLED") ?? "").trim().toLowerCase(),
+    ),
     bindings: {
       db: bindingState(env?.DB),
       appCache: bindingState(env?.APP_CACHE),

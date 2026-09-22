@@ -24,6 +24,14 @@ test.afterAll(async () => {
   await page.close();
 });
 
+test("keeps live AI runs paused while the shared app is available", async () => {
+  const smoke = await page.request.get("/api/platform/smoke");
+  expect(await smoke.json()).toMatchObject({ ok: true, aiRunsEnabled: false });
+  const run = await page.request.post("/api/platform/daily-loop", { data: { mode: "live-safe" } });
+  expect(run.status()).toBe(503);
+  expect(await run.json()).toMatchObject({ ok: false, error: "ai-runs-disabled" });
+});
+
 test("saves a pasted link as a manual-review record", async () => {
   await page.getByLabel("Add listing").click();
   await page.getByLabel("Source URL").fill(sourceUrl);
@@ -35,11 +43,18 @@ test("saves a pasted link as a manual-review record", async () => {
       response.status() === 200,
   );
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  await created;
+  const result = await (await created).json();
+  expect(result.result.extraction).toMatchObject({
+    providerCalled: false,
+    sourcePageFetched: false,
+    failureCode: "ai-runs-disabled",
+  });
 
   await expect(listingCard(page, listingTitle).first()).toBeVisible();
   await expect(listingDetail(page).getByRole("heading", { name: listingTitle })).toBeVisible();
-  await expect(listingDetail(page).getByText("Needs review")).toBeVisible();
+  await expect(
+    listingDetail(page).getByRole("heading", { name: "Approve or reject this candidate" }),
+  ).toBeVisible();
 });
 
 test("edits the rent through the field dialog", async () => {

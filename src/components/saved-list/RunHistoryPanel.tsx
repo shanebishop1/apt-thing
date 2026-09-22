@@ -33,7 +33,6 @@ export function RunHistoryPanel({
     <section className="run-history-card" aria-label="Agent run history">
       <header className="run-history-header">
         <div>
-          <p className="eyebrow">Run history</p>
           <h2>Runs</h2>
         </div>
         <button

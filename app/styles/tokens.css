@@ -1,0 +1,72 @@
+/* Slate & jade. Keep theme decisions here, not in component overrides. */
+:root {
+  color-scheme: dark;
+  --body: var(--font-body), "Helvetica Neue", sans-serif;
+  --display: var(--font-heading), var(--body);
+  --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --bg: #101719;
+  --bg-ink: #e9f0ef;
+  --panel: #192225;
+  --panel-strong: #222e32;
+  --paper: #1c272a;
+  --line: #344347;
+  --muted: #a5b6b9;
+  --accent: #91d4bf;
+  --accent-soft: #253e37;
+  --accent-strong: #d4b882;
+  --danger: #efaaa5;
+  --success: #91d4bf;
+  --info: #a1c4ee;
+  --warning: #e0be80;
+  --button-ink: #102c24;
+  --interactive-hover: #b5e5d5;
+  --interactive-hover-bg: #293a3c;
+  --primary-hover-bg: #b5e5d5;
+  --status-new: #a1c4ee;
+  --status-review: #e0be80;
+  --status-interested: #91d4bf;
+  --status-touring: #c4adf2;
+  --status-unavailable: #a5b6b9;
+  --status-gone: #efa46e;
+  --status-rejected: #efaaa5;
+  --neutral-score: var(--muted);
+  --map-canvas: #263538;
+  --shadow: 0 2px 4px rgb(0 0 0 / 6%), 0 12px 32px rgb(0 0 0 / 12%);
+  --shadow-floating: 0 20px 64px rgb(0 0 0 / 30%);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 18px;
+}
+
+:root[data-theme="light"],
+.dashboard-shell[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f2f5f4;
+  --bg-ink: #202d30;
+  --panel: #ffffff;
+  --panel-strong: #edf2f0;
+  --paper: #f8faf9;
+  --line: #dce4e1;
+  --muted: #607273;
+  --accent: #246b55;
+  --accent-soft: #e8f3ed;
+  --accent-strong: #8a631f;
+  --danger: #ac4844;
+  --success: #246b55;
+  --info: #3b6795;
+  --warning: #8a631f;
+  --button-ink: #ffffff;
+  --interactive-hover: #194e3d;
+  --interactive-hover-bg: #eaf0ed;
+  --primary-hover-bg: #194e3d;
+  --status-new: #3b6795;
+  --status-review: #8a631f;
+  --status-interested: #246b55;
+  --status-touring: #7550a8;
+  --status-unavailable: #607273;
+  --status-gone: #a5521e;
+  --status-rejected: #ac4844;
+  --map-canvas: #e3ebe6;
+  --shadow: 0 2px 4px rgb(26 47 40 / 2%), 0 8px 28px rgb(26 47 40 / 4%);
+  --shadow-floating: 0 20px 64px rgb(26 47 40 / 16%);
+}

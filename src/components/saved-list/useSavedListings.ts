@@ -61,9 +61,7 @@ export function useSavedListings() {
       const storedIdentity = readStoredInviteIdentity(window.localStorage);
 
       if (!storedIdentity) {
-        resetIdentity(
-          "Enter the invite code and display name to load this shared apartment search.",
-        );
+        resetIdentity("");
         return;
       }
 
